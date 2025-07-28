@@ -530,6 +530,28 @@ bool Loop::isSafeToClone() const {
   return true;
 }
 
+bool Loop::isSafeToCloneConditionally(const DominatorTree &DT) const {
+  // Return false if any loop blocks contain indirectbrs, or there are any calls
+  // to noduplicate functions.
+  for (BasicBlock *BB : this->blocks()) {
+    if (isa<IndirectBrInst>(BB->getTerminator()))
+      return false;
+
+    for (Instruction &I : *BB) {
+      if (I.getType()->isTokenLikeTy()) {
+        for (const Use &U : I.uses()) {
+          if (!loopContainsUser(*this, *BB, U, DT))
+            return false;
+        }
+      }
+      if (auto *CB = dyn_cast<CallBase>(&I))
+        if (CB->cannotDuplicate() || CB->isConvergent())
+          return false;
+    }
+  }
+  return true;
+}
+
 MDNode *Loop::getLoopID() const {
   MDNode *LoopID = nullptr;
 
