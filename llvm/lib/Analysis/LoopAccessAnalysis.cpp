@@ -2316,8 +2316,7 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
         return CheckCompletelyBeforeOrAfter() ? Dependence::NoDep
                                               : Dependence::Unknown;
       }
-      if (!HasSameSize ||
-          couldPreventStoreLoadForward(ConstDist, TypeByteSize.first)) {
+      if (couldPreventStoreLoadForward(ConstDist, TypeByteSize.first)) {
         LLVM_DEBUG(
             dbgs() << "LAA: Forward but may prevent st->ld forwarding\n");
         return Dependence::ForwardButPreventsForwarding;
