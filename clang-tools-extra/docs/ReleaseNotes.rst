@@ -103,6 +103,12 @@ New checks
   Finds calls to ``value_or`` (and alternative spellings ``valueOr``,
   ``ValueOr``) on optional types where the return type is expensive to copy.
 
+- New :doc:`performance-substr-self-assignment
+  <clang-tidy/checks/performance/substr-self-assignment>` check.
+
+  Finds cases where a string variable is assigned the result of calling
+  ``substr()`` on itself.
+
 New check aliases
 ^^^^^^^^^^^^^^^^^
 
