@@ -1,10 +1,12 @@
+
 //===--- StringExtras.h - Stolen from llvm/ADT/StringExtras.h ---*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-//===---------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
 
 #ifndef ORC_RT_STRINGEXTRAS_H
 #define ORC_RT_STRINGEXTRAS_H
@@ -15,8 +17,9 @@
 #include <type_traits>
 namespace orc_rt {
 /// A simplification of what is in llvm/ADT/StringExtras.h
-/// Preserves the behaviour but removes tag dispatch
-/// Will assert if iterator is not a forward iterator.
+/// Preserving behaviour so we can switch if we ever pull
+/// a common util out of llvm. It removes the tag dispatch
+/// for simplicity sake. Added an assert to bail instead.
 template <typename IteratorT>
 std::string join(IteratorT Begin, IteratorT End, std::string_view Separator) {
   using Category = typename std::iterator_traits<IteratorT>::iterator_category;
@@ -32,7 +35,6 @@ std::string join(IteratorT Begin, IteratorT End, std::string_view Separator) {
   std::string Result;
   Result.reserve(Size + (Count - 1) * Separator.size());
   [[maybe_unused]] const size_t PrevCapacity = Result.capacity();
-
   Result += std::string_view(*Begin);
   while (++Begin != End) {
     Result += Separator;
