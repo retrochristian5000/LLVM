@@ -33,8 +33,8 @@ define i32 @two_reductions(i64 %N, ptr %a, ptr %b) {
 ; UF1-NEXT:    WIDEN-REDUCTION-PHI ir<%sum.b> = phi (add) vp<[[VP2]]>, ir<%sum.b.next>
 ; UF1-NEXT:    WIDEN-PHI vp<[[VP6:%[0-9]+]]> = phi [ vp<[[VP4]]>, vector.ph ], [ vp<%vec.ind.next>, vector.body ]
 ; UF1-NEXT:    EMIT vp<[[VP7:%[0-9]+]]> = icmp ule vp<[[VP6]]>, vp<[[VP3]]>
-; UF1-NEXT:    CLONE ir<%ga> = getelementptr inbounds ir<%a>, vp<%index>
-; UF1-NEXT:    CLONE ir<%gb> = getelementptr inbounds ir<%b>, vp<%index>
+; UF1-NEXT:    EMIT-SCALAR ir<%ga> = getelementptr inbounds i32, ir<%a>, vp<%index>
+; UF1-NEXT:    EMIT-SCALAR ir<%gb> = getelementptr inbounds i32, ir<%b>, vp<%index>
 ; UF1-NEXT:    WIDEN ir<%la> = load ir<%ga>, vp<[[VP7]]>
 ; UF1-NEXT:    WIDEN ir<%lb> = load ir<%gb>, vp<[[VP7]]>
 ; UF1-NEXT:    WIDEN ir<%sum.a.next> = add ir<%sum.a>, ir<%la>
@@ -89,8 +89,8 @@ define i32 @two_reductions(i64 %N, ptr %a, ptr %b) {
 ; UF4-NEXT:    EMIT vp<[[VP13:%[0-9]+]]> = icmp ule vp<%vec.iv>.1, vp<[[VP3]]>
 ; UF4-NEXT:    EMIT vp<[[VP14:%[0-9]+]]> = icmp ule vp<%vec.iv>.2, vp<[[VP3]]>
 ; UF4-NEXT:    EMIT vp<[[VP15:%[0-9]+]]> = icmp ule vp<%vec.iv>.3, vp<[[VP3]]>
-; UF4-NEXT:    CLONE ir<%ga> = getelementptr inbounds ir<%a>, vp<%index>
-; UF4-NEXT:    CLONE ir<%gb> = getelementptr inbounds ir<%b>, vp<%index>
+; UF4-NEXT:    EMIT-SCALAR ir<%ga> = getelementptr inbounds i32, ir<%a>, vp<%index>
+; UF4-NEXT:    EMIT-SCALAR ir<%gb> = getelementptr inbounds i32, ir<%b>, vp<%index>
 ; UF4-NEXT:    vp<[[VP16:%[0-9]+]]> = vector-pointer inbounds i32, ir<%ga>, ir<1>, ir<4>
 ; UF4-NEXT:    vp<[[VP17:%[0-9]+]]> = vector-pointer inbounds i32, ir<%ga>, ir<1>, ir<8>
 ; UF4-NEXT:    vp<[[VP18:%[0-9]+]]> = vector-pointer inbounds i32, ir<%ga>, ir<1>, ir<12>

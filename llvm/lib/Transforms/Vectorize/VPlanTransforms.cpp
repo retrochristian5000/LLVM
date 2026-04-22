@@ -333,18 +333,16 @@ static bool sinkScalarOperands(VPlan &Plan) {
     if (!Candidate)
       return;
 
-    // We only know how to sink VPReplicateRecipes and VPScalarIVStepsRecipes
-    // for now.
-    if (!isa<VPReplicateRecipe, VPScalarIVStepsRecipe>(Candidate))
+    if (!isa<VPReplicateRecipe, VPScalarIVStepsRecipe, VPGEPInstruction>(
+            Candidate))
       return;
 
     if (Candidate->getParent() == SinkTo ||
         vputils::cannotHoistOrSinkRecipe(*Candidate, /*Sinking=*/true))
       return;
 
-    if (auto *RepR = dyn_cast<VPReplicateRecipe>(Candidate))
-      if (!ScalarVFOnly && RepR->isSingleScalar())
-        return;
+    if (!ScalarVFOnly && !vputils::doesGeneratePerAllLanes(Candidate))
+      return;
 
     WorkList.insert({SinkTo, Candidate});
   };
@@ -2217,22 +2215,6 @@ void VPlanTransforms::clearReductionWrapFlags(VPlan &Plan) {
 
 namespace {
 struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
-  /// If recipe \p R will lower to a GEP with a non-i8 source element type,
-  /// return that source element type.
-  static Type *getGEPSourceElementType(const VPSingleDefRecipe *R) {
-    // All VPInstructions that lower to GEPs must have the i8 source element
-    // type (as they are PtrAdds), so we omit it.
-    return TypeSwitch<const VPSingleDefRecipe *, Type *>(R)
-        .Case([](const VPReplicateRecipe *I) -> Type * {
-          if (auto *GEP = dyn_cast<GetElementPtrInst>(I->getUnderlyingValue()))
-            return GEP->getSourceElementType();
-          return nullptr;
-        })
-        .Case<VPVectorPointerRecipe, VPWidenGEPRecipe>(
-            [](auto *I) { return I->getSourceElementType(); })
-        .Default([](auto *) { return nullptr; });
-  }
-
   /// Returns true if recipe \p Def can be safely handed for CSE.
   static bool canHandle(const VPSingleDefRecipe *Def) {
     // We can extend the list of handled recipes in the future,
@@ -2255,7 +2237,7 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
   static unsigned getHashValue(const VPSingleDefRecipe *Def) {
     hash_code Result = hash_combine(
         Def->getVPRecipeID(), vputils::getOpcodeOrIntrinsicID(Def),
-        getGEPSourceElementType(Def), Def->getScalarType(),
+        vputils::getGEPSourceElementType(Def), Def->getScalarType(),
         vputils::isSingleScalar(Def), hash_combine_range(Def->operands()));
     if (auto *RFlags = dyn_cast<VPRecipeWithIRFlags>(Def))
       if (RFlags->hasPredicate())
@@ -2270,7 +2252,8 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
     if (L->getVPRecipeID() != R->getVPRecipeID() ||
         vputils::getOpcodeOrIntrinsicID(L) !=
             vputils::getOpcodeOrIntrinsicID(R) ||
-        getGEPSourceElementType(L) != getGEPSourceElementType(R) ||
+        vputils::getGEPSourceElementType(L) !=
+            vputils::getGEPSourceElementType(R) ||
         vputils::isSingleScalar(L) != vputils::isSingleScalar(R) ||
         !equal(L->operands(), R->operands()))
       return false;

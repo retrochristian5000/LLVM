@@ -31,8 +31,8 @@ define i32 @pr70988(ptr %src, i32 %n) {
 ; CHECK-NEXT:    [[TMP8:%.*]] = phi i32 [ poison, [[VECTOR_BODY]] ], [ [[TMP6]], [[PRED_LOAD_IF]] ]
 ; CHECK-NEXT:    br i1 [[ACTIVE_LANE_MASK2]], label [[PRED_LOAD_IF4:%.*]], label [[PRED_LOAD_CONTINUE5]]
 ; CHECK:       pred.load.if4:
-; CHECK-NEXT:    [[TMP9:%.*]] = add i64 [[INDEX]], 1
-; CHECK-NEXT:    [[TMP10:%.*]] = getelementptr i32, ptr [[SRC]], i64 [[TMP9]]
+; CHECK-NEXT:    [[TMP7:%.*]] = add i64 [[INDEX]], 1
+; CHECK-NEXT:    [[TMP10:%.*]] = getelementptr i32, ptr [[SRC]], i64 [[TMP7]]
 ; CHECK-NEXT:    [[TMP11:%.*]] = load ptr, ptr [[TMP10]], align 8
 ; CHECK-NEXT:    [[TMP12:%.*]] = load i32, ptr [[TMP11]], align 4
 ; CHECK-NEXT:    br label [[PRED_LOAD_CONTINUE5]]
