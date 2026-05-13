@@ -4729,7 +4729,7 @@ buildCapturedStmtCaptureList(Sema &S, CapturedRegionScopeInfo *RSI,
         }
         VarDecl *DD = cast<VarDecl>(BD->getDecomposedDecl());
         if (!CapturedDecomposed.insert(DD).second) {
-          continue; // Skip duplicate.  
+          continue; // Skip duplicate.
         }
         CapVar = DD;
       }
