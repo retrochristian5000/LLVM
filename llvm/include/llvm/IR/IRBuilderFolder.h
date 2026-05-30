@@ -86,6 +86,12 @@ public:
   virtual Value *FoldBitExtract(Type *Ty, Value *Src,
                                 Value *Offset) const = 0;
 
+  virtual Value *FoldBitInsert(Value *Base, Value *Val,
+                               Value *Offset) const = 0;
+
+  virtual Value *FoldBitExtract(Type *Ty, Value *Src,
+                                Value *Offset) const = 0;
+
   //===--------------------------------------------------------------------===//
   // Cast/Conversion Operators
   //===--------------------------------------------------------------------===//
