@@ -5263,6 +5263,37 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     return ConstantInt::get(Builder.getInt32Ty(), 0);
   }
 
+  if (BuiltinID == AArch64::BI__hvc) {
+    // The first argument is the instruction immediate; the remaining arguments
+    // (at most four, enforced by Sema) are passed in X0-X3, widened to 64 bits.
+    // The intrinsic takes exactly four register operands, so any unused
+    // trailing ones are passed as poison and dropped during lowering.
+    SmallVector<Value *, 5> Args{EmitScalarExpr(E->getArg(0))};
+    for (unsigned I = 1, N = E->getNumArgs(); I < N; ++I) {
+      Value *Arg = EmitScalarExpr(E->getArg(I));
+      llvm::Type *ArgTy = Arg->getType();
+      if (ArgTy->isPointerTy())
+        Arg = Builder.CreatePtrToInt(Arg, Int64Ty);
+      else if (ArgTy->isFloatingPointTy())
+        // Reinterpret the bits into the integer register, matching MSVC (e.g.
+        // "fmov x0, d0" for a double).
+        Arg = Builder.CreateZExtOrTrunc(
+            Builder.CreateBitCast(
+                Arg, Builder.getIntNTy(ArgTy->getPrimitiveSizeInBits())),
+            Int64Ty);
+      else
+        Arg = Builder.CreateIntCast(
+            Arg, Int64Ty, E->getArg(I)->getType()->isSignedIntegerType());
+      Args.push_back(Arg);
+    }
+    while (Args.size() < 5)
+      Args.push_back(llvm::PoisonValue::get(Int64Ty));
+    Value *Call =
+        Builder.CreateCall(CGM.getIntrinsic(Intrinsic::aarch64_hvc), Args);
+    // MSVC returns unsigned int, i.e. the low 32 bits of the X0 result.
+    return Builder.CreateTrunc(Call, Int32Ty);
+  }
+
   if (BuiltinID == NEON::BI__builtin_neon_vcvth_bf16_f32)
     return Builder.CreateFPTrunc(
         Builder.CreateBitCast(EmitScalarExpr(E->getArg(0)),
