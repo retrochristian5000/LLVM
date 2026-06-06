@@ -792,15 +792,12 @@ def TuningFastGather
                        [], InlineIgnore>;
 
 // Use AMD Zen-tuned cost tables for masked gather/scatter intrinsics in the
-// X86 TargetTransformInfo cost model. Refines the flat overhead used by other
-// AVX-512 targets with per-element-type/per-VL costs measured on znver4 and
-// znver5. Inherited automatically by every znver4+ CPU via ZN4Tuning; not
-// applied to pre-AVX-512 Zen parts (znver1..3), which take the scalarise
-// path for masked gather anyway.
-def TuningPreferAMDZenGSCost
-    : SubtargetFeature<"prefer-amd-zen-gs-cost",
-                       "HasPreferAMDZenGSCost", "true",
-                       "Use AMD Zen-tuned gather/scatter cost tables in the cost model">;
+// Enables per-shape gather/scatter cost tables on AMD znver4 and znver5
+// (set in ZN4Tuning, inherited by ZN5Tuning).
+def TuningPreferGSCostTable
+    : SubtargetFeature<"prefer-gs-cost-table",
+                       "HasPreferGSCostTable", "true",
+                       "Use per-shape gather/scatter cost tables in the cost model">;
 
 // Generate vpdpwssd instead of vpmaddwd+vpaddd sequence.
 def TuningFastDPWSSD
@@ -1728,7 +1725,7 @@ def ProcessorFeatures {
   list<SubtargetFeature> ZN4AdditionalTuning = [TuningFastDPWSSD,
                                                 TuningCOMPRESSFalseDeps,
                                                 TuningEXPANDFalseDeps,
-                                                TuningPreferAMDZenGSCost];
+                                                TuningPreferGSCostTable];
   list<SubtargetFeature> ZN4Tuning =
     !listconcat(ZN3Tuning, ZN4AdditionalTuning);
   list<SubtargetFeature> ZN4AdditionalFeatures = [FeatureAVX512,
