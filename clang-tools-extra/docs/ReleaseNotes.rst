@@ -318,6 +318,11 @@ New checks
   Checks for presence or absence of trailing commas in enum definitions and
   initializer lists.
 
+- New :doc:`llvm-regex
+  <clang-tidy/checks/llvm/regex>` check.
+
+  Detects malformed regex patterns used in ``llvm::Regex``.
+
 New check aliases
 ^^^^^^^^^^^^^^^^^
 
