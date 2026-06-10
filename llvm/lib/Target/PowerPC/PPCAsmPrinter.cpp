@@ -2880,8 +2880,7 @@ void PPCAIXAsmPrinter::emitGlobalVariableHelper(const GlobalVariable *GV) {
     AliasList[getAliasOffset(GA->getAliasee())].push_back(GA);
 
   // Emit alias label and element value for global variable.
-  emitGlobalConstant(GV->getDataLayout(), GV->getInitializer(),
-                     &AliasList);
+  emitGlobalConstant(GV->getDataLayout(), GV->getInitializer(), &AliasList);
 }
 
 void PPCAIXAsmPrinter::emitFunctionDescriptor() {

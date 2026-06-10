@@ -351,6 +351,8 @@ private:
 
   void emitFunctionBodyEnd() override;
   void emitGlobalAlias(const Module &M, const GlobalAlias &GA) override;
+  MaybeAlign
+  getRequiredGlobalAlignmentGranule(const GlobalVariable &GV) override;
 
   MCSymbol *GetCPISymbol(unsigned CPID) const override;
   void emitEndOfAsmFile(Module &M) override;
@@ -4099,6 +4101,11 @@ const MCExpr *AArch64AsmPrinter::lowerConstant(const Constant *CV,
   }
 
   return AsmPrinter::lowerConstant(CV, BaseCV, Offset);
+}
+
+MaybeAlign
+AArch64AsmPrinter::getRequiredGlobalAlignmentGranule(const GlobalVariable &GV) {
+  return GV.isTagged() ? MaybeAlign(16) : std::nullopt;
 }
 
 char AArch64AsmPrinter::ID = 0;
