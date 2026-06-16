@@ -18062,9 +18062,16 @@ SDValue SITargetLowering::performFMACombine(SDNode *N,
       Op2.getOpcode() != ISD::FP_EXTEND)
     return SDValue();
 
-  // fdot2_f32_f16 always flushes fp32 denormal operand and output to zero,
-  // regardless of the denorm mode setting. Therefore,
-  // fp-contract is sufficient to allow generating fdot2.
+  // fdot2_f32_f16 unconditionally flushes the f32 result to zero, ignoring
+  // the MODE register's denormal control bits. Only fold when the function's
+  // f32 denormal mode is PreserveSign. On AMDGPU, PreserveSign means
+  // "denormals flushed to zero with unknown or positive sign", so v_fma_mix_f32
+  // and v_dot2c produce the same sign of zero for flushed results.
+  if (DAG.getMachineFunction().getDenormalMode(APFloat::IEEEsingle()) !=
+      DenormalMode::getPreserveSign())
+    return SDValue();
+
+  // fp-contract allows reassociating the fma tree into a dot product.
   const TargetOptions &Options = DAG.getTarget().Options;
   if (Options.AllowFPOpFusion == FPOpFusion::Fast ||
       (N->getFlags().hasAllowContract() &&
