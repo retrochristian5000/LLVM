@@ -6383,8 +6383,8 @@ VPHistogramRecipe *VPRecipeBuilder::widenIfHistogram(VPInstruction *VPI) {
   if (CM.isMaskRequired(HI->Store))
     HGramOps.push_back(VPI->getMask());
 
-  return new VPHistogramRecipe(*UpdateKind, HGramOps,
-                               cast<VPIRMetadata>(*VPI), VPI->getDebugLoc());
+  return new VPHistogramRecipe(*UpdateKind, HGramOps, cast<VPIRMetadata>(*VPI),
+                               VPI->getDebugLoc());
 }
 
 bool VPRecipeBuilder::replaceWithFinalIfReductionStore(
