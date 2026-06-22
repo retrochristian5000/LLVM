@@ -1115,6 +1115,23 @@ VPIRValue *vputils::tryToFoldLiveIns(VPSingleDefRecipe &R,
     case Instruction::ExtractElement:
       assert(!Ops[0]->getType()->isVectorTy() && "Live-ins should be scalar");
       return Ops[0];
+    case VPInstruction::ActiveLaneMask: {
+      uint64_t Multiplier = cast<ConstantInt>(Ops[2])->getZExtValue();
+      Type *I1Ty = IntegerType::getInt1Ty(Plan.getContext());
+      if (Plan.hasScalableVF())
+        // We do not produce foldable scalable ALMs at the moment.
+        return nullptr;
+
+      // We do not produce ALMs foldable to false at the moment.
+      unsigned MaxVF = Multiplier * max_element(Plan.vectorFactors(),
+                                                ElementCount::isKnownLT)
+                                        ->getFixedValue();
+      if (auto *C = dyn_cast_if_present<Constant>(Folder.FoldIntrinsic(
+              Intrinsic::get_active_lane_mask, drop_end(Ops),
+              FixedVectorType::get(I1Ty, MaxVF))))
+        if (C->isOneValue())
+          return ConstantInt::getTrue(I1Ty);
+    }
     }
     return nullptr;
   };
