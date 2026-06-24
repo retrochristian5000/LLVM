@@ -365,6 +365,7 @@ features cannot lower the translation-unit ABI level;
 - Fixed a bug where `__func__`, `__PRETTY_FUNCTION__` and `__FUNCTION__` were not resolving to the proper function when inside a lambda return type (#GH211811)
 - Fixed USR generation for declarations whose signature mentions a class-type
   non-type template parameter. (#GH212351)
+- Clang now diagnoses inferred-size arrays with huge designated initializer indices instead of attempting to allocate an enormous initializer list and crashing with an out-of-memory error. (#GH205472)
 
 #### Bug Fixes to Compiler Builtins
 
