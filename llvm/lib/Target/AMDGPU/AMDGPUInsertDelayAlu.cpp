@@ -365,7 +365,7 @@ public:
       return true;
     default:
       // All V_CMP* instructions excluding V_CMPX.
-      return SIInstrInfo::isVALU(MI) && MI.isCompare() &&
+      return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/false) && MI.isCompare() &&
              !SIInstrInfo::isCmpX(MI);
     }
   }
