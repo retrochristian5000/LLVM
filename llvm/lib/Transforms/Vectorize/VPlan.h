@@ -3324,6 +3324,9 @@ public:
     return Partial ? Partial->VFScaleFactor : 1;
   }
 
+  /// The ReductionStyle of this recipe.
+  ReductionStyle getReductionStyle() const { return Style; }
+
 protected:
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print the recipe.
@@ -3344,8 +3347,7 @@ public:
                           R.getFastMathFlagsOrNone(),
                           cast_or_null<Instruction>(R.getUnderlyingValue()),
                           {R.getChainOp(), R.getVecOp(), &EVL}, CondOp,
-                          getReductionStyle(/*InLoop=*/true, R.isOrdered(), 1),
-                          DL) {}
+                          R.getReductionStyle(), DL) {}
 
   ~VPReductionEVLRecipe() override = default;
 
@@ -3649,6 +3651,9 @@ public:
     }
     return new VPExpressionRecipe(ExpressionType, NewExpressiondRecipes);
   }
+
+  /// Returns a new VPExpressionRecipe with VPReductionEVLRecipe.
+  VPExpressionRecipe *convertToEVL(VPValue &EVL, VPValue *Mask);
 
   /// Insert the recipes of the expression back into the VPlan, directly before
   /// the current recipe. Leaves the expression recipe empty, which must be
