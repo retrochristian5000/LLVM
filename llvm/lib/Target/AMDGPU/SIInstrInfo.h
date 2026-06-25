@@ -610,8 +610,7 @@ public:
   }
 
   static bool isCmpX(const MachineInstr &MI) {
-    return MI.isCompare() &&
-           MI.definesRegister(AMDGPU::EXEC, /*TRI=*/nullptr);
+    return MI.isCompare() && MI.definesRegister(AMDGPU::EXEC, /*TRI=*/nullptr);
   }
 
   static bool isMUBUF(const MachineInstr &MI) {
