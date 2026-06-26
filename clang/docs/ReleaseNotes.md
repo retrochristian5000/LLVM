@@ -326,8 +326,7 @@ features cannot lower the translation-unit ABI level;
   in more diagnostics.
 
 - Fixed a missing `-Wconstant-conversion` diagnostic for `signed char` array
-  initialization.
-
+  initialization. (#GH181730)
 
 ### Improvements to Clang's time-trace
 
