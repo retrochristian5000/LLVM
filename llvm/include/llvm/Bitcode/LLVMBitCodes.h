@@ -826,7 +826,6 @@ enum AttributeKindCodes {
   ATTR_KIND_NOOUTLINE = 107,
   ATTR_KIND_FLATTEN = 108,
   ATTR_KIND_NOIPA = 109,
-  ATTR_KIND_RANGE_SET = 110,
 };
 
 enum ComdatSelectionKindCodes {
