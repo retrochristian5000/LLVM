@@ -1343,8 +1343,9 @@ InstructionCost VPInstruction::computeCost(ElementCount VF,
   // NOTE: At the moment it seems only possible to expose this path for
   // the trunc, zext and sext opcodes.
   if (Instruction::isCast(getOpcode()))
-    return getCostForRecipeWithOpcode(getOpcode(), ElementCount::getFixed(1),
-                                      Ctx);
+    return getCostForRecipeWithOpcode(
+        getOpcode(),
+        vputils::onlyFirstLaneUsed(this) ? ElementCount::getFixed(1) : VF, Ctx);
 
   if (Instruction::isBinaryOp(getOpcode())) {
     if (!getUnderlyingValue() && getOpcode() != Instruction::FMul) {
