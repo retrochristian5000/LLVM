@@ -12,7 +12,6 @@
 
 // ADDITIONAL_COMPILE_FLAGS: -Wno-macro-redefined -D_LIBCPP_ABI_ENABLE_SHARED_PTR_TRIVIAL_ABI
 
-// XFAIL: gcc
 // UNSUPPORTED: c++03
 
 #include <memory>
