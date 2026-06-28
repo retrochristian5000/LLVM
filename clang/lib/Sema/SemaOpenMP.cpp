@@ -20036,6 +20036,9 @@ OMPClause *SemaOpenMP::ActOnOpenMPFirstprivateClause(ArrayRef<Expr *> VarList,
         SemaRef, VDPrivate, RefExpr->getType().getUnqualifiedType(),
         RefExpr->getExprLoc());
     DeclRefExpr *Ref = nullptr;
+    if (checkDecompositionDSAConflict(SemaRef, DSAStack, D, ELoc,
+                                      OMPC_firstprivate))
+      continue;
     bool IsBindingDecl = isa<BindingDecl>(D);
     if (!VD && !SemaRef.CurContext->isDependentContext()) {
       if (TopDVar.CKind == OMPC_lastprivate) {
@@ -23957,7 +23960,7 @@ static void checkMappableExpressionList(
     }
 
     // Check for unsupported structured bindings early.
-    if (!NoDiagnose) { 
+    if (!NoDiagnose) {
       if (const auto *DRE = dyn_cast<DeclRefExpr>(SimpleExpr)) {
         const DecompositionDecl *DD = nullptr;
         if (const auto *BD = dyn_cast<BindingDecl>(DRE->getDecl())) {
