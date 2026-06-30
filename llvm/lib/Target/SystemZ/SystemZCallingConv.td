@@ -213,9 +213,13 @@ def RetCC_SystemZ_XPLINK64 : CallingConv<[
 // examples.
 
 def CC_SystemZ_XPLINK64 : CallingConv<[
-  // XPLINK64 ABI compliant code widens integral types smaller than i64
-  // to i64 before placing the parameters either on the stack or in registers.
-  CCIfType<[i32], CCIfExtend<CCPromoteToType<i64>>>,
+  // Callers must pass i32 arguments in full 64-bit registers.  The XPLINK64
+  // ABI does not mandate sign- or zero-extension in the upper 32 bits (that
+  // requirement applies only to return values), but the caller is still
+  // responsible for placing the value in a 64-bit register before the call.
+  // Other compilers (e.g. xlc) behave this way unconditionally, so we promote
+  // i32 to i64 here regardless of any signext/zeroext attribute.
+  CCIfType<[i32], CCPromoteToType<i64>>,
   // Promote f32 to f64 and bitcast to i64, if it needs to be passed in GPRs.
   // Although we assign the f32 vararg to be bitcast, it will first be promoted
   // to an f64 within convertValVTToLocVT().

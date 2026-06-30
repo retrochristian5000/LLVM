@@ -453,11 +453,16 @@ public:
     ShouldExtI32Param     = ShouldExtI32Return     = false;
     ShouldSignExtI32Param = ShouldSignExtI32Return = false;
 
-    // PowerPC64, Sparc64, SystemZ need signext/zeroext on i32 parameters and
-    // returns corresponding to C-level ints and unsigned ints.
+    // PowerPC64, Sparc64, and SystemZ ELF need signext/zeroext on i32
+    // parameters and returns corresponding to C-level ints and unsigned ints.
     if (T.isPPC64() || T.getArch() == Triple::sparcv9 ||
-        T.getArch() == Triple::systemz) {
+        (T.getArch() == Triple::systemz && !T.isOSzOS())) {
       ShouldExtI32Param = true;
+      ShouldExtI32Return = true;
+    }
+    // z/OS XPLINK64 only extends return values; parameters are not extended
+    // per the XPLINK ABI spec (other compilers do not extend arguments).
+    if (T.getArch() == Triple::systemz && T.isOSzOS()) {
       ShouldExtI32Return = true;
     }
     // LoongArch, Mips, and riscv64, on the other hand, need signext on i32

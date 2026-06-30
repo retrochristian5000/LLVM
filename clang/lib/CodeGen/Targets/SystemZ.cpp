@@ -618,13 +618,11 @@ bool ZOSXPLinkABIInfo::isPromotableIntegerTypeForABI(QualType Ty) const {
       return true;
 
   // In addition to the usual promotable integer types, we also need to
-  // extend all 32-bit types, since the ABI requires promotion to 64 bits.
+  // extend 32-bit types, since the ABI requires promotion to 64 bits.
   if (const BuiltinType *BT = Ty->getAs<BuiltinType>())
     switch (BT->getKind()) {
     case BuiltinType::Int:
     case BuiltinType::UInt:
-    case BuiltinType::ULong:
-    case BuiltinType::Long:
       return true;
     default:
       break;
@@ -825,9 +823,15 @@ ABIArgInfo ZOSXPLinkABIInfo::classifyArgumentType(QualType Ty, bool IsNamedArg,
     return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                    RAA == CGCXXABI::RAA_DirectInMemory);
 
-  // Integers and enums are extended to full register width.
+  // The XPLINK64 ABI does not mandate any widening of integer arguments;
+  // arguments are passed at their natural width with no sign- or zero-extension
+  // guarantee.  Only return values are required to be widened (per the z/OS
+  // Language Environment Vendor Interfaces spec).  Other compilers (e.g. xlc)
+  // leave the upper bits of an argument register unspecified, so emitting
+  // signext/zeroext on parameters would produce incorrect code when
+  // interoperating with xlc.
   if (isPromotableIntegerTypeForABI(Ty))
-    return ABIArgInfo::getExtend(Ty, CGT.ConvertType(Ty));
+    return ABIArgInfo::getDirect(CGT.ConvertType(Ty));
 
   // For non-C calling conventions, compound types passed by address copy.
   if ((CallConv != llvm::CallingConv::C) && isCompoundType(Ty))

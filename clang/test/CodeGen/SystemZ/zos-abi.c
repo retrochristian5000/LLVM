@@ -22,22 +22,22 @@
 // Scalar types
 
 char pass_char(char arg) { return arg; }
-// CHECK-LABEL: define signext i8 @pass_char(i8 signext %{{.*}})
+// CHECK-LABEL: define signext i8 @pass_char(i8 %{{.*}})
 
 signed char pass_schar(signed char arg) { return arg; }
-// CHECK-LABEL: define signext i8 @pass_schar(i8 signext %{{.*}})
+// CHECK-LABEL: define signext i8 @pass_schar(i8 %{{.*}})
 
 unsigned char pass_uchar(unsigned char arg) { return arg; }
-// CHECK-LABEL: define zeroext i8 @pass_uchar(i8 zeroext %{{.*}})
+// CHECK-LABEL: define zeroext i8 @pass_uchar(i8 %{{.*}})
 
 short pass_short(short arg) { return arg; }
-// CHECK-LABEL: define signext i16 @pass_short(i16 signext %{{.*}})
+// CHECK-LABEL: define signext i16 @pass_short(i16 %{{.*}})
 
 int pass_int(int arg) { return arg; }
-// CHECK-LABEL: define signext i32 @pass_int(i32 signext %{{.*}})
+// CHECK-LABEL: define signext i32 @pass_int(i32 %{{.*}})
 
 long pass_long(long arg) { return arg; }
-// CHECK-LABEL: define signext i64 @pass_long(i64 signext %{{.*}})
+// CHECK-LABEL: define i64 @pass_long(i64 %{{.*}})
 
 long long pass_longlong(long long arg) { return arg; }
 // CHECK-LABEL: define i64 @pass_longlong(i64 %{{.*}})
@@ -53,7 +53,7 @@ long double pass_longdouble(long double arg) { return arg; }
 
 enum Color { Red, Blue };
 enum Color pass_enum(enum Color arg) { return arg; }
-// CHECK-LABEL: define zeroext i32 @pass_enum(i32 zeroext %{{.*}})
+// CHECK-LABEL: define zeroext i32 @pass_enum(i32 %{{.*}})
 
 #ifdef TEST_VEC
 vector unsigned int pass_vector(vector unsigned int arg) { return arg; };
@@ -472,19 +472,19 @@ struct Bad4  pass_Bad4(struct Bad4 arg) { return arg; }
 // ==================================================================
 union tu_char { char a; } __attribute__((transparent_union));
 union tu_char pass_tu_char(union tu_char arg) { return arg; }
-// CHECK-LABEL: define{{.*}} i8 @pass_tu_char(i8 signext %{{.*}})
+// CHECK-LABEL: define{{.*}} i8 @pass_tu_char(i8 %{{.*}})
 
 union tu_short { short a; } __attribute__((transparent_union));
 union tu_short pass_tu_short(union tu_short arg) { return arg; }
-// CHECK-LABEL: define{{.*}} i16 @pass_tu_short(i16 signext %{{.*}})
+// CHECK-LABEL: define{{.*}} i16 @pass_tu_short(i16 %{{.*}})
 
 union tu_int { int a; } __attribute__((transparent_union));
 union tu_int pass_tu_int(union tu_int arg) { return arg; }
-// CHECK-LABEL: define{{.*}} i32 @pass_tu_int(i32 signext %{{.*}})
+// CHECK-LABEL: define{{.*}} i32 @pass_tu_int(i32 %{{.*}})
 
 union tu_long { long a; } __attribute__((transparent_union));
 union tu_long pass_tu_long(union tu_long arg) { return arg; }
-// CHECK-LABEL: define{{.*}} i64 @pass_tu_long(i64 signext %{{.*}})
+// CHECK-LABEL: define{{.*}} i64 @pass_tu_long(i64 %{{.*}})
 
 union tu_ptr { void *a; } __attribute__((transparent_union));
 union tu_ptr pass_tu_ptr(union tu_ptr arg) { return arg; }
@@ -596,7 +596,7 @@ int va_int_s(__builtin_zos_va_list l) { return __builtin_va_arg(l, int); }
 // CHECK: ret i32 [[VAL]]
 
 long va_long_e(__builtin_va_list l) { return __builtin_va_arg(l, long); }
-// CHECK-LABEL: define signext i64 @va_long_e(ptr %{{.*}})
+// CHECK-LABEL: define i64 @va_long_e(ptr %{{.*}})
 // CHECK: [[L_ADDR:%[._a-z0-9]+]] = alloca ptr, align 8
 // CHECK: store ptr %{{.*}}, ptr [[L_ADDR]], align 8
 // CHECK: [[ARGP_CURR:%[._a-z0-9]+]] = load ptr, ptr [[L_ADDR]], align 8
@@ -606,7 +606,7 @@ long va_long_e(__builtin_va_list l) { return __builtin_va_arg(l, long); }
 // CHECK: ret i64 [[VAL]]
 
 long va_long_s(__builtin_zos_va_list l) { return __builtin_va_arg(l, long); }
-// CHECK-LABEL: define signext i64 @va_long_s(ptr %{{.*}})
+// CHECK-LABEL: define i64 @va_long_s(ptr %{{.*}})
 // CHECK: [[L_ADDR:%[._a-z0-9]+]] = alloca ptr, align 8
 // CHECK: store ptr %{{.*}}, ptr [[L_ADDR]], align 8
 // CHECK: [[VALIST:%[._a-z0-9]+]] = load ptr, ptr [[L_ADDR]], align 8
