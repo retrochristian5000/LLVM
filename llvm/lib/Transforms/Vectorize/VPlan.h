@@ -3324,9 +3324,6 @@ public:
     return Partial ? Partial->VFScaleFactor : 1;
   }
 
-  /// The ReductionStyle of this recipe.
-  ReductionStyle getReductionStyle() const { return Style; }
-
 protected:
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print the recipe.
@@ -3347,7 +3344,9 @@ public:
                           R.getFastMathFlagsOrNone(),
                           cast_or_null<Instruction>(R.getUnderlyingValue()),
                           {R.getChainOp(), R.getVecOp(), &EVL}, CondOp,
-                          R.getReductionStyle(), DL) {}
+                          getReductionStyle(R.isInLoop(), R.isOrdered(),
+                                            R.getVFScaleFactor()),
+                          DL) {}
 
   ~VPReductionEVLRecipe() override = default;
 
@@ -3652,13 +3651,13 @@ public:
     return new VPExpressionRecipe(ExpressionType, NewExpressiondRecipes);
   }
 
-  /// Return and insert the recipes of the expression back into the VPlan,
-  /// directly before the current recipe. Leaves the expression recipe empty,
-  /// which must be removed before codegen.
-  ArrayRef<VPSingleDefRecipe *> decompose();
+  /// Clone this recipe and replace the reduction recipe to EVL recipe.
+  VPExpressionRecipe *cloneWithEVL(VPValue *Mask, VPValue *EVL);
 
-  /// Returns the expression type of this recipe.
-  ExpressionTypes getExpressionType() const { return ExpressionType; }
+  /// Insert the recipes of the expression back into the VPlan,
+  /// directly before the current recipe. Leaves the expression
+  /// recipe empty, which must be removed before codegen.
+  void decompose();
 
   unsigned getVFScaleFactor() const {
     auto *PR = dyn_cast<VPReductionRecipe>(ExpressionRecipes.back());

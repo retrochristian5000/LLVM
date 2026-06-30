@@ -5,8 +5,6 @@
 ; RUN: opt -passes=loop-vectorize -mattr=+v,+experimental-zvdot4a8i -scalable-vectorization=off -tail-folding-policy=dont-fold-tail -S < %s | FileCheck %s --check-prefixes=FIXED,FIXED-ZVDOT4A8I
 ; RUN: opt -passes=loop-vectorize -mattr=+v,+experimental-zvdot4a8i -S < %s | FileCheck %s --check-prefixes=CHECK,TAILFOLD
 
-; TODO: Remove -tail-folding-policy=dont-fold-tail when partial reductions with EVL tail folding is supported.
-
 target triple = "riscv64-none-unknown-elf"
 
 define i32 @vdot4a(ptr %a, ptr %b) #0 {
