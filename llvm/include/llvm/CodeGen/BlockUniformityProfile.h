@@ -10,7 +10,7 @@
 //
 // The source of truth is IR metadata attached during PGO use:
 //   - Metadata name: "block.uniformity.profile"
-//   - Payload: i1 (true = uniform, false = divergent)
+//   - Presence means the block is uniform.
 //
 // This is intentionally target-agnostic: any backend that produces
 // uniformity bits in the profile can attach the same metadata and reuse this
