@@ -24,6 +24,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/TensorEncoding.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Interfaces/InferIntRangeInterface.h"
@@ -43,6 +44,25 @@
 
 using namespace mlir;
 using namespace mlir::tensor;
+
+/// The intent is to keep canonicalizers from silently erasing downstream
+/// metadata: a `RankedTensorType` encoding is a per-value property, and the
+/// canonicalizer is not a place to guess whether it still applies — the
+/// encoding's own contract is.
+static Attribute propagateEncoding(Attribute encoding, ArrayRef<int64_t> shape,
+                                   Type elementType) {
+  auto verifiable = dyn_cast_or_null<VerifiableTensorEncoding>(encoding);
+  if (!verifiable)
+    return encoding;
+
+  MLIRContext *ctx = encoding.getContext();
+  // to avoid user's error stream
+  ScopedDiagnosticHandler swallow(ctx, [](Diagnostic &) { return success(); });
+  auto emit = [ctx]() { return mlir::emitError(UnknownLoc::get(ctx)); };
+  return succeeded(verifiable.verifyEncoding(shape, elementType, emit))
+             ? encoding
+             : Attribute{};
+}
 
 /// Materialize a single constant operation from a given attribute value with
 /// the desired resultant type.
@@ -3016,16 +3036,20 @@ public:
 
     // Create the new op in canonical form. The refined shape is inferred from
     // the destination type, but the encoding is a per-value property of the
-    // source and must be preserved: insert_slice does not convert between
-    // encodings, so the source's encoding is what the produced cast/op must
-    // carry (dropping it would silently discard downstream metadata such as
-    // bounds, layout, or sparsity descriptors).
+    // source: insert_slice does not convert between encodings, so the
+    // produced cast/op must carry the source's encoding (dropping it would
+    // silently discard downstream metadata such as bounds, layout, or
+    // sparsity descriptors). If the source's encoding no longer holds on the
+    // refined shape (e.g. a `VerifiableTensorEncoding` that self-invalidates),
+    // it is dropped in accordance with the encoding's own contract.
     auto sourceTypeBase = ExtractSliceOp::inferCanonicalRankReducedResultType(
         insertSliceOp.getSourceType().getRank(), insertSliceOp.getDestType(),
         mixedSizes);
     auto sourceType = RankedTensorType::get(
         sourceTypeBase.getShape(), sourceTypeBase.getElementType(),
-        insertSliceOp.getSourceType().getEncoding());
+        propagateEncoding(insertSliceOp.getSourceType().getEncoding(),
+                          sourceTypeBase.getShape(),
+                          sourceTypeBase.getElementType()));
     Value toInsert = insertSliceOp.getSource();
     if (sourceType != insertSliceOp.getSourceType()) {
       OpBuilder::InsertionGuard g(rewriter);
