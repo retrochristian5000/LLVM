@@ -178,6 +178,30 @@ func.func @concat_preserves_uniform_encoding(
 
 // -----
 
+// `VerifiableTensorEncoding` case: concat preserves rank, so the sparse
+// encoding's rank invariant still holds on the refined shape and it is kept.
+// The operand refinement inserts a cast whose target must carry the same
+// sparse encoding (not `null`, which would need re-encoding back later).
+#sparse_dense4 = #sparse_tensor.encoding<{
+    map = (d0, d1, d2, d3) -> (d0 : dense, d1 : dense, d2 : dense, d3 : dense)
+}>
+// CHECK-LABEL: concat_preserves_sparse_encoding
+//  CHECK-SAME:     %[[ARG0:[a-zA-Z0-9_]+]]: tensor<3x?x8x8xf32, #{{[a-z_0-9]+}}>
+//  CHECK-SAME:     %[[ARG1:[a-zA-Z0-9_]+]]: tensor<?x?x8x8xf32, #{{[a-z_0-9]+}}>
+//       CHECK:   %[[CAST:.+]] = tensor.cast %[[ARG1]] : tensor<?x?x8x8xf32, #{{[a-z_0-9]+}}> to tensor<3x?x8x8xf32, #{{[a-z_0-9]+}}>
+//       CHECK:   tensor.concat dim(1) %[[ARG0]], %[[CAST]]
+//  CHECK-SAME:     -> tensor<3x?x8x8xf32, #{{[a-z_0-9]+}}>
+func.func @concat_preserves_sparse_encoding(
+    %a: tensor<3x?x8x8xf32, #sparse_dense4>,
+    %b: tensor<?x?x8x8xf32, #sparse_dense4>) -> tensor<3x?x8x8xf32, #sparse_dense4> {
+  %r = tensor.concat dim(1) %a, %b
+      : (tensor<3x?x8x8xf32, #sparse_dense4>, tensor<?x?x8x8xf32, #sparse_dense4>)
+     -> tensor<3x?x8x8xf32, #sparse_dense4>
+  return %r : tensor<3x?x8x8xf32, #sparse_dense4>
+}
+
+// -----
+
 // CHECK-LABEL: func @fold_extract
 func.func @fold_extract(%arg0 : index) -> (f32, f16, f16, i32, complex<f32>, i32) {
   %const_0 = arith.constant 0 : index
@@ -1124,6 +1148,25 @@ func.func @collapse_of_cast_preserves_encoding(%t: tensor<8x12x32xf32, "abc">) -
 
 // -----
 
+// `VerifiableTensorEncoding` case: collapse changes the rank, so the sparse
+// encoding's rank invariant no longer holds; propagateEncoding asks the
+// encoding via `verifyEncoding` and drops it from the refined type.
+#sparse_dense3 = #sparse_tensor.encoding<{
+    map = (d0, d1, d2) -> (d0 : dense, d1 : dense, d2 : dense)
+}>
+// CHECK-LABEL: func.func @collapse_of_cast_drops_rank_invalid_encoding(
+//   CHECK-NOT:   collapse_shape {{.*}}#{{[a-z_0-9]+}}
+//       CHECK:   tensor.collapse_shape %{{.*}} {{\[}}[0, 1], [2]] : tensor<8x12x32xf32, #{{[a-z_0-9]+}}> into tensor<96x32xf32>
+func.func @collapse_of_cast_drops_rank_invalid_encoding(
+    %t: tensor<8x12x32xf32, #sparse_dense3>) -> tensor<?x32xf32> {
+  %0 = tensor.cast %t : tensor<8x12x32xf32, #sparse_dense3> to tensor<?x?x?xf32, #sparse_dense3>
+  %1 = tensor.collapse_shape %0 [[0, 1], [2]] : tensor<?x?x?xf32, #sparse_dense3> into tensor<?x?xf32>
+  %2 = tensor.cast %1 : tensor<?x?xf32> to tensor<?x32xf32>
+  return %2 : tensor<?x32xf32>
+}
+
+// -----
+
 func.func @fold_collapse_of_expand(%arg0 : tensor<12x4xf32>) -> tensor<12x4xf32> {
   %0 = tensor.expand_shape %arg0 [[0, 1], [2]] output_shape [3, 4, 4]
       : tensor<12x4xf32> into tensor<3x4x4xf32>
@@ -1823,6 +1866,30 @@ func.func @pad_after_cast_preserves_encoding(
       tensor.yield %cst: f32
   } : tensor<?x?x?x?xf32, "abc"> to tensor<?x?x?x?xf32, "abc">
   return %padded: tensor<?x?x?x?xf32, "abc">
+}
+
+// -----
+
+// `VerifiableTensorEncoding` case: pad preserves rank, so the sparse encoding
+// stays valid on the refined shape and PadOp::inferResultType keeps it.
+#sparse_dense4b = #sparse_tensor.encoding<{
+    map = (d0, d1, d2, d3) -> (d0 : dense, d1 : dense, d2 : dense, d3 : dense)
+}>
+// CHECK-LABEL:   func @pad_after_cast_preserves_sparse_encoding(
+//  CHECK-SAME:      %[[INPUT:.*]]: tensor<?x64x?x?xf32, #{{[a-z_0-9]+}}>
+//       CHECK:     %[[PADDED:.*]] = tensor.pad %[[INPUT]]
+//       CHECK:       : tensor<?x64x?x?xf32, #{{[a-z_0-9]+}}> to tensor<?x64x?x?xf32, #{{[a-z_0-9]+}}>
+//       CHECK:     tensor.cast %[[PADDED]] : tensor<?x64x?x?xf32, #{{[a-z_0-9]+}}> to tensor<?x?x?x?xf32, #{{[a-z_0-9]+}}>
+func.func @pad_after_cast_preserves_sparse_encoding(
+    %arg0: tensor<?x64x?x?xf32, #sparse_dense4b>) -> tensor<?x?x?x?xf32, #sparse_dense4b> {
+  %cst = arith.constant 0.000000e+00 : f32
+  %dynamic = tensor.cast %arg0
+      : tensor<?x64x?x?xf32, #sparse_dense4b> to tensor<?x?x?x?xf32, #sparse_dense4b>
+  %padded = tensor.pad %dynamic low[0, 0, 1, 1] high[0, 0, 1, 1] {
+    ^bb0(%a: index, %b: index, %c: index, %d: index):
+      tensor.yield %cst: f32
+  } : tensor<?x?x?x?xf32, #sparse_dense4b> to tensor<?x?x?x?xf32, #sparse_dense4b>
+  return %padded: tensor<?x?x?x?xf32, #sparse_dense4b>
 }
 
 // -----
@@ -2736,4 +2803,27 @@ func.func @sink_expand_of_cast_preserves_encoding(%t: tensor<64xf32, "abc">) -> 
   %e = tensor.expand_shape %c [[0, 1]] output_shape [%c8, %c8b]
       : tensor<?xf32, "abc"> into tensor<?x?xf32, "abc">
   return %e : tensor<?x?xf32, "abc">
+}
+
+// -----
+
+// `VerifiableTensorEncoding` case: expand_shape refined shapes keep the src's
+// and result's ranks respectively, so both sparse encodings pass their
+// (rank-based) `verifyEncoding` and are preserved.
+#sparse_v = #sparse_tensor.encoding<{ map = (d0) -> (d0 : compressed) }>
+#sparse_m = #sparse_tensor.encoding<{
+    map = (d0, d1) -> (d0 : compressed, d1 : compressed)
+}>
+// CHECK-LABEL:  func.func @sink_expand_of_cast_preserves_sparse_encoding
+//       CHECK:   %[[EXPAND:.+]] = tensor.expand_shape
+//  CHECK-SAME:     tensor<64xf32, #{{[a-z_0-9]+}}> into tensor<8x8xf32, #{{[a-z_0-9]+}}>
+//       CHECK:   tensor.cast %[[EXPAND]] : tensor<8x8xf32, #{{[a-z_0-9]+}}> to tensor<?x?xf32, #{{[a-z_0-9]+}}>
+func.func @sink_expand_of_cast_preserves_sparse_encoding(
+    %t: tensor<64xf32, #sparse_v>) -> tensor<?x?xf32, #sparse_m> {
+  %c = tensor.cast %t : tensor<64xf32, #sparse_v> to tensor<?xf32, #sparse_v>
+  %c8a = arith.constant 8 : index
+  %c8b = arith.constant 8 : index
+  %e = tensor.expand_shape %c [[0, 1]] output_shape [%c8a, %c8b]
+      : tensor<?xf32, #sparse_v> into tensor<?x?xf32, #sparse_m>
+  return %e : tensor<?x?xf32, #sparse_m>
 }
