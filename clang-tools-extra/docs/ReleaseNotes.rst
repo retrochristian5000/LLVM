@@ -247,6 +247,12 @@ New checks
   derived type thereof. Also does similar analysis for calls to ``isa<>`` that
   always return ``true``.
 
+  - New :doc:`llvm-regex
+  <clang-tidy/checks/llvm/regex>` check.
+
+  Detects malformed regex patterns defined in a single string literal
+  to catch mistakes at compile time.
+
 - New :doc:`llvm-type-switch-case-types
   <clang-tidy/checks/llvm/type-switch-case-types>` check.
 
@@ -317,11 +323,6 @@ New checks
 
   Checks for presence or absence of trailing commas in enum definitions and
   initializer lists.
-
-- New :doc:`llvm-regex
-  <clang-tidy/checks/llvm/regex>` check.
-
-  Detects malformed regex patterns used in ``llvm::Regex``.
 
 New check aliases
 ^^^^^^^^^^^^^^^^^
