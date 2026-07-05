@@ -415,8 +415,9 @@ foreach AM = MxMoveSrcAMs in {
   def MOV8c # AM  : MxMoveToCCRPseudo<!cast<MxOpBundle>("MxOp8AddrMode_"#AM).Op>;
 } // foreach AM
 
-// Only data register is allowed.
+// Only data register or immediate is allowed.
 def MOV16cd : MxMoveToCCR<MxOp16AddrMode_d.Op, MxMoveSrcOpEnc_d>;
+def MOV16ci : MxMoveToCCR<MxOp16AddrMode_i.Op, MxEncAddrMode_i<"src", 16>>;
 
 /// Move from CCR
 /// --------------------------------------------------
@@ -482,7 +483,9 @@ foreach AM = MxMoveSrcAMs in {
                                 !cast<MxEncMemOp>("MxMoveSrcOpEnc_"#AM)>;
 } // foreach AM
 
+// Only data register or immediate is allowed.
 def MOV16sd : MxMoveToSR<MxOp16AddrMode_d.Op, MxMoveSrcOpEnc_d>;
+def MOV16si : MxMoveToSR<MxOp16AddrMode_i.Op, MxEncAddrMode_i<"src", 16>>;
 
 /// Move from SR
 /// --------------------------------------------------
