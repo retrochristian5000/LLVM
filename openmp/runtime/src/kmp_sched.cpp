@@ -187,6 +187,24 @@ static void __kmp_for_static_init(ident_t *loc, kmp_int32 global_tid,
           ompt_work_type, ompt_scope_begin, &(team_info->parallel_data),
           &(task_info->task_data), 0, codeptr);
     }
+    if (ompt_enabled.ompt_callback_dispatch) {
+      ompt_dispatch_t dispatch_type;
+      ompt_data_t instance = ompt_data_none;
+      ompt_dispatch_chunk_t dispatch_chunk;
+      if (ompt_work_type == ompt_work_sections) {
+        dispatch_type = ompt_dispatch_section;
+        instance.ptr = codeptr;
+      } else {
+        OMPT_GET_DISPATCH_CHUNK(dispatch_chunk, *plower, *pupper, incr);
+        dispatch_type = (ompt_work_type == ompt_work_distribute)
+                            ? ompt_dispatch_distribute_chunk
+                            : ompt_dispatch_ws_loop_chunk;
+        instance.ptr = &dispatch_chunk;
+      }
+      ompt_callbacks.ompt_callback(ompt_callback_dispatch)(
+          &(team_info->parallel_data), &(task_info->task_data), dispatch_type,
+          instance);
+    }
 #endif
     KMP_STATS_LOOP_END(OMP_loop_static_iterations);
     return;
@@ -240,6 +258,24 @@ static void __kmp_for_static_init(ident_t *loc, kmp_int32 global_tid,
       ompt_callbacks.ompt_callback(ompt_callback_work)(
           ompt_work_type, ompt_scope_begin, &(team_info->parallel_data),
           &(task_info->task_data), *pstride, codeptr);
+    }
+    if (ompt_enabled.ompt_callback_dispatch) {
+      ompt_dispatch_t dispatch_type;
+      ompt_data_t instance = ompt_data_none;
+      ompt_dispatch_chunk_t dispatch_chunk;
+      if (ompt_work_type == ompt_work_sections) {
+        dispatch_type = ompt_dispatch_section;
+        instance.ptr = codeptr;
+      } else {
+        OMPT_GET_DISPATCH_CHUNK(dispatch_chunk, *plower, *pupper, incr);
+        dispatch_type = (ompt_work_type == ompt_work_distribute)
+                            ? ompt_dispatch_distribute_chunk
+                            : ompt_dispatch_ws_loop_chunk;
+        instance.ptr = &dispatch_chunk;
+      }
+      ompt_callbacks.ompt_callback(ompt_callback_dispatch)(
+          &(team_info->parallel_data), &(task_info->task_data), dispatch_type,
+          instance);
     }
 #endif
     KMP_STATS_LOOP_END(OMP_loop_static_iterations);
