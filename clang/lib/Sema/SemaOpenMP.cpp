@@ -3764,6 +3764,216 @@ StmtResult SemaOpenMP::ActOnOpenMPAssumeDirective(ArrayRef<OMPClause *> Clauses,
                                     AStmt);
 }
 
+StmtResult SemaOpenMP::createParallelDirectiveForMetadirective(
+    Stmt *Body, SourceLocation StartLoc, SourceLocation EndLoc) {
+  DeclarationNameInfo DirName;
+  DSAStack->push(llvm::omp::OMPD_parallel, DirName, SemaRef.getCurScope(),
+                 StartLoc);
+
+  ActOnOpenMPRegionStart(llvm::omp::OMPD_parallel, SemaRef.getCurScope());
+
+  StmtResult CapturedBody = ActOnOpenMPRegionEnd(Body, /*Clauses=*/{});
+
+  if (!CapturedBody.isUsable()) {
+    DSAStack->pop();
+    return StmtError();
+  }
+
+  StmtResult ParallelStmt = ActOnOpenMPParallelDirective(
+      /*Clauses=*/{}, CapturedBody.get(), StartLoc, EndLoc);
+
+  DSAStack->pop();
+
+  if (!ParallelStmt.isUsable())
+    return StmtError();
+
+  return ParallelStmt;
+}
+
+StmtResult SemaOpenMP::ActOnOpenMPMetaDirective(
+    SourceLocation StartLoc, SourceLocation EndLoc,
+    ArrayRef<OMPTraitInfo *> TraitInfos, ArrayRef<OpenMPClauseKind> ClauseKinds,
+    ArrayRef<Expr *> Conditions, ArrayRef<OpenMPDirectiveKind> DirectiveKinds,
+    Stmt *AStmt, ArrayRef<Stmt *> VariantDirectives) {
+
+  assert(TraitInfos.size() == ClauseKinds.size() &&
+         ClauseKinds.size() == Conditions.size() &&
+         Conditions.size() == DirectiveKinds.size() &&
+         "Mismatched array sizes for metadirective variants");
+  assert((VariantDirectives.empty() ||
+          VariantDirectives.size() == DirectiveKinds.size()) &&
+         "VariantDirectives, if provided, must match DirectiveKinds size");
+
+  if (TraitInfos.empty())
+    return StmtError();
+
+  ASTContext &Context = getASTContext();
+
+  // Check if all user conditions are constant.
+  bool AllConstant = true;
+  for (Expr *Condition : Conditions) {
+    if (Condition && !Condition->isEvaluatable(Context)) {
+      AllConstant = false;
+      break;
+    }
+  }
+
+  if (AllConstant) {
+    // All conditions are compile-time constant - evaluate and select.
+    for (unsigned I = 0; I < Conditions.size(); ++I) {
+      bool ShouldSelect = false;
+
+      if (ClauseKinds[I] == OMPC_when) {
+        // Evaluate the user condition.
+        if (Conditions[I]) {
+          Expr::EvalResult Result;
+          if (Conditions[I]->EvaluateAsInt(Result, Context)) {
+            ShouldSelect = Result.Val.getInt().getBoolValue();
+          }
+        }
+      } else if (ClauseKinds[I] == OMPC_otherwise ||
+                 ClauseKinds[I] == OMPC_default) {
+        // otherwise/default always matches.
+        ShouldSelect = true;
+      }
+      if (ShouldSelect) {
+        OpenMPDirectiveKind SelectedKind = DirectiveKinds[I];
+
+        // If it's "nothing" or unknown, just return the statement.
+        if (SelectedKind == OMPD_unknown || SelectedKind == OMPD_nothing)
+          return AStmt;
+
+        // Create the selected directive.
+        if (SelectedKind == OMPD_parallel) {
+          DeclarationNameInfo DirName;
+          DSAStack->push(OMPD_parallel, DirName, SemaRef.getCurScope(),
+                         StartLoc);
+          StmtResult ParallelStmt =
+              createParallelDirectiveForMetadirective(AStmt, StartLoc, EndLoc);
+          DSAStack->pop();
+
+          if (ParallelStmt.isUsable())
+            return ParallelStmt;
+          return StmtError();
+        } else {
+          // TODO: Handle other directive kinds
+          // For now, just return the statement
+          return AStmt;
+        }
+      }
+    }
+    return AStmt;
+  }
+
+  // At least one condition is runtime - transform to if-else AST.
+  // This allows normal OpenMP infrastructure to create CapturedStmts.
+
+  // Push a dummy entry onto DSA stack so that ActOnOpenMPRegionStart has
+  // context. We use the metadirective itself as the dummy entry.
+  DeclarationNameInfo DirName;
+  DSAStack->push(OMPD_unknown, DirName, SemaRef.getCurScope(), StartLoc);
+
+  // For now, handle simple case: 2 variants (when + otherwise).
+  if (DirectiveKinds.size() == 2 && Conditions[0] && !Conditions[1]) {
+
+    // Build: if (condition) { #pragma omp directive1 { body } } else { body }.
+    Expr *IfCondition = Conditions[0];
+    OpenMPDirectiveKind ThenDK = DirectiveKinds[0];
+    OpenMPDirectiveKind ElseDK = DirectiveKinds[1];
+
+    // Check if both branches would execute the body identically (both are
+    // nothing/unknown).
+    // In this case, don't create an if-else - just execute the body once.
+    bool ThenIsNothing = (ThenDK == OMPD_unknown || ThenDK == OMPD_nothing);
+    bool ElseIsNothing = (ElseDK == OMPD_unknown || ElseDK == OMPD_nothing);
+    if (ThenIsNothing && ElseIsNothing) {
+      // Both branches would execute the same body - no need for if-else.
+      DSAStack->pop();
+      return AStmt;
+    }
+    SmallVector<Stmt *, 2> CreatedVariantDirectives;
+    // Create the then-branch directive.
+    Stmt *ThenStmt = nullptr;
+    Stmt *ThenDirective = nullptr;
+    if (ThenDK == OMPD_parallel) {
+      StmtResult ParallelStmt =
+          createParallelDirectiveForMetadirective(AStmt, StartLoc, EndLoc);
+      if (!ParallelStmt.isUsable())
+        return StmtError();
+      ThenDirective = ParallelStmt.get();
+      ThenStmt = ThenDirective;
+    } else if (ThenDK == OMPD_unknown || ThenDK == OMPD_nothing) {
+      ThenStmt = AStmt;
+      ThenDirective = nullptr;
+    } else {
+      // TODO: Handle other directive kinds.
+      ThenStmt = AStmt;
+      ThenDirective = nullptr;
+    }
+    CreatedVariantDirectives.push_back(ThenDirective);
+
+    // Create the else-branch directive.
+    Stmt *ElseStmt = nullptr;
+    Stmt *ElseDirective = nullptr;
+    if (ElseDK == OMPD_unknown || ElseDK == OMPD_nothing) {
+      ElseStmt = AStmt;
+      ElseDirective = nullptr;
+    } else if (ElseDK == OMPD_parallel) {
+      StmtResult ParallelStmt =
+          createParallelDirectiveForMetadirective(AStmt, StartLoc, EndLoc);
+      if (!ParallelStmt.isUsable())
+        return StmtError();
+      ElseDirective = ParallelStmt.get();
+      ElseStmt = ElseDirective;
+    } else {
+      // TODO: Handle other directive kinds.
+      ElseStmt = AStmt;
+      ElseDirective = nullptr;
+    }
+    CreatedVariantDirectives.push_back(ElseDirective);
+    // Build the IfStmt.
+    IfStmt *RuntimeIfStmt =
+        IfStmt::Create(Context, StartLoc, IfStatementKind::Ordinary,
+                       /*Init=*/nullptr, /*Var=*/nullptr, IfCondition, StartLoc,
+                       StartLoc, ThenStmt, StartLoc, ElseStmt);
+
+    // Pop the dummy DSA stack entry.
+    DSAStack->pop();
+    return OMPMetaDirective::Create(Context, StartLoc, EndLoc, /*Clauses=*/{},
+                                    AStmt, RuntimeIfStmt, DirectiveKinds,
+                                    Conditions, CreatedVariantDirectives);
+  }
+
+  // Pop the dummy DSA stack entry if we didn't handle the 2-variant case.
+  DSAStack->pop();
+  // Fallback: At least one condition is runtime - create directive nodes if we
+  // have CapturedStmts.
+  SmallVector<Stmt *, 4> CreatedVariantDirectives;
+  for (unsigned I = 0; I < DirectiveKinds.size(); ++I) {
+    OpenMPDirectiveKind DK = DirectiveKinds[I];
+
+    if (DK == OMPD_unknown || DK == OMPD_nothing) {
+      // For nothing/unknown, no directive node needed.
+      CreatedVariantDirectives.push_back(nullptr);
+    } else if (I < VariantDirectives.size() && VariantDirectives[I]) {
+      // We have a CapturedStmt from the parser - create the directive.
+      Stmt *CapturedStmt = VariantDirectives[I];
+      StmtResult DirectiveStmt = ActOnOpenMPExecutableDirective(
+          DK, /*DirName=*/{}, /*CancelRegion=*/OMPD_unknown,
+          /*Clauses=*/{}, CapturedStmt, StartLoc, EndLoc);
+
+      CreatedVariantDirectives.push_back(
+          DirectiveStmt.isUsable() ? DirectiveStmt.get() : nullptr);
+    } else {
+      // No CapturedStmt provided - codegen will handle it
+      CreatedVariantDirectives.push_back(nullptr);
+    }
+  }
+  return OMPMetaDirective::Create(Context, StartLoc, EndLoc, /*Clauses=*/{},
+                                  AStmt, /*IfStmt=*/nullptr, DirectiveKinds,
+                                  Conditions, CreatedVariantDirectives);
+}
+
 OMPRequiresDecl *
 SemaOpenMP::CheckOMPRequiresDecl(SourceLocation Loc,
                                  ArrayRef<OMPClause *> ClauseList) {

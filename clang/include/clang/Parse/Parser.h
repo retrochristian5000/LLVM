@@ -6679,8 +6679,11 @@ private:
   /// \param StmtCtx The context in which we're parsing the directive.
   /// \param ReadDirectiveWithinMetadirective true if directive is within a
   /// metadirective and therefore ends on the closing paren.
+  /// /// \param ConsumeDirectiveOnlyInMetadirective true if we should stop at
+  /// ')' for runtime metadirective (to parse multiple directives in sequence).
   StmtResult ParseOpenMPDeclarativeOrExecutableDirective(
-      ParsedStmtContext StmtCtx, bool ReadDirectiveWithinMetadirective = false);
+      ParsedStmtContext StmtCtx, bool ReadDirectiveWithinMetadirective = false,
+      bool ConsumeDirectiveOnlyInMetadirective = false);
 
   /// Parses executable directive.
   ///
@@ -6689,10 +6692,12 @@ private:
   /// \param Loc Source location of the beginning of the directive.
   /// \param ReadDirectiveWithinMetadirective true if directive is within a
   /// metadirective and therefore ends on the closing paren.
-  StmtResult
-  ParseOpenMPExecutableDirective(ParsedStmtContext StmtCtx,
-                                 OpenMPDirectiveKind DKind, SourceLocation Loc,
-                                 bool ReadDirectiveWithinMetadirective);
+  /// /// \param ConsumeDirectiveOnlyInMetadirective true if we should stop at
+  /// ')' for runtime metadirective (to parse multiple directives in sequence).
+  StmtResult ParseOpenMPExecutableDirective(
+      ParsedStmtContext StmtCtx, OpenMPDirectiveKind DKind, SourceLocation Loc,
+      bool ReadDirectiveWithinMetadirective,
+      bool ConsumeDirectiveOnlyInMetadirective = false);
 
   /// Parses informational directive.
   ///
@@ -6701,9 +6706,17 @@ private:
   /// \param Loc Source location of the beginning of the directive.
   /// \param ReadDirectiveWithinMetadirective true if directive is within a
   /// metadirective and therefore ends on the closing paren.
+  /// /// \param ConsumeDirectiveOnlyInMetadirective true if parsing only the
+  /// directive (runtime path), false if also consuming to pragma end
+  /// (compile-time).
   StmtResult ParseOpenMPInformationalDirective(
       ParsedStmtContext StmtCtx, OpenMPDirectiveKind DKind, SourceLocation Loc,
-      bool ReadDirectiveWithinMetadirective);
+      bool ReadDirectiveWithinMetadirective,
+      bool ConsumeDirectiveOnlyInMetadirective = false);
+
+  /// Skip tokens until reaching a closing ')' that matches the current nesting
+  /// level. Handles nested parentheses correctly.
+  void skipToMatchingParen();
 
   /// Parses clause of kind \a CKind for directive of a kind \a Kind.
   ///

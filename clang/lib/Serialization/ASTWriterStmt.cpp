@@ -2531,7 +2531,22 @@ void ASTStmtWriter::VisitOMPLoopDirective(OMPLoopDirective *D) {
 void ASTStmtWriter::VisitOMPMetaDirective(OMPMetaDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
+  Record.push_back(D->getNumVariants());
   VisitOMPExecutableDirective(D);
+  // Write directive kinds and conditions.
+   const OMPMetaDirective *ConstD = D;
+  for (auto DK : ConstD->getDirectiveKinds())
+    Record.push_back(static_cast<unsigned>(DK));
+
+  for (auto *E : ConstD->getConditions())
+    Record.AddStmt(E);
+
+  // Write variant directives if present.
+  ArrayRef<Stmt *> Variants = ConstD->getVariantDirectives();
+  if (!Variants.empty()) {
+    for (auto *S : Variants)
+      Record.AddStmt(S);
+  }
   Code = serialization::STMT_OMP_META_DIRECTIVE;
 }
 

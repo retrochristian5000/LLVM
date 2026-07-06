@@ -2657,6 +2657,17 @@ void TextNodeDumper::VisitOMPExecutableDirective(
     OS << " openmp_standalone_directive";
 }
 
+void TextNodeDumper::VisitOMPMetaDirective(const OMPMetaDirective *D) {
+  unsigned NumVariants = D->getNumVariants();
+  if (NumVariants > 0) {
+    OS << " variants=" << NumVariants;
+    ArrayRef<OpenMPDirectiveKind> DKs = D->getDirectiveKinds();
+    for (unsigned I = 0; I < NumVariants; ++I) {
+      OS << " [" << I << "]: " << getOpenMPDirectiveName(DKs[I]);
+    }
+  }
+}
+
 void TextNodeDumper::VisitOMPDeclareReductionDecl(
     const OMPDeclareReductionDecl *D) {
   dumpName(D);

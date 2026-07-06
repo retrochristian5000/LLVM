@@ -6374,28 +6374,70 @@ public:
 ///
 class OMPMetaDirective final : public OMPExecutableDirective {
   friend class ASTStmtReader;
+  friend class ASTStmtWriter;
   friend class OMPExecutableDirective;
-  Stmt *IfStmt;
+  unsigned NumVariants;
+  OpenMPDirectiveKind *DirectiveKinds;
+  Expr **Conditions;
+  Stmt **VariantDirectives;
 
-  OMPMetaDirective(SourceLocation StartLoc, SourceLocation EndLoc)
+  OMPMetaDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                   unsigned NumVariants)
       : OMPExecutableDirective(OMPMetaDirectiveClass,
-                               llvm::omp::OMPD_metadirective, StartLoc,
-                               EndLoc) {}
-  explicit OMPMetaDirective()
+                               llvm::omp::OMPD_metadirective, StartLoc, EndLoc),
+        NumVariants(NumVariants), DirectiveKinds(nullptr), Conditions(nullptr),
+        VariantDirectives(nullptr) {}
+  explicit OMPMetaDirective(unsigned NumVariants)
       : OMPExecutableDirective(OMPMetaDirectiveClass,
                                llvm::omp::OMPD_metadirective, SourceLocation(),
-                               SourceLocation()) {}
+                               SourceLocation()),
+        NumVariants(NumVariants), DirectiveKinds(nullptr), Conditions(nullptr),
+        VariantDirectives(nullptr) {}
 
-  void setIfStmt(Stmt *S) { IfStmt = S; }
+  void setIfStmt(Stmt *S) { Data->getChildren()[0] = S; }
+  void setDirectiveKinds(OpenMPDirectiveKind *DK) { DirectiveKinds = DK; }
+  void setConditions(Expr **C) { Conditions = C; }
+  void setVariantDirectives(Stmt **VD) { VariantDirectives = VD; }
+  static void allocateVariantStorage(const ASTContext &C, OMPMetaDirective *Dir,
+                                     unsigned NumVariants);
+
+  OpenMPDirectiveKind *getDirectiveKinds() { return DirectiveKinds; }
+  Expr **getConditions() { return Conditions; }
+  Stmt **getVariantDirectives() { return VariantDirectives; }
 
 public:
-  static OMPMetaDirective *Create(const ASTContext &C, SourceLocation StartLoc,
-                                  SourceLocation EndLoc,
-                                  ArrayRef<OMPClause *> Clauses,
-                                  Stmt *AssociatedStmt, Stmt *IfStmt);
+  static OMPMetaDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<OMPClause *> Clauses, Stmt *AssociatedStmt, Stmt *IfStmt,
+         ArrayRef<OpenMPDirectiveKind> DirectiveKinds,
+         ArrayRef<Expr *> Conditions, ArrayRef<Stmt *> VariantDirectives);
   static OMPMetaDirective *CreateEmpty(const ASTContext &C, unsigned NumClauses,
-                                       EmptyShell);
-  Stmt *getIfStmt() const { return IfStmt; }
+                                       unsigned NumVariants, EmptyShell);
+  Stmt *getIfStmt() const { return Data->getChildren()[0]; }
+
+  unsigned getNumVariants() const { return NumVariants; }
+
+  ArrayRef<OpenMPDirectiveKind> getDirectiveKinds() const {
+    return ArrayRef<OpenMPDirectiveKind>(DirectiveKinds, NumVariants);
+  }
+
+  ArrayRef<Expr *> getConditions() const {
+    return ArrayRef<Expr *>(Conditions, NumVariants);
+  }
+
+  ArrayRef<Stmt *> getVariantDirectives() const {
+    return ArrayRef<Stmt *>(VariantDirectives, NumVariants);
+  }
+
+  child_range children() {
+    if (!Data)
+      return child_range(child_iterator(), child_iterator());
+    return Data->getChildren();
+  }
+
+  const_child_range children() const {
+    return const_cast<OMPMetaDirective *>(this)->children();
+  }
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == OMPMetaDirectiveClass;

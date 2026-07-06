@@ -2518,7 +2518,25 @@ void ASTStmtReader::VisitOMPMetaDirective(OMPMetaDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
+  unsigned NumVariants = Record.readInt();
   VisitOMPExecutableDirective(D);
+
+  // Read directive kinds and conditions.
+  SmallVector<OpenMPDirectiveKind, 4> DirectiveKinds;
+  for (unsigned I = 0; I < NumVariants; ++I)
+    DirectiveKinds.push_back(
+        static_cast<OpenMPDirectiveKind>(Record.readInt()));
+  std::copy(DirectiveKinds.begin(), DirectiveKinds.end(),
+            D->getDirectiveKinds());
+
+  for (unsigned I = 0; I < NumVariants; ++I)
+    D->getConditions()[I] = Record.readSubExpr();
+
+  // Read variant directives if present.
+  if (D->getVariantDirectives()) {
+    for (unsigned I = 0; I < NumVariants; ++I)
+      D->getVariantDirectives()[I] = Record.readSubStmt();
+  }
 }
 
 void ASTStmtReader::VisitOMPParallelDirective(OMPParallelDirective *D) {
@@ -3692,7 +3710,8 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case STMT_OMP_META_DIRECTIVE:
       S = OMPMetaDirective::CreateEmpty(
-          Context, Record[ASTStmtReader::NumStmtFields], Empty);
+          Context, Record[ASTStmtReader::NumStmtFields],
+          Record[ASTStmtReader::NumStmtFields + 1], Empty);
       break;
 
     case STMT_OMP_PARALLEL_DIRECTIVE:
