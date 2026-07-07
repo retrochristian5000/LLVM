@@ -16,6 +16,7 @@
 #include "llvm/ExecutionEngine/JITLink/XCOFF.h"
 #include "llvm/ExecutionEngine/JITLink/aarch64.h"
 #include "llvm/ExecutionEngine/JITLink/loongarch.h"
+#include "llvm/ExecutionEngine/JITLink/ppc64.h"
 #include "llvm/ExecutionEngine/JITLink/systemz.h"
 #include "llvm/ExecutionEngine/JITLink/x86.h"
 #include "llvm/ExecutionEngine/JITLink/x86_64.h"
@@ -482,6 +483,9 @@ AnonymousPointerCreator getAnonymousPointerCreator(const Triple &TT) {
     return loongarch::createAnonymousPointer;
   case Triple::systemz:
     return systemz::createAnonymousPointer;
+  case Triple::ppc64:
+  case Triple::ppc64le:
+    return ppc64::createAnonymousPointer;
   default:
     return nullptr;
   }
@@ -500,6 +504,21 @@ PointerJumpStubCreator getPointerJumpStubCreator(const Triple &TT) {
     return loongarch::createAnonymousPointerJumpStub;
   case Triple::systemz:
     return systemz::createAnonymousPointerJumpStub;
+  case Triple::ppc64:
+    // LongBranchSaveR2 is the default for external calls: saves the TOC
+    // pointer (r2) before branching, as required when the callee sets its
+    // own TOC. Callers needing a different stub kind (e.g. LongBranchNoTOC)
+    // should construct a PointerJumpStubCreator lambda directly or call
+    // ppc64::createAnonymousPointerJumpStub with the desired PLTCallStubKind.
+    return [](LinkGraph &G, Section &S, Symbol &Ptr) -> Symbol & {
+      return ppc64::createAnonymousPointerJumpStub<llvm::endianness::big>(
+          G, S, Ptr, ppc64::LongBranchSaveR2);
+    };
+  case Triple::ppc64le:
+    return [](LinkGraph &G, Section &S, Symbol &Ptr) -> Symbol & {
+      return ppc64::createAnonymousPointerJumpStub<llvm::endianness::little>(
+          G, S, Ptr, ppc64::LongBranchSaveR2);
+    };
   default:
     return nullptr;
   }
