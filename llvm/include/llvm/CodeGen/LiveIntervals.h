@@ -281,11 +281,21 @@ public:
     return Indexes->getMBBFromIndex(index);
   }
 
+  /// Add \p MBB to the SlotIndexes and regmask maps. \p MBB is expected to be a
+  /// fresh, empty basic block; it is recorded as having no regmask slots. To
+  /// split a block that already contains regmask-bearing instructions (e.g.
+  /// calls) into a new block, use splitAt() instead.
   void insertMBBInMaps(MachineBasicBlock *MBB) {
-    Indexes->insertMBBInMaps(MBB);
-    assert(unsigned(MBB->getNumber()) == RegMaskBlocks.size() &&
-           "Blocks must be added in order.");
-    RegMaskBlocks.push_back(std::make_pair(RegMaskSlots.size(), 0));
+    insertMBBInMapsImpl(MBB, /*CalledBySplitAt=*/false);
+  }
+
+  /// Update the SlotIndexes and regmask maps after the tail of \p Orig --
+  /// including any regmask-bearing instructions -- has been moved into the new
+  /// block \p SplitBB: insert \p SplitBB into the maps and re-slice \p Orig's
+  /// regmask table across the two blocks.
+  void splitAt(MachineBasicBlock &Orig, MachineBasicBlock &SplitBB) {
+    insertMBBInMapsImpl(&SplitBB, /*CalledBySplitAt=*/true);
+    reassignRegMaskSlots(Orig, SplitBB);
   }
 
   SlotIndex InsertMachineInstrInMaps(MachineInstr &MI) {
@@ -481,6 +491,20 @@ private:
 
   /// Compute RegMaskSlots and RegMaskBits.
   void computeRegMasks();
+
+  /// Shared implementation of insertMBBInMaps(). \p CalledBySplitAt is true
+  /// only when called from splitAt(), which legitimately inserts a block
+  /// already populated with regmask-bearing instructions and fixes up the
+  /// regmask slices afterward via reassignRegMaskSlots(). For every other
+  /// caller \p MBB must contain no regmask operands.
+  void insertMBBInMapsImpl(MachineBasicBlock *MBB, bool CalledBySplitAt);
+
+  /// Move the per-block regmask table (RegMaskBlocks) entries for the
+  /// instructions splitAt() moved from \p Orig into the new block \p SplitBB,
+  /// so that checkRegMaskInterference does not miss call clobbers for ranges
+  /// local to either block.
+  void reassignRegMaskSlots(MachineBasicBlock &Orig,
+                            MachineBasicBlock &SplitBB);
 
   /// Walk the values in \p LI and check for dead values:
   /// - Dead PHIDef values are marked as unused.
