@@ -7,6 +7,7 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:
 target triple = "x86_64-unknown-linux-gnu"
 
 %struct.MyStruct = type { i32, i64 }
+%struct.Big = type { i64, i64, i64 }
 
 define ptr @func_ret_struct_ptr(ptr %s) #0 !dbg !8 {
 entry:
@@ -25,6 +26,18 @@ entry:
 ; CHECK: define i32 @func_ret_scalar(i32 %x)
 ; CHECK: call void @__sanitizer_cov_trace_ret(i64 ptrtoint (ptr @func_ret_scalar to i64), i32 4, ptr %{{.*}}, ptr null, i32 0)
 ; CHECK: ret i32 %x
+
+; Struct returned by value, lowered to an indirect (sret) return: the IR
+; returns void, so the sret buffer (arg 0) must be traced as the return value
+; with the source struct's field offsets and full struct size (24 bytes).
+define void @func_ret_sret(ptr sret(%struct.Big) %0) #0 !dbg !18 {
+entry:
+  ret void
+}
+
+; CHECK: define void @func_ret_sret(ptr sret(%struct.Big) %0)
+; CHECK: call void @__sanitizer_cov_trace_ret(i64 ptrtoint (ptr @func_ret_sret to i64), i32 24, ptr %0, ptr getelementptr inbounds ([7 x i64], ptr @__sancov_offsets_{{.*}}, i64 0, i64 1), i32 3)
+; CHECK: ret void
 
 attributes #0 = { nounwind sanitize_address }
 
@@ -57,3 +70,14 @@ attributes #0 = { nounwind sanitize_address }
 !16 = !DISubroutineType(types: !17)
 ; types: [ret=int, arg0=int]
 !17 = !{!5, !5}
+
+; func_ret_sret returns struct Big { long a; long b; long c; } by value
+!18 = distinct !DISubprogram(name: "func_ret_sret", scope: !1, file: !1, line: 15, type: !19, unit: !0, retainedNodes: !2)
+!19 = !DISubroutineType(types: !20)
+; types: [ret=struct Big, arg=struct Big] (arg is the source-level return, no sret entry)
+!20 = !{!21, !21}
+!21 = !DICompositeType(tag: DW_TAG_structure_type, name: "Big", size: 192, elements: !25)
+!22 = !DIDerivedType(tag: DW_TAG_member, name: "a", scope: !21, file: !1, baseType: !6, size: 64, offset: 0)
+!23 = !DIDerivedType(tag: DW_TAG_member, name: "b", scope: !21, file: !1, baseType: !6, size: 64, offset: 64)
+!24 = !DIDerivedType(tag: DW_TAG_member, name: "c", scope: !21, file: !1, baseType: !6, size: 64, offset: 128)
+!25 = !{!22, !23, !24}

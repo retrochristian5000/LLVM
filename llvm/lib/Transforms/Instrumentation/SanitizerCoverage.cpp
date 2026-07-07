@@ -1422,6 +1422,19 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
   };
   DenseMap<unsigned, SourceArg> SrcArgs;
 
+  // Record a fragment for a source parameter, ignoring exact (value, offset)
+  // duplicates. The same #dbg_value can be reached more than once (found via
+  // the argument in pass 1 and again while walking the block in pass 2, or
+  // simply duplicated by an earlier pass); without this a single scalar arg
+  // with a repeated record would look like a multi-fragment struct and be
+  // needlessly reassembled.
+  auto addFragment = [](SourceArg &SA, Value *V, uint64_t BitOff) {
+    for (const auto &Existing : SA.Fragments)
+      if (Existing.first == V && Existing.second == BitOff)
+        return;
+    SA.Fragments.push_back({V, BitOff});
+  };
+
   // Pass 1: direct argument debug records (batched scan)
   SmallVector<DbgVariableRecord *, 16> AllDVRs;
   for (auto &Arg : F.args()) {
@@ -1438,7 +1451,7 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       uint64_t FragBitOff = 0;
       if (auto Frag = DVR->getExpression()->getFragmentInfo())
         FragBitOff = Frag->OffsetInBits;
-      SA.Fragments.push_back({&Arg, FragBitOff});
+      addFragment(SA, &Arg, FragBitOff);
     }
   }
 
@@ -1467,7 +1480,7 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       uint64_t FragBitOff = 0;
       if (auto Frag = DVar->getExpression()->getFragmentInfo())
         FragBitOff = Frag->OffsetInBits;
-      SA.Fragments.push_back({V, FragBitOff});
+      addFragment(SA, V, FragBitOff);
     }
   }
 
@@ -1520,7 +1533,11 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
     SortedKeys.push_back(K);
   llvm::sort(SortedKeys);
 
-  IRBuilder<> TraceIRB(EntryBB.getTerminator());
+  // Use InstrumentationIRBuilder so the inserted calls inherit a synthetic
+  // !dbg location. In a function that carries debug info (which this pass
+  // requires), a plain IRBuilder would emit callee-bearing calls with no
+  // location and trip the verifier under -g and LTO.
+  InstrumentationIRBuilder TraceIRB(EntryBB.getTerminator());
 
   for (unsigned SrcIdx : SortedKeys) {
     auto &SA = SrcArgs[SrcIdx];
@@ -1623,6 +1640,20 @@ void ModuleSanitizerCoverage::InjectTraceForRet(Function &F) {
 
   auto [OffsetsGV, NumFields] = getStructFieldOffsets(RetDIType, M, *DL);
 
+  // A struct returned by value may be lowered to an indirect return: the IR
+  // function returns void and writes the result into a caller-provided buffer
+  // passed as a hidden `sret` pointer. In that case the ReturnInst carries no
+  // value, so trace the sret buffer instead. This keeps the return path
+  // symmetric with the argument path, which deliberately skips the same sret
+  // pointer as a non-source argument.
+  Argument *SRetArg = nullptr;
+  for (Argument &A : F.args()) {
+    if (A.hasStructRetAttr()) {
+      SRetArg = &A;
+      break;
+    }
+  }
+
   EscapeEnumerator EE(F, "sancov_trace_ret");
   while (IRBuilder<> *AtExit = EE.Next()) {
     InstrumentationIRBuilder::ensureDebugInfo(*AtExit, F);
@@ -1645,6 +1676,13 @@ void ModuleSanitizerCoverage::InjectTraceForRet(Function &F) {
       AtExit->CreateStore(RetVal, Alloca);
       RetPtr = Alloca;
       RetByteSize = DL->getTypeStoreSize(RetVal->getType());
+    } else if (SRetArg) {
+      // Indirect (sret) return: the value lives in the caller-provided buffer.
+      RetPtr = SRetArg;
+      if (Type *ElemTy = SRetArg->getParamStructRetType())
+        RetByteSize = DL->getTypeStoreSize(ElemTy);
+      else
+        RetByteSize = DL->getPointerSize();
     } else {
       RetPtr = Constant::getNullValue(PtrTy);
     }

@@ -21,8 +21,10 @@ entry:
 }
 
 ; CHECK-LABEL: define void @make_big(ptr sret(%struct.big) %0, i32 %1, i32 %2)
-; CHECK: call void @__sanitizer_cov_trace_args(i64 ptrtoint (ptr @make_big to i64), i32 0, i32 4, ptr %{{.*}}, ptr null, i32 0)
-; CHECK: call void @__sanitizer_cov_trace_args(i64 ptrtoint (ptr @make_big to i64), i32 1, i32 4, ptr %{{.*}}, ptr null, i32 0)
+; Trace calls must carry a !dbg location: this function has debug info, so a
+; call without one would fail the verifier under -g/LTO.
+; CHECK: call void @__sanitizer_cov_trace_args(i64 ptrtoint (ptr @make_big to i64), i32 0, i32 4, ptr %{{.*}}, ptr null, i32 0), !dbg !{{[0-9]+}}
+; CHECK: call void @__sanitizer_cov_trace_args(i64 ptrtoint (ptr @make_big to i64), i32 1, i32 4, ptr %{{.*}}, ptr null, i32 0), !dbg !{{[0-9]+}}
 ; CHECK-NOT: call void @__sanitizer_cov_trace_args(i64 ptrtoint (ptr @make_big to i64), i32 2
 ; CHECK: ret void
 
