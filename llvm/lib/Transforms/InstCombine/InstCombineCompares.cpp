@@ -8408,6 +8408,48 @@ Instruction *InstCombinerImpl::foldFCmpIntToFPConst(FCmpInst &I,
     }
   }
 
+  Value *X = LHSI->getOperand(0);
+  bool IsNonNegUIToFP =
+      LHSUnsigned && cast<PossiblyNonNegInst>(LHSI)->hasNonNeg();
+  if (IsNonNegUIToFP && IsExact) {
+    APSInt ZeroInt(APInt::getZero(IntWidth), /*isUnsigned=*/true);
+    Constant *ZeroC = ConstantInt::get(IntTy, APInt::getZero(IntWidth));
+    if (RHSInt == ZeroInt) {
+      switch (Pred) {
+      default:
+        break;
+      case ICmpInst::ICMP_UGE:
+        // The defined range of (uitofp nneg x) starts at zero.
+        return replaceInstUsesWith(I, ConstantInt::getTrue(I.getType()));
+      case ICmpInst::ICMP_UGT:
+        return new ICmpInst(ICmpInst::ICMP_NE, X, ZeroC);
+      case ICmpInst::ICMP_ULE:
+        return new ICmpInst(ICmpInst::ICMP_EQ, X, ZeroC);
+      case ICmpInst::ICMP_ULT:
+        return replaceInstUsesWith(I, ConstantInt::getFalse(I.getType()));
+      }
+    }
+
+    APInt SignedMax = APInt::getSignedMaxValue(IntWidth);
+    APSInt SignedMaxInt(SignedMax, /*isUnsigned=*/true);
+    if (RHSInt == SignedMaxInt) {
+      Constant *SignedMaxC =
+          ConstantInt::get(IntTy, APInt::getSignedMaxValue(IntWidth));
+      switch (Pred) {
+      default:
+        break;
+      case ICmpInst::ICMP_UGE:
+        return new ICmpInst(ICmpInst::ICMP_EQ, X, SignedMaxC);
+      case ICmpInst::ICMP_UGT:
+        return replaceInstUsesWith(I, ConstantInt::getFalse(I.getType()));
+      case ICmpInst::ICMP_ULE:
+        return replaceInstUsesWith(I, ConstantInt::getTrue(I.getType()));
+      case ICmpInst::ICMP_ULT:
+        return new ICmpInst(ICmpInst::ICMP_NE, X, SignedMaxC);
+      }
+    }
+  }
+
   // Lower this FP comparison into an appropriate integer version of the
   // comparison.
   return new ICmpInst(Pred, LHSI->getOperand(0),
@@ -9037,11 +9079,19 @@ static bool isMinMaxCmpSelectEliminable(SelectPatternFlavor Flavor, Value *A,
     return false;
 
   bool IsUnsigned = I->getOpcode() == Instruction::UIToFP;
+  bool IsNonNegUIToFP =
+      IsUnsigned && cast<PossiblyNonNegInst>(I)->hasNonNeg();
   unsigned BitWidth = I->getOperand(0)->getType()->getScalarSizeInBits();
-  APSInt IntBoundary = (Flavor == SPF_FMAXNUM)
-                           ? APSInt::getMinValue(BitWidth, IsUnsigned)
-                           : APSInt::getMaxValue(BitWidth, IsUnsigned);
-  APSInt ConvertedInt(BitWidth, IsUnsigned);
+  APSInt LowerBoundary = APSInt::getMinValue(BitWidth, IsUnsigned);
+  // For uitofp nneg, negative signed inputs are poison, so the defined upper
+  // bound is signed max rather than unsigned max.
+  APSInt UpperBoundary =
+      IsNonNegUIToFP
+          ? APSInt(APInt::getSignedMaxValue(BitWidth), /*isUnsigned=*/true)
+          : APSInt::getMaxValue(BitWidth, IsUnsigned);
+  APSInt IntBoundary =
+      Flavor == SPF_FMAXNUM ? LowerBoundary : UpperBoundary;
+  APSInt ConvertedInt(BitWidth, IntBoundary.isUnsigned());
   bool IsExact;
   APFloat::opStatus Status =
       APF->convertToInteger(ConvertedInt, APFloat::rmTowardZero, &IsExact);
