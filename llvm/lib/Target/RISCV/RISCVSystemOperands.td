@@ -186,6 +186,9 @@ foreach i = 4...6 in {
 def : SysReg<"satp", 0x180>;
 let isDeprecatedName = 1 in
 def : SysReg<"sptbr", 0x180>;
+def : SysReg<"spmpen", 0x183>;
+let isRV32Only = 1 in
+def : SysReg<"spmpenh", 0x193>;
 
 //===----------------------------------------------------------------------===//
 // Supervisor Timer Compare
@@ -415,6 +418,7 @@ foreach i = 4...6 in {
 def : SysReg<"menvcfg", 0x30A>;
 let isRV32Only = 1 in
 def : SysReg<"menvcfgh", 0x31A>;
+def : SysReg<"mpmpdeleg", 0x316>;
 def : SysReg<"mseccfg", 0x747>;
 let isRV32Only = 1 in
 def : SysReg<"mseccfgh", 0x757>;
