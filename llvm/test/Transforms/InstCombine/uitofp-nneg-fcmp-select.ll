@@ -107,6 +107,57 @@ define i1 @uitofp_nneg_i8_cmp_ole_smax(i8 %x) {
   ret i1 %cmp
 }
 
+define i1 @uitofp_nneg_i8_cmp_olt_above_smax(i8 %x) {
+; CHECK-LABEL: define i1 @uitofp_nneg_i8_cmp_olt_above_smax(
+; CHECK-SAME: i8 [[X:%.*]]) {
+; CHECK-NEXT:    ret i1 true
+;
+  %f = uitofp nneg i8 %x to float
+  %cmp = fcmp olt float %f, 1.280000e+02
+  ret i1 %cmp
+}
+
+define i1 @uitofp_nneg_i8_cmp_oge_above_smax(i8 %x) {
+; CHECK-LABEL: define i1 @uitofp_nneg_i8_cmp_oge_above_smax(
+; CHECK-SAME: i8 [[X:%.*]]) {
+; CHECK-NEXT:    ret i1 false
+;
+  %f = uitofp nneg i8 %x to float
+  %cmp = fcmp oge float %f, 1.280000e+02
+  ret i1 %cmp
+}
+
+define i1 @uitofp_nneg_i8_cmp_oeq_above_smax(i8 %x) {
+; CHECK-LABEL: define i1 @uitofp_nneg_i8_cmp_oeq_above_smax(
+; CHECK-SAME: i8 [[X:%.*]]) {
+; CHECK-NEXT:    ret i1 false
+;
+  %f = uitofp nneg i8 %x to float
+  %cmp = fcmp oeq float %f, 1.280000e+02
+  ret i1 %cmp
+}
+
+define i1 @uitofp_nneg_i8_cmp_one_above_smax(i8 %x) {
+; CHECK-LABEL: define i1 @uitofp_nneg_i8_cmp_one_above_smax(
+; CHECK-SAME: i8 [[X:%.*]]) {
+; CHECK-NEXT:    ret i1 true
+;
+  %f = uitofp nneg i8 %x to float
+  %cmp = fcmp one float %f, 1.280000e+02
+  ret i1 %cmp
+}
+
+define i1 @uitofp_i8_no_nneg_cmp_olt_128_not_true(i8 %x) {
+; CHECK-LABEL: define i1 @uitofp_i8_no_nneg_cmp_olt_128_not_true(
+; CHECK-SAME: i8 [[X:%.*]]) {
+; CHECK-NEXT:    [[CMP:%.*]] = icmp sgt i8 [[X]], -1
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %f = uitofp i8 %x to float
+  %cmp = fcmp olt float %f, 1.280000e+02
+  ret i1 %cmp
+}
+
 define i1 @uitofp_nneg_i8_cmp_ogt_zero(i8 %x) {
 ; CHECK-LABEL: define i1 @uitofp_nneg_i8_cmp_ogt_zero(
 ; CHECK-SAME: i8 [[X:%.*]]) {
