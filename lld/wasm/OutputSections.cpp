@@ -109,8 +109,7 @@ void DataSection::finalizeContents() {
   });
 #endif
 
-  assert((ctx.arg.sharedMemory || !ctx.isPic || ctx.arg.extendedConst ||
-          activeCount <= 1) &&
+  assert((!ctx.isPic || ctx.arg.extendedConst || activeCount <= 1) &&
          "output segments should have been combined by now");
 
   writeUleb128(os, segmentCount, "data segment count");
