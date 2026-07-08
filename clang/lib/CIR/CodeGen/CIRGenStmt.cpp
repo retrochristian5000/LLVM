@@ -21,6 +21,7 @@
 #include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/CIR/MissingFeatures.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 using namespace clang;
 using namespace clang::CIRGen;
@@ -994,8 +995,14 @@ mlir::LogicalResult CIRGenFunction::emitForStmt(const ForStmt &s) {
           if (s.getCond()) {
             // If the for statement has a condition scope,
             // emit the local variable declaration.
-            if (s.getConditionVariable())
+            if (s.getConditionVariable()) {
+              // A lifetime.end for the condition variable would have to run
+              // on both the back edge and the exit edge, which the cond
+              // region cannot express; suppress its lifetime markers.
+              assert(!cir::MissingFeatures::lifetimeMarkersLoopCondVar());
+              llvm::SaveAndRestore suppress(suppressLoopCondVarLifetime, true);
               emitDecl(*s.getConditionVariable());
+            }
             // C99 6.8.5p2/p4: The first substatement is executed if the
             // expression compares unequal to 0. The condition must be a
             // scalar type.
@@ -1104,8 +1111,14 @@ mlir::LogicalResult CIRGenFunction::emitWhileStmt(const WhileStmt &s) {
           mlir::Value condVal;
           // If the for statement has a condition scope,
           // emit the local variable declaration.
-          if (s.getConditionVariable())
+          if (s.getConditionVariable()) {
+            // A lifetime.end for the condition variable would have to run
+            // on both the back edge and the exit edge, which the cond
+            // region cannot express; suppress its lifetime markers.
+            assert(!cir::MissingFeatures::lifetimeMarkersLoopCondVar());
+            llvm::SaveAndRestore suppress(suppressLoopCondVarLifetime, true);
             emitDecl(*s.getConditionVariable());
+          }
           // C99 6.8.5p2/p4: The first substatement is executed if the
           // expression compares unequal to 0. The condition must be a
           // scalar type.

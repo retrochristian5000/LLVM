@@ -2709,6 +2709,12 @@ private:
   /// Set when the current function has a goto/switch that may bypass a local's
   /// init; lifetime markers are then suppressed. See functionMightHaveBypass.
   bool fnHasBypassStmt = false;
+  /// Set while emitting a loop condition variable's declaration. Such a
+  /// variable is destroyed and re-created on every iteration, so its
+  /// lifetime.end would have to run on both the loop's back edge and its exit
+  /// edge; the structured cond region cannot express a cleanup on both edges
+  /// yet, so lifetime markers are suppressed for these variables.
+  bool suppressLoopCondVarLifetime = false;
 
   class InlinedInheritingConstructorScope {
   public:

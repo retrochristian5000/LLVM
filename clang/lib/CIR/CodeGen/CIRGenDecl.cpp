@@ -147,7 +147,8 @@ CIRGenFunction::emitAutoVarAlloca(const VarDecl &d,
       // classic's per-decl bypass analysis, drop markers for the whole
       // function if any such statement is present.
       assert(!cir::MissingFeatures::lifetimeMarkersBypass());
-      if (shouldEmitLifetimeMarkers && haveInsertPoint() && !fnHasBypassStmt) {
+      if (shouldEmitLifetimeMarkers && haveInsertPoint() && !fnHasBypassStmt &&
+          !suppressLoopCondVarLifetime) {
         emission.useLifetimeMarkers = emitLifetimeStartOp(
             loc, address.getUnderlyingAllocaOp().getResult());
       }
