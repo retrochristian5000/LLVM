@@ -144,7 +144,8 @@ public:
         if (declareTargetOp)
           declareTargetOp.setDeclareTarget(
               declareType, omp::DeclareTargetCaptureClause::to,
-              declareTargetOp.getDeclareTargetAutomap());
+              declareTargetOp.getDeclareTargetAutomap(),
+              declareTargetOp.getDeclareTargetIndirect());
       }
       return WalkResult::advance();
     });
