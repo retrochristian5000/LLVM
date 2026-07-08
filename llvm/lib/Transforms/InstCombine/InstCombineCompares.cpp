@@ -9083,8 +9083,7 @@ static bool isMinMaxCmpSelectEliminable(SelectPatternFlavor Flavor, Value *A,
     return false;
 
   bool IsUnsigned = I->getOpcode() == Instruction::UIToFP;
-  bool IsNonNegUIToFP =
-      IsUnsigned && cast<PossiblyNonNegInst>(I)->hasNonNeg();
+  bool IsNonNegUIToFP = IsUnsigned && cast<PossiblyNonNegInst>(I)->hasNonNeg();
   unsigned BitWidth = I->getOperand(0)->getType()->getScalarSizeInBits();
   APSInt LowerBoundary = APSInt::getMinValue(BitWidth, IsUnsigned);
   // For uitofp nneg, negative signed inputs are poison, so the defined upper
@@ -9093,8 +9092,7 @@ static bool isMinMaxCmpSelectEliminable(SelectPatternFlavor Flavor, Value *A,
       IsNonNegUIToFP
           ? APSInt(APInt::getSignedMaxValue(BitWidth), /*isUnsigned=*/true)
           : APSInt::getMaxValue(BitWidth, IsUnsigned);
-  APSInt IntBoundary =
-      Flavor == SPF_FMAXNUM ? LowerBoundary : UpperBoundary;
+  APSInt IntBoundary = Flavor == SPF_FMAXNUM ? LowerBoundary : UpperBoundary;
   APSInt ConvertedInt(BitWidth, IntBoundary.isUnsigned());
   bool IsExact;
   APFloat::opStatus Status =
