@@ -66,3 +66,19 @@ add_entrypoint_object(
     libc.hdr.types.FILE
     libc.src.__support.File.platform_file
 )
+
+add_entrypoint_object(
+  tmpnam
+  SRCS
+    tmpnam.cpp
+  HDRS
+    ../tmpnam.h
+  DEPENDS
+    libc.hdr.stdio_macros
+    libc.hdr.errno_macros
+    libc.src.__support.CPP.string_view
+    libc.src.string.memory_utils.inline_memcpy
+    libc.src.__support.CPP.atomic
+    libc.hdr.unistd_macros
+    libc.src.__support.OSUtil.osutil
+)
