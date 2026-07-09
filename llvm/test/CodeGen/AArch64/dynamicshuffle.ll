@@ -4,27 +4,14 @@
 define <4 x i32> @shuffle_v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_v4i32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #32
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    mov w8, v2.s[2]
-; CHECK-NEXT:    mov w9, v2.s[1]
-; CHECK-NEXT:    mov x11, sp
-; CHECK-NEXT:    mov w10, v2.s[3]
-; CHECK-NEXT:    fmov w12, s2
-; CHECK-NEXT:    stp q0, q1, [sp]
-; CHECK-NEXT:    and x8, x8, #0x7
-; CHECK-NEXT:    and x12, x12, #0x7
-; CHECK-NEXT:    and x9, x9, #0x7
-; CHECK-NEXT:    add x8, x11, x8, lsl #2
-; CHECK-NEXT:    and x10, x10, #0x7
-; CHECK-NEXT:    ldr s0, [x11, x12, lsl #2]
-; CHECK-NEXT:    add x9, x11, x9, lsl #2
-; CHECK-NEXT:    add x10, x11, x10, lsl #2
-; CHECK-NEXT:    ldr s1, [x8]
-; CHECK-NEXT:    ld1 { v0.s }[1], [x9]
-; CHECK-NEXT:    ld1 { v1.s }[1], [x10]
-; CHECK-NEXT:    zip1 v0.2d, v0.2d, v1.2d
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    mov w8, #256 // =0x100
+; CHECK-NEXT:    movi v3.16b, #4
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    movk w8, #770, lsl #16
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    dup v4.4s, w8
+; CHECK-NEXT:    mla v4.4s, v2.4s, v3.4s
+; CHECK-NEXT:    tbl v0.16b, { v0.16b, v1.16b }, v4.16b
 ; CHECK-NEXT:    ret
   %res = call <4 x i32> @llvm.dynamicshuffle.v4i32.v4i32.v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask)
   ret <4 x i32> %res
@@ -34,73 +21,9 @@ define <4 x i32> @shuffle_v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask) {
 define <16 x i8> @shuffle_v16i8_mask_v16i8(<16 x i8> %v1, <16 x i8> %v2, <16 x i8> %mask) {
 ; CHECK-LABEL: shuffle_v16i8_mask_v16i8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    stp q0, q1, [sp, #-32]!
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    umov w9, v2.b[0]
-; CHECK-NEXT:    umov w10, v2.b[1]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    umov w11, v2.b[2]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    ldr b0, [x8, x9]
-; CHECK-NEXT:    and x9, x10, #0x1f
-; CHECK-NEXT:    and x10, x11, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[1], [x9]
-; CHECK-NEXT:    umov w9, v2.b[3]
-; CHECK-NEXT:    ld1 { v0.b }[2], [x10]
-; CHECK-NEXT:    umov w10, v2.b[4]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[3], [x9]
-; CHECK-NEXT:    umov w9, v2.b[5]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[4], [x10]
-; CHECK-NEXT:    umov w10, v2.b[6]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[5], [x9]
-; CHECK-NEXT:    umov w9, v2.b[7]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[6], [x10]
-; CHECK-NEXT:    umov w10, v2.b[8]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[7], [x9]
-; CHECK-NEXT:    umov w9, v2.b[9]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[8], [x10]
-; CHECK-NEXT:    umov w10, v2.b[10]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[9], [x9]
-; CHECK-NEXT:    umov w9, v2.b[11]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[10], [x10]
-; CHECK-NEXT:    umov w10, v2.b[12]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[11], [x9]
-; CHECK-NEXT:    umov w9, v2.b[13]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[12], [x10]
-; CHECK-NEXT:    umov w10, v2.b[14]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x9, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[13], [x9]
-; CHECK-NEXT:    umov w9, v2.b[15]
-; CHECK-NEXT:    and x10, x10, #0x1f
-; CHECK-NEXT:    add x10, x8, x10
-; CHECK-NEXT:    ld1 { v0.b }[14], [x10]
-; CHECK-NEXT:    and x9, x9, #0x1f
-; CHECK-NEXT:    add x8, x8, x9
-; CHECK-NEXT:    ld1 { v0.b }[15], [x8]
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    tbl v0.16b, { v0.16b, v1.16b }, v2.16b
 ; CHECK-NEXT:    ret
   %res = call <16 x i8> @llvm.dynamicshuffle.v16i8.v16i8.v16i8(<16 x i8> %v1, <16 x i8> %v2, <16 x i8> %mask)
   ret <16 x i8> %res
@@ -109,27 +32,14 @@ define <16 x i8> @shuffle_v16i8_mask_v16i8(<16 x i8> %v1, <16 x i8> %v2, <16 x i
 define <4 x float> @shuffle_v4f32(<4 x float> %v1, <4 x float> %v2, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_v4f32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #32
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    mov w8, v2.s[2]
-; CHECK-NEXT:    mov w9, v2.s[1]
-; CHECK-NEXT:    mov x11, sp
-; CHECK-NEXT:    mov w10, v2.s[3]
-; CHECK-NEXT:    fmov w12, s2
-; CHECK-NEXT:    stp q0, q1, [sp]
-; CHECK-NEXT:    and x8, x8, #0x7
-; CHECK-NEXT:    and x12, x12, #0x7
-; CHECK-NEXT:    and x9, x9, #0x7
-; CHECK-NEXT:    add x8, x11, x8, lsl #2
-; CHECK-NEXT:    and x10, x10, #0x7
-; CHECK-NEXT:    ldr s0, [x11, x12, lsl #2]
-; CHECK-NEXT:    add x9, x11, x9, lsl #2
-; CHECK-NEXT:    add x10, x11, x10, lsl #2
-; CHECK-NEXT:    ldr s1, [x8]
-; CHECK-NEXT:    ld1 { v0.s }[1], [x9]
-; CHECK-NEXT:    ld1 { v1.s }[1], [x10]
-; CHECK-NEXT:    zip1 v0.2d, v0.2d, v1.2d
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    mov w8, #256 // =0x100
+; CHECK-NEXT:    movi v3.16b, #4
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    movk w8, #770, lsl #16
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    dup v4.4s, w8
+; CHECK-NEXT:    mla v4.4s, v2.4s, v3.4s
+; CHECK-NEXT:    tbl v0.16b, { v0.16b, v1.16b }, v4.16b
 ; CHECK-NEXT:    ret
   %res = call <4 x float> @llvm.dynamicshuffle.v4f32.v4f32.v4i32(<4 x float> %v1, <4 x float> %v2, <4 x i32> %mask)
   ret <4 x float> %res
@@ -138,43 +48,18 @@ define <4 x float> @shuffle_v4f32(<4 x float> %v1, <4 x float> %v2, <4 x i32> %m
 define <8 x i32> @shuffle_v8i32_from_v4i32(<4 x i32> %v1, <4 x i32> %v2, <8 x i32> %mask) {
 ; CHECK-LABEL: shuffle_v8i32_from_v4i32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #64
-; CHECK-NEXT:    .cfi_def_cfa_offset 64
-; CHECK-NEXT:    fmov w13, s2
-; CHECK-NEXT:    add x8, sp, #32
-; CHECK-NEXT:    mov w9, v2.s[1]
-; CHECK-NEXT:    mov w10, v3.s[1]
-; CHECK-NEXT:    stp q0, q1, [sp]
-; CHECK-NEXT:    mov w12, v2.s[2]
-; CHECK-NEXT:    stp q0, q1, [sp, #32]
-; CHECK-NEXT:    mov w14, v3.s[2]
-; CHECK-NEXT:    mov x11, sp
-; CHECK-NEXT:    and x13, x13, #0x7
-; CHECK-NEXT:    mov w15, v2.s[3]
-; CHECK-NEXT:    ldr s0, [x8, x13, lsl #2]
-; CHECK-NEXT:    fmov w13, s3
-; CHECK-NEXT:    and x9, x9, #0x7
-; CHECK-NEXT:    and x10, x10, #0x7
-; CHECK-NEXT:    add x9, x8, x9, lsl #2
-; CHECK-NEXT:    add x10, x11, x10, lsl #2
-; CHECK-NEXT:    and x13, x13, #0x7
-; CHECK-NEXT:    ld1 { v0.s }[1], [x9]
-; CHECK-NEXT:    and x9, x12, #0x7
-; CHECK-NEXT:    ldr s1, [x11, x13, lsl #2]
-; CHECK-NEXT:    mov w13, v3.s[3]
-; CHECK-NEXT:    add x9, x8, x9, lsl #2
-; CHECK-NEXT:    ld1 { v1.s }[1], [x10]
-; CHECK-NEXT:    and x10, x14, #0x7
-; CHECK-NEXT:    ld1 { v0.s }[2], [x9]
-; CHECK-NEXT:    add x10, x11, x10, lsl #2
-; CHECK-NEXT:    and x9, x15, #0x7
-; CHECK-NEXT:    add x8, x8, x9, lsl #2
-; CHECK-NEXT:    ld1 { v1.s }[2], [x10]
-; CHECK-NEXT:    and x10, x13, #0x7
-; CHECK-NEXT:    add x9, x11, x10, lsl #2
-; CHECK-NEXT:    ld1 { v0.s }[3], [x8]
-; CHECK-NEXT:    ld1 { v1.s }[3], [x9]
-; CHECK-NEXT:    add sp, sp, #64
+; CHECK-NEXT:    mov w8, #256 // =0x100
+; CHECK-NEXT:    movi v4.16b, #4
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    movk w8, #770, lsl #16
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    dup v5.4s, w8
+; CHECK-NEXT:    mov v6.16b, v5.16b
+; CHECK-NEXT:    mla v5.4s, v3.4s, v4.4s
+; CHECK-NEXT:    mla v6.4s, v2.4s, v4.4s
+; CHECK-NEXT:    tbl v2.16b, { v0.16b, v1.16b }, v6.16b
+; CHECK-NEXT:    tbl v1.16b, { v0.16b, v1.16b }, v5.16b
+; CHECK-NEXT:    mov v0.16b, v2.16b
 ; CHECK-NEXT:    ret
   %res = call <8 x i32> @llvm.dynamicshuffle.v8i32.v4i32.v8i32(<4 x i32> %v1, <4 x i32> %v2, <8 x i32> %mask)
   ret <8 x i32> %res
@@ -183,26 +68,12 @@ define <8 x i32> @shuffle_v8i32_from_v4i32(<4 x i32> %v1, <4 x i32> %v2, <8 x i3
 define <4 x i32> @shuffle_single_source(<4 x i32> %v1, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_single_source:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #32
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    mov w9, v1.s[1]
-; CHECK-NEXT:    fmov w11, s1
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    mov w10, v1.s[2]
-; CHECK-NEXT:    str q0, [sp]
-; CHECK-NEXT:    and x11, x11, #0x7
-; CHECK-NEXT:    and x9, x9, #0x7
-; CHECK-NEXT:    ldr s0, [x8, x11, lsl #2]
-; CHECK-NEXT:    mov w11, v1.s[3]
-; CHECK-NEXT:    add x9, x8, x9, lsl #2
-; CHECK-NEXT:    ld1 { v0.s }[1], [x9]
-; CHECK-NEXT:    and x9, x10, #0x7
-; CHECK-NEXT:    add x9, x8, x9, lsl #2
-; CHECK-NEXT:    ld1 { v0.s }[2], [x9]
-; CHECK-NEXT:    and x9, x11, #0x7
-; CHECK-NEXT:    add x8, x8, x9, lsl #2
-; CHECK-NEXT:    ld1 { v0.s }[3], [x8]
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    mov w8, #256 // =0x100
+; CHECK-NEXT:    movi v2.16b, #4
+; CHECK-NEXT:    movk w8, #770, lsl #16
+; CHECK-NEXT:    dup v3.4s, w8
+; CHECK-NEXT:    mla v3.4s, v1.4s, v2.4s
+; CHECK-NEXT:    tbl v0.16b, { v0.16b }, v3.16b
 ; CHECK-NEXT:    ret
   %res = call <4 x i32> @llvm.dynamicshuffle.v4i32.v4i32.v4i32(<4 x i32> %v1, <4 x i32> poison, <4 x i32> %mask)
   ret <4 x i32> %res
@@ -211,41 +82,12 @@ define <4 x i32> @shuffle_single_source(<4 x i32> %v1, <4 x i32> %mask) {
 define <8 x i16> @shuffle_v8i16(<8 x i16> %v1, <8 x i16> %v2, <8 x i16> %mask) {
 ; CHECK-LABEL: shuffle_v8i16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    stp q0, q1, [sp, #-32]!
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    umov w8, v2.h[1]
-; CHECK-NEXT:    umov w9, v2.h[0]
-; CHECK-NEXT:    mov x11, sp
-; CHECK-NEXT:    umov w10, v2.h[2]
-; CHECK-NEXT:    and x8, x8, #0xf
-; CHECK-NEXT:    and x9, x9, #0xf
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ldr h0, [x11, x9, lsl #1]
-; CHECK-NEXT:    umov w9, v2.h[3]
-; CHECK-NEXT:    ld1 { v0.h }[1], [x8]
-; CHECK-NEXT:    and x8, x10, #0xf
-; CHECK-NEXT:    umov w10, v2.h[4]
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[2], [x8]
-; CHECK-NEXT:    and x8, x9, #0xf
-; CHECK-NEXT:    umov w9, v2.h[5]
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[3], [x8]
-; CHECK-NEXT:    and x8, x10, #0xf
-; CHECK-NEXT:    umov w10, v2.h[6]
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[4], [x8]
-; CHECK-NEXT:    and x8, x9, #0xf
-; CHECK-NEXT:    umov w9, v2.h[7]
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[5], [x8]
-; CHECK-NEXT:    and x8, x10, #0xf
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[6], [x8]
-; CHECK-NEXT:    and x8, x9, #0xf
-; CHECK-NEXT:    add x8, x11, x8, lsl #1
-; CHECK-NEXT:    ld1 { v0.h }[7], [x8]
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    movi v3.16b, #2
+; CHECK-NEXT:    movi v4.8h, #1, lsl #8
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    mla v4.8h, v2.8h, v3.8h
+; CHECK-NEXT:    tbl v0.16b, { v0.16b, v1.16b }, v4.16b
 ; CHECK-NEXT:    ret
   %res = call <8 x i16> @llvm.dynamicshuffle.v8i16.v8i16.v8i16(<8 x i16> %v1, <8 x i16> %v2, <8 x i16> %mask)
   ret <8 x i16> %res
@@ -254,17 +96,22 @@ define <8 x i16> @shuffle_v8i16(<8 x i16> %v1, <8 x i16> %v2, <8 x i16> %mask) {
 define <2 x i64> @shuffle_v2i64(<2 x i64> %v1, <2 x i64> %v2, <2 x i64> %mask) {
 ; CHECK-LABEL: shuffle_v2i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    stp q0, q1, [sp, #-32]!
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    mov x8, v2.d[1]
-; CHECK-NEXT:    fmov x9, d2
-; CHECK-NEXT:    mov x10, sp
-; CHECK-NEXT:    and x9, x9, #0x3
-; CHECK-NEXT:    and x8, x8, #0x3
-; CHECK-NEXT:    ldr d0, [x10, x9, lsl #3]
-; CHECK-NEXT:    add x8, x10, x8, lsl #3
-; CHECK-NEXT:    ld1 { v0.d }[1], [x8]
-; CHECK-NEXT:    add sp, sp, #32
+; CHECK-NEXT:    fmov x10, d2
+; CHECK-NEXT:    mov x8, #578721382704613384 // =0x808080808080808
+; CHECK-NEXT:    mov x9, v2.d[1]
+; CHECK-NEXT:    // kill: def $q1 killed $q1 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    // kill: def $q0 killed $q0 killed $q0_q1 def $q0_q1
+; CHECK-NEXT:    mul x10, x10, x8
+; CHECK-NEXT:    mul x8, x9, x8
+; CHECK-NEXT:    fmov d2, x10
+; CHECK-NEXT:    mov v2.d[1], x8
+; CHECK-NEXT:    mov x8, #256 // =0x100
+; CHECK-NEXT:    movk x8, #770, lsl #16
+; CHECK-NEXT:    movk x8, #1284, lsl #32
+; CHECK-NEXT:    movk x8, #1798, lsl #48
+; CHECK-NEXT:    dup v3.2d, x8
+; CHECK-NEXT:    add v2.2d, v2.2d, v3.2d
+; CHECK-NEXT:    tbl v0.16b, { v0.16b, v1.16b }, v2.16b
 ; CHECK-NEXT:    ret
   %res = call <2 x i64> @llvm.dynamicshuffle.v2i64.v2i64.v2i64(<2 x i64> %v1, <2 x i64> %v2, <2 x i64> %mask)
   ret <2 x i64> %res
@@ -274,44 +121,10 @@ define <2 x i64> @shuffle_v2i64(<2 x i64> %v1, <2 x i64> %v2, <2 x i64> %mask) {
 define <8 x i8> @shuffle_v8i8(<8 x i8> %v1, <8 x i8> %v2, <8 x i8> %mask) {
 ; CHECK-LABEL: shuffle_v8i8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #16
-; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    // kill: def $d2 killed $d2 def $q2
-; CHECK-NEXT:    umov w8, v2.b[0]
-; CHECK-NEXT:    umov w9, v2.b[1]
-; CHECK-NEXT:    mov x10, sp
-; CHECK-NEXT:    stp d0, d1, [sp]
-; CHECK-NEXT:    umov w11, v2.b[2]
-; CHECK-NEXT:    bfxil x10, x8, #0, #4
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x9, #0, #4
-; CHECK-NEXT:    umov w9, v2.b[3]
-; CHECK-NEXT:    ldr b0, [x10]
-; CHECK-NEXT:    umov w10, v2.b[4]
-; CHECK-NEXT:    ld1 { v0.b }[1], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x11, #0, #4
-; CHECK-NEXT:    ld1 { v0.b }[2], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x9, #0, #4
-; CHECK-NEXT:    umov w9, v2.b[5]
-; CHECK-NEXT:    ld1 { v0.b }[3], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x10, #0, #4
-; CHECK-NEXT:    umov w10, v2.b[6]
-; CHECK-NEXT:    ld1 { v0.b }[4], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x9, #0, #4
-; CHECK-NEXT:    umov w9, v2.b[7]
-; CHECK-NEXT:    ld1 { v0.b }[5], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfxil x8, x10, #0, #4
-; CHECK-NEXT:    mov x10, sp
-; CHECK-NEXT:    bfxil x10, x9, #0, #4
-; CHECK-NEXT:    ld1 { v0.b }[6], [x8]
-; CHECK-NEXT:    ld1 { v0.b }[7], [x10]
-; CHECK-NEXT:    // kill: def $d0 killed $d0 killed $q0
-; CHECK-NEXT:    add sp, sp, #16
+; CHECK-NEXT:    // kill: def $d0 killed $d0 def $q0
+; CHECK-NEXT:    // kill: def $d1 killed $d1 def $q1
+; CHECK-NEXT:    mov v0.d[1], v1.d[0]
+; CHECK-NEXT:    tbl v0.8b, { v0.16b }, v2.8b
 ; CHECK-NEXT:    ret
   %res = call <8 x i8> @llvm.dynamicshuffle.v8i8.v8i8.v8i8(<8 x i8> %v1, <8 x i8> %v2, <8 x i8> %mask)
   ret <8 x i8> %res
@@ -320,28 +133,13 @@ define <8 x i8> @shuffle_v8i8(<8 x i8> %v1, <8 x i8> %v2, <8 x i8> %mask) {
 define <4 x half> @shuffle_v4f16(<4 x half> %v1, <4 x half> %v2, <4 x i16> %mask) {
 ; CHECK-LABEL: shuffle_v4f16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    sub sp, sp, #16
-; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    // kill: def $d2 killed $d2 def $q2
-; CHECK-NEXT:    umov w8, v2.h[0]
-; CHECK-NEXT:    umov w9, v2.h[1]
-; CHECK-NEXT:    mov x10, sp
-; CHECK-NEXT:    stp d0, d1, [sp]
-; CHECK-NEXT:    umov w11, v2.h[2]
-; CHECK-NEXT:    bfi x10, x8, #1, #3
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfi x8, x9, #1, #3
-; CHECK-NEXT:    umov w9, v2.h[3]
-; CHECK-NEXT:    ldr h0, [x10]
-; CHECK-NEXT:    mov x10, sp
-; CHECK-NEXT:    ld1 { v0.h }[1], [x8]
-; CHECK-NEXT:    mov x8, sp
-; CHECK-NEXT:    bfi x8, x11, #1, #3
-; CHECK-NEXT:    bfi x10, x9, #1, #3
-; CHECK-NEXT:    ld1 { v0.h }[2], [x8]
-; CHECK-NEXT:    ld1 { v0.h }[3], [x10]
-; CHECK-NEXT:    // kill: def $d0 killed $d0 killed $q0
-; CHECK-NEXT:    add sp, sp, #16
+; CHECK-NEXT:    movi v3.8b, #2
+; CHECK-NEXT:    movi v4.4h, #1, lsl #8
+; CHECK-NEXT:    // kill: def $d0 killed $d0 def $q0
+; CHECK-NEXT:    // kill: def $d1 killed $d1 def $q1
+; CHECK-NEXT:    mov v0.d[1], v1.d[0]
+; CHECK-NEXT:    mla v4.4h, v2.4h, v3.4h
+; CHECK-NEXT:    tbl v0.8b, { v0.16b }, v4.8b
 ; CHECK-NEXT:    ret
   %res = call <4 x half> @llvm.dynamicshuffle.v4f16.v4f16.v4i16(<4 x half> %v1, <4 x half> %v2, <4 x i16> %mask)
   ret <4 x half> %res
