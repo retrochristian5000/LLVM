@@ -970,12 +970,20 @@ static void createSyntheticSymbols() {
   }
 
   if (ctx.arg.isMultithreaded()) {
-    // TLS symbols are all hidden/dso-local
+    // TLS symbols are all hidden/dso-local, and note that the `tlsBase` global
+    // serves a different purpose depending on `libcallThreadContext`. If
+    // `libcallThreadContext` is `false` it's the base address of TLS and it's
+    // initialized fresh by each thread. This requires a mutable global.
+    //
+    // If `libcallThreadContext` is `true`, however, then it records the
+    // initial thread's TLS address at `start`-time. In non-PIC mode this is a
+    // constant determined during linking, but in PIC mode it's calculated
+    // during instantiation.
     auto tls_base_name =
         ctx.arg.libcallThreadContext ? "__init_tls_base" : "__tls_base";
-    ctx.sym.tlsBase =
-        createGlobalVariable(tls_base_name, !ctx.arg.libcallThreadContext,
-                             WASM_SYMBOL_VISIBILITY_HIDDEN);
+    ctx.sym.tlsBase = createGlobalVariable(
+        tls_base_name, !ctx.arg.libcallThreadContext || ctx.isPic,
+        WASM_SYMBOL_VISIBILITY_HIDDEN);
     ctx.sym.tlsSize = createGlobalVariable("__tls_size", false,
                                            WASM_SYMBOL_VISIBILITY_HIDDEN);
     ctx.sym.tlsAlign = createGlobalVariable("__tls_align", false,

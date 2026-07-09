@@ -1417,13 +1417,32 @@ void Writer::createInitMemoryFunction() {
         // When we initialize the TLS segment we also set the TLS base.
         // This allows the runtime to use this static copy of the TLS data
         // for the first/main thread.
+        //
+        // Note that for `--cooperative-threading` this additionally configures
+        // the `__init_tls_base` global which is the initial TLS value that can
+        // be used for all new component model tasks. For non-PIC builds this
+        // global's statically known value is now calculated, so it's updated
+        // here. For PIC builds the result of the address computation above is
+        // what's stored into the global.
+        //
+        // Finally, note that a temporary local is used here to ensure that the
+        // result of the addition above can be reused a number of times.
         if (ctx.arg.isMultithreaded() && s->isTLS()) {
           if (ctx.isPic) {
             // Cache the result of the addition in the TLS address local
             writeU8(os, WASM_OPCODE_LOCAL_TEE, "local.tee");
             writeUleb128(os, tlsAddressLocal, "tls address local");
+            if (ctx.arg.libcallThreadContext) {
+              writeU8(os, WASM_OPCODE_GLOBAL_SET, "GLOBAL_SET");
+              writeUleb128(os, ctx.sym.tlsBase->getGlobalIndex(),
+                           "__init_tls_base");
+              writeU8(os, WASM_OPCODE_LOCAL_GET, "local.get");
+              writeUleb128(os, tlsAddressLocal, "tls address local");
+            }
           } else {
             writePtrConst(os, s->startVA, is64, "destination address");
+            if (ctx.arg.libcallThreadContext)
+              ctx.sym.tlsBase->global->setPointerValue(s->startVA);
           }
           writeSetTLSBase(ctx, os);
           if (ctx.isPic) {
