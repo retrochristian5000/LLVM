@@ -4,55 +4,12 @@
 define <4 x i32> @shuffle_v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_v4i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -64
-; CHECK-NEXT:    .cfi_def_cfa_offset 64
-; CHECK-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    .cfi_offset s0, -16
-; CHECK-NEXT:    addi s0, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa s0, 0
-; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vslidedown.vi v11, v10, 1
-; CHECK-NEXT:    vmv.x.s a0, v11
-; CHECK-NEXT:    vslidedown.vi v11, v10, 2
-; CHECK-NEXT:    vmv.x.s a1, v11
-; CHECK-NEXT:    vmv.x.s a2, v10
-; CHECK-NEXT:    vslidedown.vi v10, v10, 3
-; CHECK-NEXT:    addi a3, sp, 16
-; CHECK-NEXT:    vse32.v v9, (a3)
-; CHECK-NEXT:    mv a3, sp
-; CHECK-NEXT:    andi a2, a2, 7
-; CHECK-NEXT:    slli a2, a2, 2
-; CHECK-NEXT:    vmv.x.s a4, v10
-; CHECK-NEXT:    vse32.v v8, (a3)
-; CHECK-NEXT:    or a2, a3, a2
-; CHECK-NEXT:    lw a2, 0(a2)
-; CHECK-NEXT:    andi a0, a0, 7
-; CHECK-NEXT:    slli a0, a0, 2
-; CHECK-NEXT:    or a0, a3, a0
-; CHECK-NEXT:    vmv.v.x v8, a2
-; CHECK-NEXT:    lw a0, 0(a0)
-; CHECK-NEXT:    andi a1, a1, 7
-; CHECK-NEXT:    slli a1, a1, 2
-; CHECK-NEXT:    or a1, a3, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    lw a0, 0(a1)
-; CHECK-NEXT:    andi a4, a4, 7
-; CHECK-NEXT:    slli a4, a4, 2
-; CHECK-NEXT:    or a3, a3, a4
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    lw a0, 0(a3)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    addi sp, s0, -64
-; CHECK-NEXT:    .cfi_def_cfa sp, 64
-; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    .cfi_restore ra
-; CHECK-NEXT:    .cfi_restore s0
-; CHECK-NEXT:    addi sp, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, mu
+; CHECK-NEXT:    vadd.vi v12, v10, -4
+; CHECK-NEXT:    vmsleu.vi v0, v10, 3
+; CHECK-NEXT:    vrgather.vv v11, v9, v12
+; CHECK-NEXT:    vrgather.vv v11, v8, v10, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v11
 ; CHECK-NEXT:    ret
   %res = call <4 x i32> @llvm.dynamicshuffle.v4i32.v4i32.v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask)
   ret <4 x i32> %res
@@ -62,65 +19,13 @@ define <4 x i32> @shuffle_v4i32(<4 x i32> %v1, <4 x i32> %v2, <4 x i32> %mask) {
 define <8 x i8> @shuffle_v8i8_mask_v8i16(<8 x i8> %v1, <8 x i8> %v2, <8 x i16> %mask) {
 ; CHECK-LABEL: shuffle_v8i8_mask_v8i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -16
-; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    vsetivli zero, 8, e16, m1, ta, ma
-; CHECK-NEXT:    vslidedown.vi v11, v10, 5
-; CHECK-NEXT:    vmv.x.s a0, v11
-; CHECK-NEXT:    vslidedown.vi v11, v10, 4
-; CHECK-NEXT:    vmv.x.s a1, v11
-; CHECK-NEXT:    vslidedown.vi v11, v10, 6
-; CHECK-NEXT:    vmv.x.s a2, v11
-; CHECK-NEXT:    vslidedown.vi v11, v10, 7
-; CHECK-NEXT:    vmv.x.s a3, v11
-; CHECK-NEXT:    vslidedown.vi v11, v10, 1
-; CHECK-NEXT:    vmv.x.s a4, v11
-; CHECK-NEXT:    vmv.x.s a5, v10
-; CHECK-NEXT:    vslidedown.vi v11, v10, 2
-; CHECK-NEXT:    vmv.x.s a6, v11
-; CHECK-NEXT:    vslidedown.vi v10, v10, 3
-; CHECK-NEXT:    addi a7, sp, 8
-; CHECK-NEXT:    vse8.v v9, (a7)
-; CHECK-NEXT:    mv a7, sp
-; CHECK-NEXT:    andi a1, a1, 15
-; CHECK-NEXT:    vmv.x.s t0, v10
-; CHECK-NEXT:    vse8.v v8, (a7)
-; CHECK-NEXT:    or a1, a7, a1
-; CHECK-NEXT:    lbu a1, 0(a1)
-; CHECK-NEXT:    andi a5, a5, 15
-; CHECK-NEXT:    andi a0, a0, 15
-; CHECK-NEXT:    or a5, a7, a5
-; CHECK-NEXT:    or a0, a7, a0
-; CHECK-NEXT:    lbu a5, 0(a5)
-; CHECK-NEXT:    vsetvli zero, zero, e8, mf2, ta, mu
-; CHECK-NEXT:    vmv.v.x v8, a1
-; CHECK-NEXT:    lbu a0, 0(a0)
-; CHECK-NEXT:    andi a4, a4, 15
-; CHECK-NEXT:    or a1, a7, a4
-; CHECK-NEXT:    vmv.v.x v9, a5
-; CHECK-NEXT:    lbu a1, 0(a1)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    andi a2, a2, 15
-; CHECK-NEXT:    or a0, a7, a2
-; CHECK-NEXT:    andi a2, a6, 15
-; CHECK-NEXT:    lbu a0, 0(a0)
-; CHECK-NEXT:    or a2, a7, a2
-; CHECK-NEXT:    vslide1down.vx v9, v9, a1
-; CHECK-NEXT:    lbu a1, 0(a2)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    vslide1down.vx v9, v9, a1
-; CHECK-NEXT:    andi a3, a3, 15
-; CHECK-NEXT:    or a0, a7, a3
-; CHECK-NEXT:    andi a1, t0, 15
-; CHECK-NEXT:    lbu a0, 0(a0)
-; CHECK-NEXT:    or a1, a7, a1
-; CHECK-NEXT:    lbu a1, 0(a1)
-; CHECK-NEXT:    vmv.v.i v0, 15
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    vslide1down.vx v9, v9, a1
-; CHECK-NEXT:    vslidedown.vi v8, v9, 4, v0.t
-; CHECK-NEXT:    addi sp, sp, 16
-; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, mu
+; CHECK-NEXT:    vnsrl.wi v11, v10, 0
+; CHECK-NEXT:    vadd.vi v12, v11, -8
+; CHECK-NEXT:    vmsleu.vi v0, v11, 7
+; CHECK-NEXT:    vrgather.vv v10, v9, v12
+; CHECK-NEXT:    vrgather.vv v10, v8, v11, v0.t
+; CHECK-NEXT:    vmv1r.v v8, v10
 ; CHECK-NEXT:    ret
   %res = call <8 x i8> @llvm.dynamicshuffle.v8i8.v8i8.v8i16(<8 x i8> %v1, <8 x i8> %v2, <8 x i16> %mask)
   ret <8 x i8> %res
@@ -129,55 +34,12 @@ define <8 x i8> @shuffle_v8i8_mask_v8i16(<8 x i8> %v1, <8 x i8> %v2, <8 x i16> %
 define <4 x float> @shuffle_v4f32(<4 x float> %v1, <4 x float> %v2, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_v4f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -64
-; CHECK-NEXT:    .cfi_def_cfa_offset 64
-; CHECK-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    .cfi_offset s0, -16
-; CHECK-NEXT:    addi s0, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa s0, 0
-; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vslidedown.vi v11, v10, 1
-; CHECK-NEXT:    vmv.x.s a0, v11
-; CHECK-NEXT:    vmv.x.s a1, v10
-; CHECK-NEXT:    vslidedown.vi v11, v10, 2
-; CHECK-NEXT:    vmv.x.s a2, v11
-; CHECK-NEXT:    addi a3, sp, 16
-; CHECK-NEXT:    vse32.v v9, (a3)
-; CHECK-NEXT:    mv a3, sp
-; CHECK-NEXT:    andi a1, a1, 7
-; CHECK-NEXT:    vse32.v v8, (a3)
-; CHECK-NEXT:    slli a1, a1, 2
-; CHECK-NEXT:    or a1, a3, a1
-; CHECK-NEXT:    vslidedown.vi v8, v10, 3
-; CHECK-NEXT:    flw fa5, 0(a1)
-; CHECK-NEXT:    andi a0, a0, 7
-; CHECK-NEXT:    slli a0, a0, 2
-; CHECK-NEXT:    or a0, a3, a0
-; CHECK-NEXT:    vmv.x.s a1, v8
-; CHECK-NEXT:    flw fa4, 0(a0)
-; CHECK-NEXT:    vfmv.v.f v8, fa5
-; CHECK-NEXT:    andi a2, a2, 7
-; CHECK-NEXT:    slli a2, a2, 2
-; CHECK-NEXT:    or a2, a3, a2
-; CHECK-NEXT:    flw fa5, 0(a2)
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa4
-; CHECK-NEXT:    andi a1, a1, 7
-; CHECK-NEXT:    slli a1, a1, 2
-; CHECK-NEXT:    or a1, a3, a1
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa5
-; CHECK-NEXT:    flw fa5, 0(a1)
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa5
-; CHECK-NEXT:    addi sp, s0, -64
-; CHECK-NEXT:    .cfi_def_cfa sp, 64
-; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    .cfi_restore ra
-; CHECK-NEXT:    .cfi_restore s0
-; CHECK-NEXT:    addi sp, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, mu
+; CHECK-NEXT:    vadd.vi v12, v10, -4
+; CHECK-NEXT:    vmsleu.vi v0, v10, 3
+; CHECK-NEXT:    vrgather.vv v11, v9, v12
+; CHECK-NEXT:    vrgather.vv v11, v8, v10, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v11
 ; CHECK-NEXT:    ret
   %res = call <4 x float> @llvm.dynamicshuffle.v4f32.v4f32.v4i32(<4 x float> %v1, <4 x float> %v2, <4 x i32> %mask)
   ret <4 x float> %res
@@ -274,58 +136,91 @@ define <8 x i32> @shuffle_v8i32_from_v4i32(<4 x i32> %v1, <4 x i32> %v2, <8 x i3
 define <4 x i32> @shuffle_single_source(<4 x i32> %v1, <4 x i32> %mask) {
 ; CHECK-LABEL: shuffle_single_source:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -64
-; CHECK-NEXT:    .cfi_def_cfa_offset 64
-; CHECK-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    .cfi_offset s0, -16
-; CHECK-NEXT:    addi s0, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa s0, 0
-; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    mv a0, sp
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vslidedown.vi v10, v9, 1
-; CHECK-NEXT:    vmv.x.s a1, v10
-; CHECK-NEXT:    vmv.x.s a2, v9
-; CHECK-NEXT:    vslidedown.vi v10, v9, 2
-; CHECK-NEXT:    vmv.x.s a3, v10
-; CHECK-NEXT:    vslidedown.vi v9, v9, 3
-; CHECK-NEXT:    andi a2, a2, 7
-; CHECK-NEXT:    slli a2, a2, 2
-; CHECK-NEXT:    vmv.x.s a4, v9
-; CHECK-NEXT:    vse32.v v8, (a0)
-; CHECK-NEXT:    or a2, a0, a2
-; CHECK-NEXT:    lw a2, 0(a2)
-; CHECK-NEXT:    andi a1, a1, 7
-; CHECK-NEXT:    slli a1, a1, 2
-; CHECK-NEXT:    or a1, a0, a1
-; CHECK-NEXT:    vmv.v.x v8, a2
-; CHECK-NEXT:    lw a1, 0(a1)
-; CHECK-NEXT:    andi a3, a3, 7
-; CHECK-NEXT:    slli a3, a3, 2
-; CHECK-NEXT:    or a3, a0, a3
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    lw a1, 0(a3)
-; CHECK-NEXT:    andi a4, a4, 7
-; CHECK-NEXT:    slli a4, a4, 2
-; CHECK-NEXT:    or a0, a0, a4
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    lw a0, 0(a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a0
-; CHECK-NEXT:    addi sp, s0, -64
-; CHECK-NEXT:    .cfi_def_cfa sp, 64
-; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    .cfi_restore ra
-; CHECK-NEXT:    .cfi_restore s0
-; CHECK-NEXT:    addi sp, sp, 64
-; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    vrgather.vv v10, v8, v9
+; CHECK-NEXT:    vmv.v.v v8, v10
 ; CHECK-NEXT:    ret
   %res = call <4 x i32> @llvm.dynamicshuffle.v4i32.v4i32.v4i32(<4 x i32> %v1, <4 x i32> poison, <4 x i32> %mask)
   ret <4 x i32> %res
 }
 
 ; Scalable vectors are only supported via this custom lowering.
+define <vscale x 4 x i32> @shuffle_nxv4i32(<vscale x 4 x i32> %v1, <vscale x 4 x i32> %v2, <vscale x 4 x i32> %mask) {
+; CHECK-LABEL: shuffle_nxv4i32:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    csrr a0, vlenb
+; CHECK-NEXT:    srli a0, a0, 1
+; CHECK-NEXT:    vsetvli a1, zero, e32, m2, ta, mu
+; CHECK-NEXT:    vsub.vx v16, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v10, v16
+; CHECK-NEXT:    vmsltu.vx v0, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v8, v12, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v14
+; CHECK-NEXT:    ret
+  %res = call <vscale x 4 x i32> @llvm.dynamicshuffle.nxv4i32.nxv4i32.nxv4i32(<vscale x 4 x i32> %v1, <vscale x 4 x i32> %v2, <vscale x 4 x i32> %mask)
+  ret <vscale x 4 x i32> %res
+}
+
+define <vscale x 4 x i32> @shuffle_nxv4i32_single_source(<vscale x 4 x i32> %v1, <vscale x 4 x i32> %mask) {
+; CHECK-LABEL: shuffle_nxv4i32_single_source:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e32, m2, ta, ma
+; CHECK-NEXT:    vrgather.vv v12, v8, v10
+; CHECK-NEXT:    vmv.v.v v8, v12
+; CHECK-NEXT:    ret
+  %res = call <vscale x 4 x i32> @llvm.dynamicshuffle.nxv4i32.nxv4i32.nxv4i32(<vscale x 4 x i32> %v1, <vscale x 4 x i32> poison, <vscale x 4 x i32> %mask)
+  ret <vscale x 4 x i32> %res
+}
+
 ; i8 data uses vrgatherei16 with an i16 index vector.
+define <vscale x 16 x i8> @shuffle_nxv16i8_mask_nxv16i16(<vscale x 16 x i8> %v1, <vscale x 16 x i8> %v2, <vscale x 16 x i16> %mask) {
+; CHECK-LABEL: shuffle_nxv16i8_mask_nxv16i16:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    csrr a0, vlenb
+; CHECK-NEXT:    slli a0, a0, 1
+; CHECK-NEXT:    vsetvli a1, zero, e16, m4, ta, ma
+; CHECK-NEXT:    vsub.vx v20, v12, a0
+; CHECK-NEXT:    vsetvli zero, zero, e8, m2, ta, ma
+; CHECK-NEXT:    vrgatherei16.vv v16, v10, v20
+; CHECK-NEXT:    vsetvli zero, zero, e16, m4, ta, ma
+; CHECK-NEXT:    vmsltu.vx v0, v12, a0
+; CHECK-NEXT:    vsetvli zero, zero, e8, m2, ta, mu
+; CHECK-NEXT:    vrgatherei16.vv v16, v8, v12, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v16
+; CHECK-NEXT:    ret
+  %res = call <vscale x 16 x i8> @llvm.dynamicshuffle.nxv16i8.nxv16i8.nxv16i16(<vscale x 16 x i8> %v1, <vscale x 16 x i8> %v2, <vscale x 16 x i16> %mask)
+  ret <vscale x 16 x i8> %res
+}
+
+define <vscale x 4 x float> @shuffle_nxv4f32(<vscale x 4 x float> %v1, <vscale x 4 x float> %v2, <vscale x 4 x i32> %mask) {
+; CHECK-LABEL: shuffle_nxv4f32:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    csrr a0, vlenb
+; CHECK-NEXT:    srli a0, a0, 1
+; CHECK-NEXT:    vsetvli a1, zero, e32, m2, ta, mu
+; CHECK-NEXT:    vsub.vx v16, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v10, v16
+; CHECK-NEXT:    vmsltu.vx v0, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v8, v12, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v14
+; CHECK-NEXT:    ret
+  %res = call <vscale x 4 x float> @llvm.dynamicshuffle.nxv4f32.nxv4f32.nxv4i32(<vscale x 4 x float> %v1, <vscale x 4 x float> %v2, <vscale x 4 x i32> %mask)
+  ret <vscale x 4 x float> %res
+}
+
 ; i64 elements on RV64 use SEW-width indices.
+define <vscale x 2 x i64> @shuffle_nxv2i64(<vscale x 2 x i64> %v1, <vscale x 2 x i64> %v2, <vscale x 2 x i64> %mask) {
+; CHECK-LABEL: shuffle_nxv2i64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    csrr a0, vlenb
+; CHECK-NEXT:    srli a0, a0, 2
+; CHECK-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; CHECK-NEXT:    vsub.vx v16, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v10, v16
+; CHECK-NEXT:    vmsltu.vx v0, v12, a0
+; CHECK-NEXT:    vrgather.vv v14, v8, v12, v0.t
+; CHECK-NEXT:    vmv.v.v v8, v14
+; CHECK-NEXT:    ret
+  %res = call <vscale x 2 x i64> @llvm.dynamicshuffle.nxv2i64.nxv2i64.nxv2i64(<vscale x 2 x i64> %v1, <vscale x 2 x i64> %v2, <vscale x 2 x i64> %mask)
+  ret <vscale x 2 x i64> %res
+}
