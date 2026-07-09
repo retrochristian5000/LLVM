@@ -110,9 +110,8 @@ define amdgpu_gs void @main(<4 x i32> %arg, i32 %arg1) {
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX11-TRUE16-NEXT:  ; %bb.2:
 ; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s4
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v5.h
+; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e64 v0, 16, v5
 ; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_and_b32 v1, 0xffff, v6
 ; GFX11-TRUE16-NEXT:    ds_store_2addr_b32 v2, v0, v1 offset0:7 offset1:8
 ;
@@ -163,9 +162,8 @@ define amdgpu_gs void @main(<4 x i32> %arg, i32 %arg1) {
 ; GFX12-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX12-TRUE16-NEXT:  ; %bb.2:
 ; GFX12-TRUE16-NEXT:    s_mov_b32 exec_lo, s4
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX12-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v5.h
+; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e64 v0, 16, v5
 ; GFX12-TRUE16-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_and_b32 v1, 0xffff, v6
 ; GFX12-TRUE16-NEXT:    ds_store_2addr_b32 v2, v0, v1 offset0:7 offset1:8
 ;

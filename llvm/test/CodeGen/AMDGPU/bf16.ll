@@ -38083,9 +38083,8 @@ define <2 x bfloat> @v_uitofp_v2i16_to_v2bf16(<2 x i16> %x) #0 {
 ; GFX11TRUE16:       ; %bb.0:
 ; GFX11TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11TRUE16-NEXT:    v_and_b32_e32 v1, 0xffff, v0
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v2.h, 0
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v2.l, v0.h
-; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX11TRUE16-NEXT:    v_lshrrev_b32_e64 v2, 16, v0
+; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX11TRUE16-NEXT:    v_cvt_f32_u32_e32 v0, v1
 ; GFX11TRUE16-NEXT:    v_cvt_f32_u32_e32 v1, v2
 ; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
@@ -38132,9 +38131,8 @@ define <2 x bfloat> @v_uitofp_v2i16_to_v2bf16(<2 x i16> %x) #0 {
 ; GFX1250TRUE16:       ; %bb.0:
 ; GFX1250TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v1.h, 0
 ; GFX1250TRUE16-NEXT:    v_and_b32_e32 v2, 0xffff, v0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.h
+; GFX1250TRUE16-NEXT:    v_lshrrev_b32_e64 v1, 16, v0
 ; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v0, v2
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v1, v1
@@ -38283,9 +38281,8 @@ define <3 x bfloat> @v_uitofp_v3i16_to_v3bf16(<3 x i16> %x) #0 {
 ; GFX11TRUE16:       ; %bb.0:
 ; GFX11TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11TRUE16-NEXT:    v_and_b32_e32 v2, 0xffff, v0
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v3.h, 0
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v3.l, v0.h
-; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX11TRUE16-NEXT:    v_lshrrev_b32_e64 v3, 16, v0
+; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX11TRUE16-NEXT:    v_cvt_f32_u32_e32 v0, v2
 ; GFX11TRUE16-NEXT:    v_cvt_f32_u32_e32 v2, v3
 ; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
@@ -38354,9 +38351,8 @@ define <3 x bfloat> @v_uitofp_v3i16_to_v3bf16(<3 x i16> %x) #0 {
 ; GFX1250TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250TRUE16-NEXT:    v_and_b32_e32 v1, 0xffff, v1
 ; GFX1250TRUE16-NEXT:    v_and_b32_e32 v2, 0xffff, v0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v3.h, 0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v3.l, v0.h
-; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
+; GFX1250TRUE16-NEXT:    v_lshrrev_b32_e64 v3, 16, v0
+; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v0, v1
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v1, v2
 ; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
@@ -38538,8 +38534,7 @@ define <4 x bfloat> @v_uitofp_v4i16_to_v4bf16(<4 x i16> %x) #0 {
 ; GFX11TRUE16-LABEL: v_uitofp_v4i16_to_v4bf16:
 ; GFX11TRUE16:       ; %bb.0:
 ; GFX11TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v3.h, 0
-; GFX11TRUE16-NEXT:    v_mov_b16_e32 v3.l, v1.h
+; GFX11TRUE16-NEXT:    v_lshrrev_b32_e64 v3, 16, v1
 ; GFX11TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX11TRUE16-NEXT:    v_cvt_f32_u32_e32 v4, v3
 ; GFX11TRUE16-NEXT:    v_mov_b16_e32 v3.l, v0.h
@@ -38624,8 +38619,7 @@ define <4 x bfloat> @v_uitofp_v4i16_to_v4bf16(<4 x i16> %x) #0 {
 ; GFX1250TRUE16:       ; %bb.0:
 ; GFX1250TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v2.h, 0
-; GFX1250TRUE16-NEXT:    v_mov_b16_e32 v2.l, v1.h
+; GFX1250TRUE16-NEXT:    v_lshrrev_b32_e64 v2, 16, v1
 ; GFX1250TRUE16-NEXT:    v_and_b32_e32 v3, 0xffff, v0
 ; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_4)
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v4, v2
