@@ -8602,6 +8602,13 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              getValue(I.getArgOperand(1)),
                              getValue(I.getArgOperand(2)), Flags));
     return;
+  case Intrinsic::dynamicshuffle:
+    setValue(&I, DAG.getNode(ISD::VECTOR_SHUFFLE_VAR, sdl,
+                             TLI.getValueType(DAG.getDataLayout(), I.getType()),
+                             getValue(I.getArgOperand(0)),
+                             getValue(I.getArgOperand(1)),
+                             getValue(I.getArgOperand(2)), Flags));
+    return;
   case Intrinsic::experimental_convergence_anchor:
   case Intrinsic::experimental_convergence_entry:
   case Intrinsic::experimental_convergence_loop:

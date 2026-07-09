@@ -20990,6 +20990,66 @@ VecT compress(VecT vec, VecT mask, VecT passthru) {
 }
 ```
 
+(int_dynamicshuffle)=
+
+#### '`llvm.dynamicshuffle.*`' Intrinsics
+
+##### Syntax:
+
+This is an overloaded intrinsic. The result vector, the input vectors, and the
+mask vector may be any vector types as long as the constraints described in the
+Arguments section below are met.
+
+```llvm
+declare <8 x i32> @llvm.dynamicshuffle.v8i32.v4i32.v8i8(<4 x i32> %v1, <4 x i32> %v2, <8 x i8> %mask)
+declare <vscale x 4 x float> @llvm.dynamicshuffle.nxv4f32.nxv4f32.nxv4i16(<vscale x 4 x float> %v1, <vscale x 4 x float> %v2, <vscale x 4 x i16> %mask)
+```
+
+##### Overview:
+
+The '`llvm.dynamicshuffle`' intrinsic is the run-time-mask
+generalization of the {ref}`shufflevector <i_shufflevector>` instruction: it
+constructs a permutation of elements from its two input vectors, with the
+element selection given by a mask that does not need to be a compile-time
+constant.
+
+##### Arguments:
+
+The first two arguments are the input vectors and must be vectors of the same
+type. The second input vector may be a `poison` value when only elements of
+the first input are selected.
+
+The third argument is the mask. It may have any integer element type and any
+element count, but its element count determines the element count of the
+result: the result type has the same number of elements as the mask and the
+same element type as the input vectors. The mask and the input vectors must
+either all be fixed vectors or all be scalable vectors.
+
+##### Semantics:
+
+Each mask element is interpreted as an *unsigned* index into the concatenation
+of the two input vectors. For a result vector with `M` elements and input
+vectors with `N` elements each:
+
+- If `zext(%mask[i]) < N`, then `%result[i] = %v1[zext(%mask[i])]`.
+- If `N <= zext(%mask[i]) < 2 * N`, then
+  `%result[i] = %v2[zext(%mask[i]) - N]`.
+- If `zext(%mask[i]) >= 2 * N`, then `%result[i]` is a `poison` value.
+- If `%mask[i]` is `poison`, then `%result[i]` is a `poison` value.
+
+Unlike `shufflevector`, an out-of-range index is not an immediate error: it
+yields `poison` in that result element only. This makes the intrinsic
+speculatable and allows targets to lower it directly to native variable
+permute instructions regardless of how those instructions treat out-of-range
+indices.
+
+If the mask is a compile-time constant, the intrinsic is canonicalized to an
+equivalent `shufflevector` instruction.
+
+On targets without native support, calls with fixed vector types are expanded
+via a stack temporary and variable-indexed loads. Calls with scalable vector
+types are currently only supported on targets that provide a custom lowering.
+
 #### '`llvm.experimental.vector.match.*`' Intrinsic
 
 ##### Syntax:

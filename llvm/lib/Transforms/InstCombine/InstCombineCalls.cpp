@@ -3954,6 +3954,42 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     }
     break;
   }
+  case Intrinsic::dynamicshuffle: {
+    Value *V1 = II->getArgOperand(0);
+    Value *V2 = II->getArgOperand(1);
+    auto *MaskC = dyn_cast<Constant>(II->getArgOperand(2));
+    auto *RetTy = dyn_cast<FixedVectorType>(II->getType());
+    auto *VecTy = dyn_cast<FixedVectorType>(V1->getType());
+
+    // Canonicalize a constant mask to a shufflevector. Scalable vectors are
+    // skipped since shufflevector only supports splat masks for them.
+    if (MaskC && RetTy && VecTy) {
+      unsigned NumMaskElts = RetTy->getNumElements();
+      unsigned NumSrcElts = VecTy->getNumElements();
+      SmallVector<int, 16> Mask;
+      Mask.reserve(NumMaskElts);
+      for (unsigned I = 0; I != NumMaskElts; ++I) {
+        Constant *C = MaskC->getAggregateElement(I);
+        auto *CIdx = dyn_cast_or_null<ConstantInt>(C);
+        if (!CIdx) {
+          if (!C || !isa<PoisonValue, UndefValue>(C)) {
+            Mask.clear();
+            break;
+          }
+          Mask.push_back(PoisonMaskElem);
+          continue;
+        }
+        // Out-of-range indices produce poison.
+        const APInt &Idx = CIdx->getValue();
+        Mask.push_back(Idx.ult(2 * NumSrcElts) ? (int)Idx.getZExtValue()
+                                               : PoisonMaskElem);
+      }
+      if (Mask.size() == NumMaskElts)
+        return replaceInstUsesWith(CI,
+                                   Builder.CreateShuffleVector(V1, V2, Mask));
+    }
+    break;
+  }
   case Intrinsic::vector_insert: {
     Value *Vec = II->getArgOperand(0);
     Value *SubVec = II->getArgOperand(1);

@@ -6711,6 +6711,27 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           &Call);
     break;
   }
+  case Intrinsic::dynamicshuffle: {
+    Value *V1 = Call.getArgOperand(0);
+    Value *Mask = Call.getArgOperand(2);
+
+    auto *RetTy = cast<VectorType>(Call.getType());
+    auto *V1Ty = cast<VectorType>(V1->getType());
+    auto *MaskTy = cast<VectorType>(Mask->getType());
+
+    Check(MaskTy->getElementType()->isIntegerTy(),
+          "Mask must be a vector of integers.", &Call);
+    Check(MaskTy->getElementCount() == RetTy->getElementCount(),
+          "Mask and return type must have the same number of elements.", &Call);
+    Check(RetTy->getElementType() == V1Ty->getElementType(),
+          "Return type and input vectors must have the same element type.",
+          &Call);
+    Check(isa<ScalableVectorType>(RetTy) == isa<ScalableVectorType>(V1Ty),
+          "Return type and input vectors must both be fixed or both be "
+          "scalable vectors.",
+          &Call);
+    break;
+  }
   case Intrinsic::vector_insert: {
     Value *Vec = Call.getArgOperand(0);
     Value *SubVec = Call.getArgOperand(1);
