@@ -26,6 +26,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
@@ -1395,10 +1396,40 @@ getStructFieldOffsets(DIType *Ty, Module &M, const DataLayout &DL) {
   return {GV, (unsigned)(Offsets.size() / 2)};
 }
 
+// x86 uses RBX as the frame base pointer for a realigned stack. A function whose
+// inline asm reads/writes/clobbers RBX cannot also use it as the base pointer -- the
+// backend rejects it ("Interference usage of base pointer/frame pointer"). The
+// trace-args/trace-ret spill allocas below escape (their address is passed to the
+// trace call), so ASAN redzones them, forcing 32-byte frame realignment => a base
+// pointer. In a function that already ties up RBX in inline asm (e.g. CPUID's "=b",
+// RDTSC's "~{rbx}") that is a hard error. Detect it and skip the escaping spill for
+// such functions (the arg/ret is traced as a null pointer instead). The base-pointer
+// register is spelled {rbx}/{ebx}/{bx} (and byte views {bl}/{bh}) in constraint codes.
+static bool functionInlineAsmUsesBasePointerX86(const Function &F) {
+  for (const BasicBlock &BB : F)
+    for (const Instruction &I : BB) {
+      const auto *CB = dyn_cast<CallBase>(&I);
+      if (!CB || !CB->isInlineAsm())
+        continue;
+      const auto *IA = dyn_cast<InlineAsm>(CB->getCalledOperand());
+      if (!IA)
+        continue;
+      for (const InlineAsm::ConstraintInfo &CI : IA->ParseConstraints())
+        for (StringRef Code : CI.Codes)
+          if (Code == "{rbx}" || Code == "{ebx}" || Code == "{bx}" ||
+              Code == "{bl}" || Code == "{bh}")
+            return true;
+    }
+  return false;
+}
+
 void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
   DISubprogram *SP = F.getSubprogram();
   if (!SP)
     return;
+  // Only guards x86; on other targets there is no RBX base-pointer interference.
+  const bool SkipSpill = TargetTriple.getArch() == Triple::x86_64 &&
+                         functionInlineAsmUsesBasePointerX86(F);
 
   BasicBlock &EntryBB = F.getEntryBlock();
   Instruction *InsertPt = &*EntryBB.getFirstInsertionPt();
@@ -1474,6 +1505,18 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       Value *V = DVar->getValue();
       if (!V || isa<Argument>(V))
         continue; // Direct args handled in pass 1
+      // A #dbg_value may point at a value that does NOT dominate the entry-block
+      // terminator where the trace call is inserted (debug records are exempt from
+      // SSA dominance). Using such a value as ArgPtr emits IR that fails the verifier
+      // ("Instruction does not dominate all uses") and, with -disable-llvm-verifier
+      // (kernel builds), reaches codegen and crashes RegisterCoalescer::reMaterializeDef.
+      // The insertion point is the entry terminator, so a value defined in the entry
+      // block dominates it; anything else (a later-block instruction, e.g. a field
+      // getelementptr) does not -> skip it and let the dead-arg fallback emit a null
+      // trace for this param.
+      if (auto *VI = dyn_cast<Instruction>(V))
+        if (VI->getParent() != &EntryBB)
+          continue;
       auto &SA = SrcArgs[SrcIdx];
       SA.Var = Var;
       SA.Ty = Var->getType();
@@ -1500,16 +1543,21 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       }
       auto [OffsetsGV, NumFields] = getStructFieldOffsets(ArgDIType, M, *DL);
       Value *ArgPtr;
+      bool Spilled = false;
       if (Arg.getType()->isPointerTy()) {
         ArgPtr = &Arg;
+      } else if (SkipSpill) {
+        ArgPtr = Constant::getNullValue(PtrTy); // base-pointer asm: no escaping spill
       } else {
         AllocaInst *Alloca = IRB.CreateAlloca(Arg.getType());
         IRB.CreateStore(&Arg, Alloca);
         ArgPtr = Alloca;
+        Spilled = true;
       }
-      unsigned ArgByteSize = Arg.getType()->isPointerTy()
-                                 ? DL->getPointerSize()
-                                 : DL->getTypeStoreSize(Arg.getType());
+      unsigned ArgByteSize =
+          Arg.getType()->isPointerTy() ? DL->getPointerSize()
+          : Spilled                    ? DL->getTypeStoreSize(Arg.getType())
+                                       : 0;
       Value *OffsetsPtr = Constant::getNullValue(PtrTy);
       if (OffsetsGV) {
         Value *Indices[] = {ConstantInt::get(Int64Ty, 0),
@@ -1552,12 +1600,18 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       if (V->getType()->isPointerTy()) {
         ArgPtr = V;
         ArgByteSize = DL->getPointerSize();
+      } else if (SkipSpill) {
+        ArgPtr = Constant::getNullValue(PtrTy); // base-pointer asm: no escaping spill
+        ArgByteSize = 0;
       } else {
         AllocaInst *Alloca = IRB.CreateAlloca(V->getType());
         TraceIRB.CreateStore(V, Alloca);
         ArgPtr = Alloca;
         ArgByteSize = DL->getTypeStoreSize(V->getType());
       }
+    } else if (SkipSpill) {
+      ArgPtr = Constant::getNullValue(PtrTy); // base-pointer asm: no escaping spill
+      ArgByteSize = 0;
     } else {
       // Multiple IR args for one source param (ABI struct decomposition).
       // Reassemble fragments into a stack slot matching the source layout.
@@ -1630,6 +1684,13 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
 void ModuleSanitizerCoverage::InjectTraceForRet(Function &F) {
   DISubprogram *SP = F.getSubprogram();
 
+  // On x86, skip the escaping return-value spill in functions whose inline asm ties up
+  // the base pointer (RBX): the spill alloca is ASAN-redzoned -> stack realignment ->
+  // base pointer, which the backend rejects against the asm's RBX use ("Interference
+  // usage of base pointer/frame pointer"). Such returns are traced as a null pointer.
+  const bool SkipSpill = TargetTriple.getArch() == Triple::x86_64 &&
+                         functionInlineAsmUsesBasePointerX86(F);
+
   // Get return type debug info
   DIType *RetDIType = nullptr;
   if (SP && SP->getType()) {
@@ -1671,7 +1732,7 @@ void ModuleSanitizerCoverage::InjectTraceForRet(Function &F) {
     if (RetVal && RetVal->getType()->isPointerTy()) {
       RetPtr = RetVal;
       RetByteSize = DL->getPointerSize();
-    } else if (RetVal && !RetVal->getType()->isVoidTy()) {
+    } else if (RetVal && !RetVal->getType()->isVoidTy() && !SkipSpill) {
       AllocaInst *Alloca = AtExit->CreateAlloca(RetVal->getType());
       AtExit->CreateStore(RetVal, Alloca);
       RetPtr = Alloca;
