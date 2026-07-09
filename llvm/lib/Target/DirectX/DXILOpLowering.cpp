@@ -977,6 +977,62 @@ public:
     });
   }
 
+  [[nodiscard]] bool lowerStoreOutput(Function &F) {
+    IRBuilder<> &IRB = OpBuilder.getIRB();
+    Type *Int8Ty = IRB.getInt8Ty();
+
+    return replaceFunction(F, [&](CallInst *CI) -> Error {
+      IRB.SetInsertPoint(CI);
+
+      // int_dx_store_output (scalar): (outputSigId, rowIndex, colIndex,
+      //                                startCol:i8, unused, value)
+      // Vectors are scalarized by DXILIntrinsicExpansion; startCol (arg 3)
+      // holds the per-component column index for the DXIL op.
+      Value *OutputSigId = CI->getArgOperand(0);
+      Value *RowIndex = CI->getArgOperand(1);
+      Value *StartCol = CI->getArgOperand(3); // i8
+      Value *Data = CI->getArgOperand(5);
+      Value *ColI8 = IRB.CreateZExtOrBitCast(StartCol, Int8Ty);
+
+      SmallVector<Value *, 4> Args{OutputSigId, RowIndex, ColI8, Data};
+      Expected<CallInst *> OpCall =
+          OpBuilder.tryCreateOp(dxil::OpCode::StoreOutput, Args);
+      if (Error E = OpCall.takeError())
+        return E;
+
+      CI->eraseFromParent();
+      return Error::success();
+    });
+  }
+
+  [[nodiscard]] bool lowerLoadInput(Function &F) {
+    IRBuilder<> &IRB = OpBuilder.getIRB();
+    Type *Int8Ty = IRB.getInt8Ty();
+
+    return replaceFunction(F, [&](CallInst *CI) -> Error {
+      IRB.SetInsertPoint(CI);
+
+      // int_dx_load_input: (inputSigId, rowIndex, colIndex, startCol, unused)
+      // After expansion, colIndex (arg 2) already encodes the component column;
+      // use it directly as the DXIL colIndex (i8).
+      Value *InputSigId = CI->getArgOperand(0);
+      Value *RowIndex = CI->getArgOperand(1);
+      Value *ColI32 = CI->getArgOperand(2);
+      Value *ColI8 = IRB.CreateTrunc(ColI32, Int8Ty);
+
+      Type *ScalarTy = CI->getType();
+      SmallVector<Value *, 3> Args{InputSigId, RowIndex, ColI8};
+      Expected<CallInst *> OpCall = OpBuilder.tryCreateOp(
+          dxil::OpCode::LoadInput, Args, CI->getName(), ScalarTy);
+      if (Error E = OpCall.takeError())
+        return E;
+
+      CI->replaceAllUsesWith(*OpCall);
+      CI->eraseFromParent();
+      return Error::success();
+    });
+  }
+
   [[nodiscard]] bool lowerCtpopToCountBits(Function &F) {
     IRBuilder<> &IRB = OpBuilder.getIRB();
     Type *Int32Ty = IRB.getInt32Ty();
@@ -1212,6 +1268,12 @@ public:
         break;
       case Intrinsic::dx_resource_getdimensions_x:
         HasErrors |= lowerGetDimensionsX(F);
+        break;
+      case Intrinsic::dx_load_input:
+        HasErrors |= lowerLoadInput(F);
+        break;
+      case Intrinsic::dx_store_output:
+        HasErrors |= lowerStoreOutput(F);
         break;
       case Intrinsic::ctpop:
         HasErrors |= lowerCtpopToCountBits(F);
