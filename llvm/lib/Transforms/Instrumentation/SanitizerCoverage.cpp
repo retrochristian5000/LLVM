@@ -1424,9 +1424,12 @@ static bool functionInlineAsmUsesBasePointerX86(const Function &F) {
 }
 
 void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
+  // SP may be null: a function compiled WITHOUT debug info (-g) carries no
+  // #dbg_value records, so the source-argument map below stays empty and the
+  // SrcArgs.empty() fallback traces each IR argument directly (no source-level
+  // struct-field offsets). This lets trace-args work on userspace / optimized
+  // code built without -g, not just debug kernels.
   DISubprogram *SP = F.getSubprogram();
-  if (!SP)
-    return;
   // Only guards x86; on other targets there is no RBX base-pointer interference.
   const bool SkipSpill = TargetTriple.getArch() == Triple::x86_64 &&
                          functionInlineAsmUsesBasePointerX86(F);
@@ -1536,7 +1539,7 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
       if (Arg.hasStructRetAttr())
         continue;
       DIType *ArgDIType = nullptr;
-      if (SP->getType()) {
+      if (SP && SP->getType()) {
         auto TypeArray = SP->getType()->getTypeArray();
         if (ArgIdx + 1 < TypeArray.size())
           ArgDIType = TypeArray[ArgIdx + 1];
@@ -1654,7 +1657,7 @@ void ModuleSanitizerCoverage::InjectTraceForArgs(Function &F) {
   // Dead-arg fallback: if the DISubroutineType indicates more source params
   // than we found via debug records (e.g., arg optimized away entirely at -O2),
   // emit a null-pointer trace so consumers know the argument existed.
-  if (SP->getType()) {
+  if (SP && SP->getType()) {
     auto TypeArray = SP->getType()->getTypeArray();
     unsigned NumSrcParams = TypeArray.size() > 0 ? TypeArray.size() - 1 : 0;
     for (unsigned I = 1; I <= NumSrcParams; ++I) {
