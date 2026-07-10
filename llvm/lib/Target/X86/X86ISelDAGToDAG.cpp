@@ -926,22 +926,30 @@ static bool isCalleeLoad(SDValue Callee, SDValue &Chain, bool HasCallSeq) {
   }
 }
 
-static bool isEndbrImm64(uint64_t Imm) {
-// There may be some other prefix bytes between 0xF3 and 0x0F1EFA.
-// i.g: 0xF3660F1EFA, 0xF3670F1EFA
-  if ((Imm & 0x00FFFFFF) != 0x0F1EFA)
+static bool isEndbrImm(uint64_t Imm, unsigned BitWidth) {
+  assert(BitWidth <= 64 && BitWidth % 8 == 0 && "Unexpected immediate size");
+
+  const unsigned NumBytes = BitWidth / 8;
+  if (NumBytes < 4)
     return false;
 
-  uint8_t OptionalPrefixBytes [] = {0x26, 0x2e, 0x36, 0x3e, 0x64,
-                                    0x65, 0x66, 0x67, 0xf0, 0xf2};
-  int i = 24; // 24bit 0x0F1EFA has matched
-  while (i < 64) {
-    uint8_t Byte = (Imm >> i) & 0xFF;
-    if (Byte == 0xF3)
+  const uint8_t OptionalPrefixBytes[] = {0x26, 0x2e, 0x36, 0x3e, 0x64,
+                                         0x65, 0x66, 0x67, 0xf0, 0xf2};
+  uint8_t Bytes[8];
+  for (unsigned I = 0; I != NumBytes; ++I)
+    Bytes[I] = (Imm >> (I * 8)) & 0xFF;
+
+  for (unsigned I = 0; I + 3 < NumBytes; ++I) {
+    if (Bytes[I] != 0xf3)
+      continue;
+
+    unsigned J = I + 1;
+    while (J < NumBytes && llvm::is_contained(OptionalPrefixBytes, Bytes[J]))
+      ++J;
+
+    if (J + 2 < NumBytes && Bytes[J] == 0x0f && Bytes[J + 1] == 0x1e &&
+        (Bytes[J + 2] == 0xfa || Bytes[J + 2] == 0xfb))
       return true;
-    if (!llvm::is_contained(OptionalPrefixBytes, Byte))
-      return false;
-    i += 8;
   }
 
   return false;
@@ -966,30 +974,34 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
     // opcode matches in the binary
     // Here’s an example:
     // If the compiler had to generate asm for the following code:
-    // a = 0xF30F1EFA
+    // a = 0xFA1E0FF3
     // it could, for example, generate:
-    // mov 0xF30F1EFA, dword ptr[a]
+    // mov 0xFA1E0FF3, dword ptr[a]
     // In such a case, the binary would include a gadget that starts
     // with a fake ENDBR64 opcode. Therefore, we split such generation
     // into multiple operations, let it not shows in the binary
     if (N->getOpcode() == ISD::Constant) {
       MVT VT = N->getSimpleValueType(0);
-      int64_t Imm = cast<ConstantSDNode>(N)->getSExtValue();
-      int32_t EndbrImm = Subtarget->is64Bit() ? 0xF30F1EFA : 0xF30F1EFB;
-      if (Imm == EndbrImm || isEndbrImm64(Imm)) {
-        // Check that the cf-protection-branch is enabled.
-        Metadata *CFProtectionBranch =
-            MF->getFunction().getParent()->getModuleFlag(
-                "cf-protection-branch");
-        if (CFProtectionBranch || IndirectBranchTracking) {
-          SDLoc dl(N);
-          SDValue Complement = CurDAG->getConstant(~Imm, dl, VT, false, true);
-          Complement = CurDAG->getNOT(dl, Complement, VT);
-          --I;
-          CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), Complement);
-          ++I;
-          MadeChange = true;
-          continue;
+      if (VT.isScalarInteger()) {
+        uint64_t Imm = cast<ConstantSDNode>(N)->getZExtValue();
+        if (isEndbrImm(Imm, VT.getSizeInBits())) {
+          // Check that the cf-protection-branch is enabled.
+          Metadata *CFProtectionBranch =
+              MF->getFunction().getParent()->getModuleFlag(
+                  "cf-protection-branch");
+          if (CFProtectionBranch || IndirectBranchTracking) {
+            SDLoc dl(N);
+            uint64_t ComplementImm =
+                (~Imm) & maskTrailingOnes<uint64_t>(VT.getSizeInBits());
+            SDValue Complement =
+                CurDAG->getConstant(ComplementImm, dl, VT, false, true);
+            Complement = CurDAG->getNOT(dl, Complement, VT);
+            --I;
+            CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), Complement);
+            ++I;
+            MadeChange = true;
+            continue;
+          }
         }
       }
     }
