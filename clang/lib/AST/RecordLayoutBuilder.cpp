@@ -2751,9 +2751,9 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
   // Respect pragma pack, attribute pack and declspec align, but not for types
   // that require specific alignment for correctness (e.g., x86_fp80 needs
   // 16-byte alignment for movaps instructions).
-  if (!MaxFieldAlignment.isZero() && !ContainsX86FP80)
+  if (!MaxFieldAlignment.isZero())
     Info.Alignment = std::min(Info.Alignment, MaxFieldAlignment);
-  if (FD->hasAttr<PackedAttr>() && !ContainsX86FP80)
+  if (FD->hasAttr<PackedAttr>())
     Info.Alignment = CharUnits::One();
   // The alignment used to update the record's alignment excludes over-alignment
   // applied directly to the field; the alignment used for placement includes
