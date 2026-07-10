@@ -73,6 +73,8 @@ Code completion
 Code actions
 ^^^^^^^^^^^^
 
+- clangd now applies clang-tidy fix-it post-processing before exposing fixes.
+
 Signature help
 ^^^^^^^^^^^^^^
 
