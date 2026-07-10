@@ -222,6 +222,10 @@ Makes programs 10x faster by doing Special New Thing.
 
 * Changed triple naming system from "amdgcn" to "amdgpu" plus a subarch suffix.
 
+* These intrinsics have been removed in favour of `llvm.amdgcn.ballot`:
+  * `llvm.amdgcn.icmp`
+  * `llvm.amdgcn.fcmp`
+
 ### Changes to the ARM Backend
 
 * The `r14` register can now be used as an alias for the link register `lr`
