@@ -1986,6 +1986,68 @@ void NVPTXDAGToDAGISel::SelectCpAsyncBulkTensorReduceCommon(SDNode *N,
   ReplaceNode(N, CurDAG->getMachineNode(Opcode, DL, N->getVTList(), Ops));
 }
 
+#define GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(TYPE, IS_CACHE_HINT)               \
+  ((IS_CACHE_HINT) ? NVPTX::CP_ASYNC_BULK_REDUCE_S2G_##TYPE##_CH               \
+                   : NVPTX::CP_ASYNC_BULK_REDUCE_S2G_##TYPE)
+
+static unsigned getCpAsyncBulkReduceS2GOpcode(unsigned IID, bool IsCacheHint) {
+  switch (IID) {
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f16:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(F16, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_bf16:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(BF16, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_b32:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(B32, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_u32:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(U32, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_s32:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(S32, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_b64:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(B64, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_u64:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(U64, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_s64:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(S64, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f32:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(F32, IsCacheHint);
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f64:
+    return GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE(F64, IsCacheHint);
+  }
+  llvm_unreachable("unhandled cp.async.bulk.reduce.s2g lowering");
+}
+
+#undef GET_CP_ASYNC_BULK_REDUCE_S2G_OPCODE
+
+void NVPTXDAGToDAGISel::SelectCpAsyncBulkReduceS2G(SDNode *N) {
+  // Operands are {Chain, Intrinsic-ID, dst, src, size, red_op, scope,
+  // cache_hint, cache_hint_flag}. The cache hint operand is only emitted when
+  // its flag is set.
+  bool IsCacheHint = N->getConstantOperandVal(8) == 1;
+  unsigned RedOp = N->getConstantOperandVal(5);
+  unsigned Scope = N->getConstantOperandVal(6);
+
+  if (Scope != static_cast<unsigned>(nvvm::MMScope::SYSTEM) &&
+      Subtarget->getPTXVersion() < 93)
+    report_fatal_error(
+        "cp.reduce.async.bulk sem.scope requires PTX ISA 9.3 or higher");
+
+  SDLoc DL(N);
+  const auto [DstBase, DstOffset] = selectADDR(N->getOperand(2), CurDAG);
+  const auto [SrcBase, SrcOffset] = selectADDR(N->getOperand(3), CurDAG);
+
+  SmallVector<SDValue, 10> Ops{DstBase, DstOffset, SrcBase, SrcOffset,
+                               N->getOperand(4)};
+  if (IsCacheHint)
+    Ops.push_back(N->getOperand(7));
+  Ops.push_back(getI32Imm(Scope, DL));
+  Ops.push_back(getI32Imm(RedOp, DL));
+  Ops.push_back(N->getOperand(0)); // Chain operand
+
+  unsigned IID = N->getConstantOperandVal(1);
+  unsigned Opcode = getCpAsyncBulkReduceS2GOpcode(IID, IsCacheHint);
+  ReplaceNode(N, CurDAG->getMachineNode(Opcode, DL, N->getVTList(), Ops));
+}
+
 #define TCGEN05_ST_OPCODE(SHAPE, NUM)                                          \
   (enableUnpack ? NVPTX::TCGEN05_ST_##SHAPE##_##NUM##_UNPACK                   \
                 : NVPTX::TCGEN05_ST_##SHAPE##_##NUM)
@@ -2101,22 +2163,34 @@ void NVPTXDAGToDAGISel::SelectTcgen05St(SDNode *N, bool hasOffset) {
 
 bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   unsigned IID = N->getConstantOperandVal(1);
-  using TMARedTy = llvm::nvvm::TMAReductionOp;
-  auto CastTy = [](TMARedTy Op) { return static_cast<unsigned>(Op); };
+  using RedTy = llvm::nvvm::ReductionOp;
+  auto CastTy = [](RedTy Op) { return static_cast<unsigned>(Op); };
   switch (IID) {
   default:
     return false;
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f16:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_bf16:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_b32:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_u32:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_s32:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_b64:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_u64:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_s64:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f32:
+  case Intrinsic::nvvm_cp_async_bulk_reduce_s2g_f64:
+    SelectCpAsyncBulkReduceS2G(N);
+    return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_tile_1d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_tile_2d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::ADD));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::ADD));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_add_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::ADD),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::ADD),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_tile_1d:
@@ -2124,12 +2198,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::MIN));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::MIN));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_min_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::MIN),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::MIN),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_tile_1d:
@@ -2137,12 +2211,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::MAX));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::MAX));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_max_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::MAX),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::MAX),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_tile_1d:
@@ -2150,12 +2224,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::INC));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::INC));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_inc_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::INC),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::INC),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_tile_1d:
@@ -2163,12 +2237,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::DEC));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::DEC));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_dec_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::DEC),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::DEC),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_tile_1d:
@@ -2176,12 +2250,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::AND));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::AND));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_and_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::AND),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::AND),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_tile_1d:
@@ -2189,12 +2263,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::OR));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::OR));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_or_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::OR),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::OR),
                                         /*IsIm2Col=*/true);
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_tile_1d:
@@ -2202,12 +2276,12 @@ bool NVPTXDAGToDAGISel::tryIntrinsicVoid(SDNode *N) {
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_tile_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_tile_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_tile_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::XOR));
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::XOR));
     return true;
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_im2col_3d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_im2col_4d:
   case Intrinsic::nvvm_cp_async_bulk_tensor_reduce_xor_im2col_5d:
-    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(TMARedTy::XOR),
+    SelectCpAsyncBulkTensorReduceCommon(N, CastTy(RedTy::XOR),
                                         /*IsIm2Col=*/true);
     return true;
 

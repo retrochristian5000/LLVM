@@ -90,6 +90,7 @@ private:
   void SelectI128toV2I64(SDNode *N);
   void SelectCpAsyncBulkTensorReduceCommon(SDNode *N, unsigned RedOp,
                                            bool IsIm2Col = false);
+  void SelectCpAsyncBulkReduceS2G(SDNode *N);
   void SelectTcgen05Ld(SDNode *N, bool hasOffset = false);
   void SelectTcgen05St(SDNode *N, bool hasOffset = false);
   void selectAtomicSwap128(SDNode *N);

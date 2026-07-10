@@ -3031,6 +3031,42 @@ def int_nvvm_cp_async_bulk_shared_cta_to_global
       [IntrConvergent, IntrArgMemOnly,
        WriteOnly<ArgIndex<0>>, ReadOnly<ArgIndex<1>>]>;
 
+// From Shared CTA to Global memory with reduction
+class CPAsyncBulkReduceS2GIntrinsic<list<list<int>> red_ops>
+  : DefaultAttrsIntrinsicFlags<[],
+      [llvm_global_ptr_ty, // dst_gmem_ptr
+       llvm_shared_ptr_ty, // src_smem_ptr
+       llvm_i32_ty,        // copy_size
+       llvm_i32_ty,        // reduction Op enum - nvvm::ReductionOp in NVVMIntrinsicUtils.h
+       llvm_i32_ty,        // scope Op enum - nvvm::MMScope in NVVMIntrinsicUtils.h
+       llvm_i64_ty],       // cache_hint
+      [llvm_i1_ty],        // Flag for cache_hint
+      [IntrConvergent, IntrArgMemOnly,
+       WriteOnly<ArgIndex<0>>, ReadOnly<ArgIndex<1>>,
+       ImmArg<ArgIndex<3>>, RangeSet<ArgIndex<3>, red_ops>,
+       ImmArg<ArgIndex<4>>, Range<ArgIndex<4>, 0, 4>]>;
+
+// RangeSet bounds are closed.
+foreach type = ["b32", "b64"] in
+  def int_nvvm_cp_async_bulk_reduce_s2g_ # type
+    : CPAsyncBulkReduceS2GIntrinsic<[[0, 2]]>;
+
+foreach type = ["u32"] in
+  def int_nvvm_cp_async_bulk_reduce_s2g_ # type
+    : CPAsyncBulkReduceS2GIntrinsic<[[3, 7]]>;
+
+foreach type = ["s32", "u64", "f16", "bf16"] in
+  def int_nvvm_cp_async_bulk_reduce_s2g_ # type
+    : CPAsyncBulkReduceS2GIntrinsic<[[3, 3], [6, 7]]>;
+
+foreach type = ["s64"] in
+  def int_nvvm_cp_async_bulk_reduce_s2g_ # type
+    : CPAsyncBulkReduceS2GIntrinsic<[[6, 7]]>;
+
+foreach type = ["f32", "f64"] in
+  def int_nvvm_cp_async_bulk_reduce_s2g_ # type
+    : CPAsyncBulkReduceS2GIntrinsic<[[3, 3]]>;
+
 // From Shared CTA to Global memory with bytemask
 def int_nvvm_cp_async_bulk_shared_cta_to_global_bytemask
   : DefaultAttrsIntrinsic<[],

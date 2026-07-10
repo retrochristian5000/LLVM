@@ -27,18 +27,24 @@
 namespace llvm {
 namespace nvvm {
 
-// Reduction Ops supported with TMA Copy from Shared
-// to Global Memory for the "cp.reduce.async.bulk.tensor.*"
-// family of PTX instructions.
-enum class TMAReductionOp : uint8_t {
-  ADD = 0,
-  MIN = 1,
-  MAX = 2,
-  INC = 3,
-  DEC = 4,
-  AND = 5,
-  OR = 6,
-  XOR = 7,
+// Reduction op
+enum class ReductionOp : uint8_t {
+  AND = 0,
+  OR = 1,
+  XOR = 2,
+  ADD = 3,
+  INC = 4,
+  DEC = 5,
+  MIN = 6,
+  MAX = 7,
+};
+
+// Memory scope
+enum class MMScope : uint8_t {
+  GPU = 0,
+  CTA = 1,
+  SYSTEM = 2,
+  CLUSTER = 3,
 };
 
 // Enum to represent the cta_group::1 and
