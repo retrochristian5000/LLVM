@@ -799,6 +799,14 @@ static bool isDeadRecipe(VPRecipeBase &R) {
   if (R.mayHaveSideEffects())
     return false;
 
+  // Forbid removing ExpandSCEVs that define trip-count or vector-trip-count.
+  VPlan &Plan = *R.getParent()->getPlan();
+  if (isa<VPExpandSCEVRecipe>(R) &&
+      any_of(R.definedValues(), [&Plan](VPValue *V) {
+        return V == Plan.getTripCount() || V == &Plan.getVectorTripCount();
+      }))
+    return false;
+
   // Recipe is dead if no user keeps the recipe alive.
   return all_of(R.definedValues(), [](VPValue *V) { return V->user_empty(); });
 }
