@@ -802,9 +802,9 @@ static bool isDeadRecipe(VPRecipeBase &R) {
   // Forbid removing ExpandSCEVs that define trip-count or vector-trip-count.
   VPlan &Plan = *R.getParent()->getPlan();
   if (isa<VPExpandSCEVRecipe>(R) &&
-      any_of(R.definedValues(), [&Plan](VPValue *V) {
-        return V == Plan.getTripCount() || V == &Plan.getVectorTripCount();
-      }))
+      is_contained(ArrayRef<VPValue *>(
+                       {Plan.getTripCount(), &Plan.getVectorTripCount()}),
+                   R.getVPSingleValue()))
     return false;
 
   // Recipe is dead if no user keeps the recipe alive.
