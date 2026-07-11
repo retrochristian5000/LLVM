@@ -361,6 +361,10 @@ class PPC32_SVR4_ABIInfo : public DefaultABIInfo {
   bool IsSoftFloatABI;
   bool IsRetSmallStructInRegABI;
 
+  // Number of GPRs (r3..=r10) available for passing arguments, and their width.
+  static const int NumArgGPRs = 8;
+  static const unsigned GPRBits = 32;
+
   bool isComplexGnuABI() const {
     return !getTarget().getTriple().isOSDarwin() &&
            !getContext().getLangOpts().isCompatibleWith(
@@ -376,13 +380,15 @@ public:
         IsRetSmallStructInRegABI(RetSmallStructInRegABI) {}
 
   ABIArgInfo classifyReturnType(QualType RetTy) const;
-  ABIArgInfo classifyArgumentType(QualType Ty) const;
+  ABIArgInfo classifyArgumentType(QualType Ty, int &ArgGPRsLeft) const;
 
   void computeInfo(CGFunctionInfo &FI) const override {
     if (!getCXXABI().classifyReturnType(FI))
       FI.getReturnInfo() = classifyReturnType(FI.getReturnType());
+
+    int ArgGPRsLeft = NumArgGPRs;
     for (auto &I : FI.arguments())
-      I.info = classifyArgumentType(I.type);
+      I.info = classifyArgumentType(I.type, ArgGPRsLeft);
   }
 
   RValue EmitVAArg(CodeGenFunction &CGF, Address VAListAddr, QualType Ty,
@@ -433,7 +439,9 @@ CharUnits PPC32_SVR4_ABIInfo::getParamTypeAlignment(QualType Ty) const {
   return CharUnits::fromQuantity(4);
 }
 
-ABIArgInfo PPC32_SVR4_ABIInfo::classifyArgumentType(QualType Ty) const {
+ABIArgInfo PPC32_SVR4_ABIInfo::classifyArgumentType(QualType Ty,
+                                                    int &ArgGPRsLeft) const {
+  assert(ArgGPRsLeft <= NumArgGPRs && "Arg GPR tracking underflow");
   Ty = useFirstFieldIfTransparentUnion(Ty);
 
   if (isAggregateTypeForABI(Ty)) {
@@ -500,8 +508,10 @@ RValue PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
     TI.Align = getParamTypeAlignment(Ty);
 
     CharUnits SlotSize = CharUnits::fromQuantity(4);
+    int ArgGPRsLeft = NumArgGPRs;
     return emitVoidPtrVAArg(CGF, VAList, Ty,
-                            classifyArgumentType(Ty).isIndirect(), TI, SlotSize,
+                            classifyArgumentType(Ty, ArgGPRsLeft).isIndirect(),
+                            TI, SlotSize,
                             /*AllowHigherAlign=*/true, Slot);
   }
 
