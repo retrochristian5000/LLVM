@@ -250,6 +250,12 @@ New checks
   derived type thereof. Also does similar analysis for calls to ``isa<>`` that
   always return ``true``.
 
+- New :doc:`llvm-invalid-regex-pattern
+  <clang-tidy/checks/llvm/invalid-regex-pattern>` check.
+
+  Detects malformed regex patterns defined in a single string literal
+  to catch mistakes at compile time.
+
 - New :doc:`llvm-type-switch-case-types
   <clang-tidy/checks/llvm/type-switch-case-types>` check.
 
