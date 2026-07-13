@@ -18,8 +18,7 @@ define void @alias_mask_forked_pointer_needs_freeze(ptr %base1, ptr %base2,
 ; CHECK-NEXT:    [[TMP3:%.*]] = call <4 x i1> @llvm.loop.dependence.war.mask.v4i1.i64(i64 [[TMP1]], i64 [[TMP2]], i64 4)
 ; CHECK-NEXT:    [[TMP4:%.*]] = and <4 x i1> [[TMP0]], [[TMP3]]
 ; CHECK-NEXT:    [[TMP5:%.*]] = freeze i64 [[BASE12]]
-; CHECK-NEXT:    [[TMP6:%.*]] = freeze i64 [[DEST1]]
-; CHECK-NEXT:    [[TMP7:%.*]] = call <4 x i1> @llvm.loop.dependence.war.mask.v4i1.i64(i64 [[TMP5]], i64 [[TMP6]], i64 4)
+; CHECK-NEXT:    [[TMP7:%.*]] = call <4 x i1> @llvm.loop.dependence.war.mask.v4i1.i64(i64 [[TMP5]], i64 [[TMP2]], i64 4)
 ; CHECK-NEXT:    [[TMP8:%.*]] = and <4 x i1> [[TMP4]], [[TMP7]]
 ; CHECK-NEXT:    [[TMP9:%.*]] = zext <4 x i1> [[TMP8]] to <4 x i64>
 ; CHECK-NEXT:    [[NUM_ACTIVE_LANES:%.*]] = call i64 @llvm.vector.reduce.add.v4i64(<4 x i64> [[TMP9]])
