@@ -555,7 +555,8 @@ define <2 x i8> @sdiv_exact_negated_dividend_constant_divisor_vec_overflow(<2 x 
 define i32 @test35(i32 %A) {
 ; CHECK-LABEL: @test35(
 ; CHECK-NEXT:    [[AND:%.*]] = and i32 [[A:%.*]], 2147483647
-; CHECK-NEXT:    [[MUL:%.*]] = udiv exact i32 [[AND]], 2147483647
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp eq i32 [[AND]], 2147483647
+; CHECK-NEXT:    [[MUL:%.*]] = zext i1 [[TMP1]] to i32
 ; CHECK-NEXT:    ret i32 [[MUL]]
 ;
   %and = and i32 %A, 2147483647
@@ -566,7 +567,8 @@ define i32 @test35(i32 %A) {
 define <2 x i32> @test35vec(<2 x i32> %A) {
 ; CHECK-LABEL: @test35vec(
 ; CHECK-NEXT:    [[AND:%.*]] = and <2 x i32> [[A:%.*]], splat (i32 2147483647)
-; CHECK-NEXT:    [[MUL:%.*]] = udiv exact <2 x i32> [[AND]], splat (i32 2147483647)
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp eq <2 x i32> [[AND]], splat (i32 2147483647)
+; CHECK-NEXT:    [[MUL:%.*]] = zext <2 x i1> [[TMP1]] to <2 x i32>
 ; CHECK-NEXT:    ret <2 x i32> [[MUL]]
 ;
   %and = and <2 x i32> %A, <i32 2147483647, i32 2147483647>

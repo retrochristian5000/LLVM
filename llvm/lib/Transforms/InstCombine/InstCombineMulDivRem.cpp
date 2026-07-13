@@ -1782,6 +1782,38 @@ Instruction *InstCombinerImpl::visitUDiv(BinaryOperator &I) {
     Value *Cmp = Builder.CreateICmpUGE(Op0, Op1);
     return CastInst::CreateZExtOrBitCast(Cmp, Ty);
   }
+
+  // Op0 / C --> sum_i (Op0 >= i*C) if MaxQuotient <= MaxComparisons
+  if (match(Op1, m_APInt(C2)) && !C2->isZero()) {
+    ConstantRange CR = computeConstantRange(Op0, /*ForSigned=*/false,
+                                            SQ.getWithInstruction(&I));
+    APInt MaxOp0 = CR.getUnsignedMax();
+    APInt MaxQ = MaxOp0.udiv(*C2);
+
+    if (MaxQ == 0)
+      return replaceInstUsesWith(I, ConstantInt::getNullValue(Ty));
+
+    if (MaxQ == 1) {
+      Value *Cmp = Builder.CreateICmpUGE(Op0, Op1);
+      return CastInst::CreateZExtOrBitCast(Cmp, Ty);
+    }
+
+    if (MaxQ == 2) {
+      Value *Cmp1 = Builder.CreateICmpUGE(Op0, Op1);
+      Value *Zext1 = Builder.CreateZExtOrBitCast(Cmp1, Ty);
+      bool Overflow;
+      APInt C2x2 = C2->uadd_ov(*C2, Overflow);
+      (void)Overflow;
+      assert(!Overflow && "MaxQ == 2 implies 2 * C2 <= MaxOp0 <= UINT_MAX");
+
+      Value *Cmp2 = Builder.CreateICmpUGE(Op0, ConstantInt::get(Ty, C2x2));
+      Value *Zext2 = Builder.CreateZExtOrBitCast(Cmp2, Ty);
+      BinaryOperator *Add = BinaryOperator::CreateNUWAdd(Zext1, Zext2);
+      Add->setHasNoSignedWrap();
+      return Add;
+    }
+  }
+
   // Op0 / (sext i1 X) --> zext (Op0 == -1) (if X is 0, the div is undefined)
   if (match(Op1, m_SExt(m_Value(X))) && X->getType()->isIntOrIntVectorTy(1)) {
     Value *Cmp = Builder.CreateICmpEQ(Op0, ConstantInt::getAllOnesValue(Ty));
