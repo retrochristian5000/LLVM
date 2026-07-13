@@ -478,7 +478,7 @@ define void @test_scev_check_mul_add_expansion(ptr %out, ptr %in, i32 %len, i32 
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[PRE_1:%.*]] = icmp samesign ugt i32 [[D:%.*]], 5
 ; CHECK-NEXT:    tail call void @llvm.assume(i1 [[PRE_1]])
-; CHECK-NEXT:    [[PRE_2:%.*]] = icmp ult i32 [[D]], 7
+; CHECK-NEXT:    [[PRE_2:%.*]] = icmp samesign ult i32 [[D]], 7
 ; CHECK-NEXT:    tail call void @llvm.assume(i1 [[PRE_2]])
 ; CHECK-NEXT:    [[PRE_3:%.*]] = icmp slt i32 [[D]], [[LEN:%.*]]
 ; CHECK-NEXT:    tail call void @llvm.assume(i1 [[PRE_3]])
