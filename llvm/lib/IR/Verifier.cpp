@@ -1464,8 +1464,12 @@ void Verifier::visitDICompileUnit(const DICompileUnit &N) {
   if (auto *Array = N.getRawGlobalVariables()) {
     CheckDI(isa<MDTuple>(Array), "invalid global variable list", &N, Array);
     for (Metadata *Op : N.getGlobalVariables()->operands()) {
-      CheckDI(Op && (isa<DIGlobalVariableExpression>(Op)),
-              "invalid global variable ref", &N, Op);
+      auto *GVE = dyn_cast_or_null<DIGlobalVariableExpression>(Op);
+      CheckDI(GVE, "invalid global variable ref", &N, Op);
+      CheckDI(!isa_and_nonnull<DILocalScope>(GVE->getVariable()->getScope()),
+              "function-local variables are not allowed in a DICompileUnit's "
+              "global variables list",
+              &N, Op);
     }
   }
   if (auto *Array = N.getRawImportedEntities()) {
@@ -1516,13 +1520,13 @@ void Verifier::visitDISubprogram(const DISubprogram &N) {
       auto True = [](const Metadata *) { return true; };
       auto False = [](const Metadata *) { return false; };
       bool IsTypeCorrect = DISubprogram::visitRetainedNode<bool>(
-          Op, True, True, True, True, False);
+          Op, True, True, True, True, True, False);
       CheckDI(IsTypeCorrect,
               "invalid retained nodes, expected DILocalVariable, DILabel, "
-              "DIImportedEntity or DIType",
+              "DIImportedEntity, DIType or DIGlobalVariableExpression",
               &N, Node, Op);
 
-      auto *RetainedNode = cast<DINode>(Op);
+      auto *RetainedNode = cast<MDNode>(Op);
       auto *RetainedNodeScope = dyn_cast_or_null<DILocalScope>(
           DISubprogram::getRawRetainedNodeScope(RetainedNode));
       CheckDI(RetainedNodeScope,
@@ -5938,8 +5942,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
               "bits",
               Call);
         Check(OBU.Inputs.size() < 3 ||
-                  GetTypeAt(2)->isIntegerTy() &&
-                      GetTypeAt(2)->getIntegerBitWidth() <= 64,
+                  (GetTypeAt(2)->isIntegerTy() &&
+                   GetTypeAt(2)->getIntegerBitWidth() <= 64),
               "third argument should be an integer with a maximum width of 64 "
               "bits if present",
               Call);
@@ -6096,6 +6100,13 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     Check(APFloatBase::isValidArbitraryFPFormat(Interp),
           "unsupported interpretation metadata string", Call);
 
+    // The integer type width must equal the arbitrary FP format width.
+    if (unsigned FormatBits =
+            APFloatBase::getArbitraryFPFormatSizeInBits(Interp))
+      Check(IntTy->getScalarSizeInBits() == FormatBits,
+            "integer type bit width must equal the arbitrary FP format width",
+            Call);
+
     // Check rounding mode metadata (argoperand 2).
     auto *RoundingMAV = dyn_cast<MetadataAsValue>(Call.getArgOperand(2));
     Check(RoundingMAV, "missing rounding mode metadata operand", Call);
@@ -6138,6 +6149,13 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     // Valid interpretation strings: mini-float format names.
     Check(APFloatBase::isValidArbitraryFPFormat(Interp),
           "unsupported interpretation metadata string", Call);
+
+    // The integer type width must equal the arbitrary FP format width.
+    if (unsigned FormatBits =
+            APFloatBase::getArbitraryFPFormatSizeInBits(Interp))
+      Check(IntTy->getScalarSizeInBits() == FormatBits,
+            "integer type bit width must equal the arbitrary FP format width",
+            Call);
     break;
   }
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
