@@ -775,10 +775,11 @@ MachineInstrBuilder SIPreEmitPeephole::createUnpackedMI(MachineInstr &I,
 //   V_MOV_B16_t16_e32: dst(0), src0(1)
 //   V_MOV_B16_t16_e64: dst(0), src0_mods(1), src0(2), op_sel(3)
 static bool getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
-                          MCRegister &SrcReg32, bool &SrcIsHi, bool &SrcIsImm,
-                          int64_t &ImmVal) {
+                          MCRegister &SrcReg16, MCRegister &SrcReg32,
+                          bool &SrcIsHi, bool &SrcIsImm, int64_t &ImmVal) {
   SrcIsImm = false;
   SrcIsHi = false;
+  SrcReg16 = MCRegister();
   SrcReg32 = MCRegister();
 
   unsigned Opc = MI.getOpcode();
@@ -807,6 +808,7 @@ static bool getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
     return false;
 
   SrcIsHi = AMDGPU::isHi16Reg(SrcReg, *TRI);
+  SrcReg16 = SrcReg;
   SrcReg32 = TRI->get32BitRegister(SrcReg);
   return SrcReg32.isValid();
 }
@@ -815,58 +817,30 @@ static bool getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
 // Try to merge a pair of v_mov_b16 instructions targeting the lo16 and hi16
 // halves of the same VGPR into a single 32-bit instruction.
 //
+// Caller guarantee the pair to be two v_mov_b16 and targets the same dst32
+//
 // Patterns:
 //   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.l  => v_and_b32  v0,0xffff,v2
 //   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.h  => v_lshrrev_b32 v0,16,v2
 //   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.l  => v_lshlrev_b32 v0,16,v2
 //   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.h  => v_and_b32  v0,0xffff0000,v2
-//   v_mov_b16 v0.l, v2.l     v_mov_b16 v0.h, v3.l  => v_perm_b32 v0,v2,v3,0x05040100
-//   v_mov_b16 v0.l, v2.l     v_mov_b16 v0.h, v3.h  => v_bfi_b32  v0,0x0000ffff,v2,v3
-//   v_mov_b16 v0.l, v2.h     v_mov_b16 v0.h, v3.l  => v_alignbit_b32 v0,v3,v2,16
-//   v_mov_b16 v0.l, v2.h     v_mov_b16 v0.h, v3.h  => v_perm_b32 v0,v2,v3,0x07060302
+//   v_mov_b16 v0.l, v2.x     v_mov_b16 v0.h, v3.y  => v_pack_b32_f16 v0,v2.x,v3.y
 // clang-format on
 bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
                                               MachineInstr &Hi,
                                               bool IsHiFirst) const {
-  // Both must be v_mov_b16 true16 variants.
-  unsigned LoOpc = Lo.getOpcode();
-  unsigned HiOpc = Hi.getOpcode();
-  if ((LoOpc != AMDGPU::V_MOV_B16_t16_e32 &&
-       LoOpc != AMDGPU::V_MOV_B16_t16_e64) ||
-      (HiOpc != AMDGPU::V_MOV_B16_t16_e32 &&
-       HiOpc != AMDGPU::V_MOV_B16_t16_e64))
-    return false;
-
+  // Lo and Hi share the same Dst32
   MCRegister LoDst = Lo.getOperand(0).getReg().asMCReg();
-  MCRegister HiDst = Hi.getOperand(0).getReg().asMCReg();
-
-  if (!LoDst.isValid() || !HiDst.isValid())
-    return false;
-
-  if (!AMDGPU::VGPR_16RegClass.contains(LoDst) ||
-      !AMDGPU::VGPR_16RegClass.contains(HiDst))
-    return false;
-  if (AMDGPU::isHi16Reg(LoDst, *TRI))
-    return false; // Lo is actually writing hi half
-  if (!AMDGPU::isHi16Reg(HiDst, *TRI))
-    return false; // Hi is actually writing lo half
-
-  // Both must target the same 32-bit VGPR.
-  MCRegister LoDst32 = TRI->get32BitRegister(LoDst);
-  MCRegister HiDst32 = TRI->get32BitRegister(HiDst);
-  if (!LoDst32.isValid() || LoDst32 != HiDst32)
-    return false;
-
-  MCRegister Dst32 = LoDst32;
+  MCRegister Dst32 = TRI->get32BitRegister(LoDst);
 
   // Extract source info for Lo and Hi.
-  MCRegister LoSrc32, HiSrc32;
+  MCRegister LoSrc16, LoSrc32, HiSrc16, HiSrc32;
   bool LoSrcIsHi, HiSrcIsHi, LoSrcIsImm, HiSrcIsImm;
   int64_t LoImm = 0, HiImm = 0;
 
-  if (!getMovB16Info(Lo, TRI, LoSrc32, LoSrcIsHi, LoSrcIsImm, LoImm))
+  if (!getMovB16Info(Lo, TRI, LoSrc16, LoSrc32, LoSrcIsHi, LoSrcIsImm, LoImm))
     return false;
-  if (!getMovB16Info(Hi, TRI, HiSrc32, HiSrcIsHi, HiSrcIsImm, HiImm))
+  if (!getMovB16Info(Hi, TRI, HiSrc16, HiSrc32, HiSrcIsHi, HiSrcIsImm, HiImm))
     return false;
 
   MachineInstr &FirstMI = IsHiFirst ? Hi : Lo;
@@ -878,25 +852,41 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
 
   // Check that between Lo and Hi, there are no instructions that:
   // - modify Dst32 (except through Lo/Hi themselves)
-  // - modify LoSrc32 or HiSrc32 dependinig on order (data dependency)
+  // - modify LoSrc16 or HiSrc16 dependinig on order (data dependency)
   // We scan from the instruction after the first mov up to (but not including)
   // the second mov.
-  MCRegister SecondSrc32 = IsHiFirst ? LoSrc32 : HiSrc32;
-  for (auto It = std::next(FirstMI.getIterator()); &*It != &SecondMI; ++It) {
-    const MachineInstr &Scan = *It;
+  MCRegister SecondSrc16 = IsHiFirst ? LoSrc16 : HiSrc16;
+  for (auto &It :
+       drop_begin(make_range(FirstMI.getIterator(), SecondMI.getIterator()))) {
+    const MachineInstr &Scan = It;
     if (Scan.modifiesRegister(Dst32, TRI))
       return false;
-    if (!IsSecondImm && Scan.modifiesRegister(SecondSrc32, TRI))
+    if (!IsSecondImm && Scan.modifiesRegister(SecondSrc16, TRI))
       return false;
   }
 
   // Now match patterns and emit the replacement instruction.
   // Insert before the first (Lo) instruction, then remove both.
 
+  // Pattern: v_mov_b16 v0.l, v2.x + v_mov_b16 v0.h, v3.y
+  //   => v_pack_b32_f16 v0,v2.x,v3.y
+  if (!HiSrcIsImm && !LoSrcIsImm) {
+    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_PACK_B32_F16_t16_e64), Dst32)
+        .addImm(0) // SrcMod
+        .addReg(LoSrc16)
+        .addImm(0) // SrcMod
+        .addReg(HiSrc16)
+        .addImm(0)  // Clamp
+        .addImm(0); // Opsel
+    Lo.eraseFromParent();
+    Hi.eraseFromParent();
+    return true;
+  }
+
   // Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.l
   //   => v_and_b32 v0, 0x0000ffff, v2
   if (HiSrcIsImm && HiImm == 0 && !LoSrcIsImm && !LoSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e64), Dst32)
+    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e32), Dst32)
         .addImm(0x0000ffff)
         .addReg(LoSrc32);
     Lo.eraseFromParent();
@@ -907,7 +897,7 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.h
   //   => v_lshrrev_b32 v0, 16, v2
   if (HiSrcIsImm && HiImm == 0 && !LoSrcIsImm && LoSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHRREV_B32_e64), Dst32)
+    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHRREV_B32_e32), Dst32)
         .addImm(16)
         .addReg(LoSrc32);
     Lo.eraseFromParent();
@@ -918,7 +908,7 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.l
   //   => v_lshlrev_b32 v0, 16, v2
   if (LoSrcIsImm && LoImm == 0 && !HiSrcIsImm && !HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHLREV_B32_e64), Dst32)
+    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHLREV_B32_e32), Dst32)
         .addImm(16)
         .addReg(HiSrc32);
     Lo.eraseFromParent();
@@ -929,62 +919,9 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.h
   //   => v_and_b32 v0, 0xffff0000, v2
   if (LoSrcIsImm && LoImm == 0 && !HiSrcIsImm && HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e64), Dst32)
+    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e32), Dst32)
         .addImm(0xffff0000)
         .addReg(HiSrc32);
-    Lo.eraseFromParent();
-    Hi.eraseFromParent();
-    return true;
-  }
-
-  // Pattern: v_mov_b16 v0.l, v2.l  +  v_mov_b16 v0.h, v3.l
-  //   => v_perm_b32 v0, v2, v3, 0x05040100
-  if (!LoSrcIsImm && !LoSrcIsHi && !HiSrcIsImm && !HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_PERM_B32_e64), Dst32)
-        .addReg(LoSrc32)
-        .addReg(HiSrc32)
-        .addImm(0x05040100);
-    Lo.eraseFromParent();
-    Hi.eraseFromParent();
-    return true;
-  }
-
-  // Pattern: v_mov_b16 v0.l, v2.l  +  v_mov_b16 v0.h, v3.h
-  //   => v_bfi_b32 v0, 0x0000ffff, v2, v3
-  if (!LoSrcIsImm && !LoSrcIsHi && !HiSrcIsImm && HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_BFI_B32_e64), Dst32)
-        .addImm(0x0000ffff)
-        .addReg(LoSrc32)
-        .addReg(HiSrc32);
-    Lo.eraseFromParent();
-    Hi.eraseFromParent();
-    return true;
-  }
-
-  // Pattern: v_mov_b16 v0.l, v2.h  +  v_mov_b16 v0.h, v3.l
-  //   => v_alignbit_b32 v0,v3,v2,16
-  if (!LoSrcIsImm && LoSrcIsHi && !HiSrcIsImm && !HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_ALIGNBIT_B32_t16_e64), Dst32)
-        .addImm(0) // SrcMod0
-        .addReg(HiSrc32)
-        .addImm(0) // SrcMod1
-        .addReg(LoSrc32)
-        .addImm(0) // SrcMod2
-        .addImm(16)
-        .addImm(0)  // Clamp
-        .addImm(0); // Opsel
-    Lo.eraseFromParent();
-    Hi.eraseFromParent();
-    return true;
-  }
-
-  // Pattern: v_mov_b16 v0.l, v2.h  +  v_mov_b16 v0.h, v3.h
-  //   => v_perm_b32 v0, v2, v3, 0x07060302
-  if (!LoSrcIsImm && LoSrcIsHi && !HiSrcIsImm && HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_PERM_B32_e64), Dst32)
-        .addReg(LoSrc32)
-        .addReg(HiSrc32)
-        .addImm(0x07060302);
     Lo.eraseFromParent();
     Hi.eraseFromParent();
     return true;

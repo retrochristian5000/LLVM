@@ -981,7 +981,7 @@ define <6 x half> @v_repeat_divisor_v3f16_x2(<3 x half> %x, <3 x half> %y, <3 x 
 ; GFX11-TRUE16-NEXT:    v_pk_mul_f16 v0, v0, v4
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.h, v2.l
-; GFX11-TRUE16-NEXT:    v_alignbit_b32 v2, v3, v2, 16
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v2, v2.h, v3.l
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_repeat_divisor_v3f16_x2:

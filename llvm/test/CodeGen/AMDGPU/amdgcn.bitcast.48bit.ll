@@ -936,7 +936,7 @@ define <3 x i16> @bitcast_v3bf16_to_v3i16(<3 x bfloat> %a, i32 %b) #0 {
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v1, v5, v8, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_cmp_u_f32_e32 vcc_lo, v0, v0
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v3, 0x7fc0
-; GFX11-TRUE16-NEXT:    v_alignbit_b32 v1, v3, v1, 16
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v1, v1.h, v3.l
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v0, v4, v6, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v2.h
 ; GFX11-TRUE16-NEXT:  .LBB4_2: ; %end
@@ -1195,7 +1195,7 @@ define inreg <3 x i16> @bitcast_v3bf16_to_v3i16_scalar(<3 x bfloat> inreg %a, i3
 ; GFX11-TRUE16-NEXT:    v_cmp_u_f32_e32 vcc_lo, v2, v2
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v4, 0x7fc0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_alignbit_b32 v1, v4, v1, 16
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v1, v1.h, v4.l
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v0, v5, v8, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v3.h
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]

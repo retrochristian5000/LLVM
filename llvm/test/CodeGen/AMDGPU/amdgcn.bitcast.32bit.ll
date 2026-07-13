@@ -10266,7 +10266,7 @@ define inreg <4 x i8> @bitcast_v2bf16_to_v4i8_scalar(<2 x bfloat> inreg %a, i32 
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v1, v3, v5, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v2, 16, v1
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_perm_b32 v1, v0, v2, 0x5040100
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v1, v0.l, v2.l
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v3, 24, v1
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v1
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]

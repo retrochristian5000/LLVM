@@ -243,7 +243,7 @@ define amdgpu_ps void @insertelement_s_v2i16_v_s(ptr addrspace(4) inreg %ptr, i1
 ; GFX11-LABEL: insertelement_s_v2i16_v_s:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_load_b32 s0, s[2:3], 0x0
-; GFX11-NEXT:    v_perm_b32 v2, v0, v0, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v2, v0.l, v0.l
 ; GFX11-NEXT:    s_lshl_b32 s1, s4, 4
 ; GFX11-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
 ; GFX11-NEXT:    s_lshl_b32 s1, 0xffff, s1
@@ -403,7 +403,7 @@ define amdgpu_ps void @insertelement_s_v2i16_v_v(ptr addrspace(4) inreg %ptr, i1
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_load_b32 s0, s[2:3], 0x0
 ; GFX11-NEXT:    v_lshlrev_b32_e32 v1, 4, v1
-; GFX11-NEXT:    v_perm_b32 v3, v0, v0, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v3, v0.l, v0.l
 ; GFX11-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX11-NEXT:    v_lshlrev_b32_e64 v2, v1, 0xffff
@@ -564,7 +564,7 @@ define amdgpu_ps void @insertelement_v_v2i16_v_s(ptr addrspace(1) %ptr, i16 %val
 ; GFX11-LABEL: insertelement_v_v2i16_v_s:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    global_load_b32 v3, v[0:1], off
-; GFX11-NEXT:    v_perm_b32 v4, v2, v2, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v4, v2.l, v2.l
 ; GFX11-NEXT:    s_lshl_b32 s0, s2, 4
 ; GFX11-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
 ; GFX11-NEXT:    s_lshl_b32 s0, 0xffff, s0
@@ -646,7 +646,7 @@ define amdgpu_ps void @insertelement_v_v2i16_v_v(ptr addrspace(1) %ptr, i16 %val
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    global_load_b32 v4, v[0:1], off
 ; GFX11-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_lshlrev_b32 v0, 4, v3
-; GFX11-NEXT:    v_perm_b32 v5, v2, v2, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v5, v2.l, v2.l
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX11-NEXT:    v_lshlrev_b32_e64 v3, v0, 0xffff
 ; GFX11-NEXT:    v_mov_b32_e32 v0, 0
@@ -878,7 +878,7 @@ define amdgpu_ps void @insertelement_s_v4i16_v_s(ptr addrspace(4) inreg %ptr, i1
 ; GFX11-LABEL: insertelement_s_v4i16_v_s:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_load_b64 s[0:1], s[2:3], 0x0
-; GFX11-NEXT:    v_perm_b32 v2, v0, v0, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v2, v0.l, v0.l
 ; GFX11-NEXT:    s_lshl_b32 s2, s4, 4
 ; GFX11-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
 ; GFX11-NEXT:    s_lshl_b64 s[2:3], 0xffff, s2
@@ -1054,7 +1054,7 @@ define amdgpu_ps void @insertelement_s_v4i16_v_v(ptr addrspace(4) inreg %ptr, i1
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_load_b64 s[0:1], s[2:3], 0x0
 ; GFX11-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_lshlrev_b32 v1, 4, v1
-; GFX11-NEXT:    v_perm_b32 v5, v0, v0, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v5, v0.l, v0.l
 ; GFX11-NEXT:    v_mov_b32_e32 v3, 0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_lshlrev_b64 v[1:2], v1, 0xffff
@@ -1227,7 +1227,7 @@ define amdgpu_ps void @insertelement_v_v4i16_v_s(ptr addrspace(1) %ptr, i16 %val
 ; GFX11-LABEL: insertelement_v_v4i16_v_s:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    global_load_b64 v[0:1], v[0:1], off
-; GFX11-NEXT:    v_perm_b32 v4, v2, v2, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v4, v2.l, v2.l
 ; GFX11-NEXT:    s_lshl_b32 s0, s2, 4
 ; GFX11-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v3, 0
 ; GFX11-NEXT:    s_lshl_b64 s[0:1], 0xffff, s0
@@ -1315,7 +1315,7 @@ define amdgpu_ps void @insertelement_v_v4i16_v_v(ptr addrspace(1) %ptr, i16 %val
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    global_load_b64 v[0:1], v[0:1], off
 ; GFX11-NEXT:    v_dual_mov_b32 v6, 0 :: v_dual_lshlrev_b32 v3, 4, v3
-; GFX11-NEXT:    v_perm_b32 v7, v2, v2, 0x5040100
+; GFX11-NEXT:    v_pack_b32_f16 v7, v2.l, v2.l
 ; GFX11-NEXT:    v_mov_b32_e32 v5, 0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_lshlrev_b64 v[3:4], v3, 0xffff

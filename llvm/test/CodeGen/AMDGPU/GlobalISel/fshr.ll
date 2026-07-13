@@ -4844,23 +4844,14 @@ define i64 @v_fshr_i64_48(i64 %lhs, i64 %rhs) {
 ; GFX10-NEXT:    v_or_b32_sdwa v0, v0, v3 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:DWORD src1_sel:WORD_1
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-TRUE16-LABEL: v_fshr_i64_48:
-; GFX11-TRUE16:       ; %bb.0:
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_lshlrev_b64 v[0:1], 16, v[0:1]
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e64 v2, 16, v3
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_or_b32_e32 v0, v0, v2
-; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
-;
-; GFX11-FAKE16-LABEL: v_fshr_i64_48:
-; GFX11-FAKE16:       ; %bb.0:
-; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-FAKE16-NEXT:    v_lshlrev_b64 v[0:1], 16, v[0:1]
-; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v2, 16, v3
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-FAKE16-NEXT:    v_or_b32_e32 v0, v0, v2
-; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-LABEL: v_fshr_i64_48:
+; GFX11:       ; %bb.0:
+; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-NEXT:    v_lshlrev_b64 v[0:1], 16, v[0:1]
+; GFX11-NEXT:    v_lshrrev_b32_e32 v2, 16, v3
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-NEXT:    v_or_b32_e32 v0, v0, v2
+; GFX11-NEXT:    s_setpc_b64 s[30:31]
   %result = call i64 @llvm.fshr.i64(i64 %lhs, i64 %rhs, i64 48)
   ret i64 %result
 }
