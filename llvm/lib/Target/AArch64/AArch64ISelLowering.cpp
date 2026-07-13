@@ -16644,6 +16644,28 @@ static SDValue tryLowerToBSL(SDValue N, SelectionDAG &DAG) {
                            N0->getOperand(1 - i), N1->getOperand(1 - j));
     }
 
+  // Fold: or(and(xor(AArch64ISD::CMTST(X,M), allones), A),
+  // and(AArch64ISD::CMTST(X,M), B)) --> BSP(CMTST(X,M), A, B)
+  // This absorbs the NOT produced by performSETCCCombine when it folds
+  // setcc(and(X,Mask), 0, seteq) --> NOT(CMTST(X,Mask)).
+  for (int i = 1; i >= 0; --i)
+    for (int j = 1; j >= 0; --j) {
+      SDValue NotCMTST = N0->getOperand(i);
+      SDValue A = N0->getOperand(1 - i);
+      SDValue CMTST = N1->getOperand(j);
+      SDValue B = N1->getOperand(1 - j);
+
+      if (NotCMTST.getOpcode() != ISD::XOR ||
+          !ISD::isBuildVectorAllOnes(NotCMTST.getOperand(1).getNode()))
+        continue;
+      if (NotCMTST.getOperand(0) != CMTST)
+        continue;
+      if (CMTST.getOpcode() != AArch64ISD::CMTST)
+        continue;
+
+      return DAG.getNode(AArch64ISD::BSP, DL, VT, CMTST, A, B);
+    }
+
   return SDValue();
 }
 
@@ -29066,6 +29088,43 @@ static SDValue performSETCCCombine(SDNode *N,
       ISD::isConstantSplatVector(LHS.getNode(), SplatLHSVal) &&
       SplatLHSVal.isOne())
     return DAG.getSetCC(DL, VT, DAG.getConstant(0, DL, CmpVT), RHS, ISD::SETGE);
+
+  // Fold setcc(and(X, Mask), Mask/0, eq/ne) --> [not] AArch64ISD::CMTST(X,
+  // Mask) for a power of 2 splat Mask, replacing AND+CMEQ with a single CMTST.
+  // Any NOT folds away when the result feeds a BSL/BIF/BIT select.
+  if (!DCI.isBeforeLegalize() && CmpVT.isFixedLengthVector() &&
+      (Cond == ISD::SETEQ || Cond == ISD::SETNE) &&
+      LHS.getOpcode() == ISD::AND) {
+    APInt SplatVal;
+    SDValue X, MaskOp;
+    if (ISD::isConstantSplatVector(LHS.getOperand(1).getNode(), SplatVal) &&
+        SplatVal.isPowerOf2()) {
+      X = LHS.getOperand(0);
+      MaskOp = LHS.getOperand(1);
+    } else if (ISD::isConstantSplatVector(LHS.getOperand(0).getNode(),
+                                          SplatVal) &&
+               SplatVal.isPowerOf2()) {
+      X = LHS.getOperand(1);
+      MaskOp = LHS.getOperand(0);
+    }
+    if (X.getNode()) {
+      bool RHSIsZero = ISD::isBuildVectorAllZeros(RHS.getNode());
+      APInt RHSSplat;
+      bool RHSIsMask = !RHSIsZero &&
+                       ISD::isConstantSplatVector(RHS.getNode(), RHSSplat) &&
+                       RHSSplat == SplatVal;
+      if (RHSIsZero || RHSIsMask) {
+        SDValue CMTSTNode =
+            DAG.getNode(AArch64ISD::CMTST, DL, CmpVT, X, MaskOp);
+        // CMTST gives all-ones where (X & Mask) != 0, i.e. SETNE(AND, 0).
+        // Invert when the original condition is the opposite sense.
+        bool Invert = (Cond == ISD::SETEQ) ? RHSIsZero : RHSIsMask;
+        if (Invert)
+          return DAG.getNOT(DL, CMTSTNode, CmpVT);
+        return CMTSTNode;
+      }
+    }
+  }
 
   return SDValue();
 }
