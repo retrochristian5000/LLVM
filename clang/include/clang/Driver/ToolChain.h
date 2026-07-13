@@ -537,6 +537,9 @@ public:
     return LangOptions::SSPOff;
   }
 
+  /// Does this tool chain enable -fstack-clash-protection by default.
+  virtual bool IsStackClashProtectionDefault() const { return false; }
+
   /// Get the default trivial automatic variable initialization.
   virtual LangOptions::TrivialAutoVarInitKind
   GetDefaultTrivialAutoVarInit() const {

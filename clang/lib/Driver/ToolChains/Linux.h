@@ -51,6 +51,7 @@ public:
   IsAArch64OutlineAtomicsDefault(const llvm::opt::ArgList &Args) const override;
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override;
   bool IsMathErrnoDefault() const override;
+  bool IsStackClashProtectionDefault() const override;
   SanitizerMask
   getSupportedSanitizers(BoundArch BA,
                          Action::OffloadKind DeviceOffloadKind) const override;

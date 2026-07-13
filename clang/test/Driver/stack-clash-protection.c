@@ -8,6 +8,21 @@
 // RUN: %clang -target x86_64-unknown-freebsd -fstack-clash-protection -### %s 2>&1 | FileCheck %s -check-prefix=SCP-x86
 // SCP-x86: "-fstack-clash-protection"
 
+// RUN: %clang -target x86_64-unknown-linux -### %s 2>&1 | FileCheck %s -check-prefix=SCP-LINUX-NO
+// SCP-LINUX-NO-NOT: "-fstack-clash-protection"
+
+// RUN: %clang -target x86_64-linux-android -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID
+// RUN: %clang -target i686-linux-android -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID
+// RUN: %clang -target aarch64-linux-android -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID
+// RUN: %clang -target riscv64-linux-android -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID
+// RUN: %clang -target aarch64-linux-android -fno-stack-clash-protection -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID-NO
+// RUN: %clang -target aarch64-linux-android -fno-stack-clash-protection -fstack-clash-protection -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID
+// RUN: %clang -target aarch64-linux-android -fstack-clash-protection -fno-stack-clash-protection -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID-NO
+// RUN: %clang -target armv7-linux-androideabi -### %s 2>&1 | FileCheck %s -check-prefix=SCP-ANDROID-ARMV7
+// SCP-ANDROID: "-fstack-clash-protection"
+// SCP-ANDROID-NO-NOT: "-fstack-clash-protection"
+// SCP-ANDROID-ARMV7-NOT: "-fstack-clash-protection"
+
 // RUN: %clang -target armv7k-apple-linux -fstack-clash-protection -### %s 2>&1 | FileCheck %s -check-prefix=SCP-armv7
 // SCP-armv7-NOT: "-fstack-clash-protection"
 // SCP-armv7: argument unused during compilation: '-fstack-clash-protection'

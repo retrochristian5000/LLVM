@@ -946,6 +946,10 @@ bool Linux::isPIEDefault(const llvm::opt::ArgList &Args) const {
          getTriple().isMusl() || getSanitizerArgs(Args).requiresPIE();
 }
 
+bool Linux::IsStackClashProtectionDefault() const {
+  return getTriple().isAndroid();
+}
+
 bool Linux::IsAArch64OutlineAtomicsDefault(const ArgList &Args) const {
   // Outline atomics for AArch64 are supported by compiler-rt
   // and libgcc since 9.3.1
