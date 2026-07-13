@@ -597,19 +597,7 @@ RankedTensorType ConcatOp::inferResultType(int64_t dim, TypeRange inputTypes) {
     concatSize =
         concatSize + SaturatedInteger::wrap(tensorType.getDimSize(dim));
   sizes[dim] = concatSize.asInteger();
-  // Only propagate an encoding when all inputs agree on it (concat semantics
-  // across differing encodings are undefined at this level). Let the encoding
-  // itself decide whether it still holds on the new shape.
-  Attribute encoding = tensorTypes[0].getEncoding();
-  for (auto tensorType : llvm::drop_begin(tensorTypes)) {
-    if (tensorType.getEncoding() != encoding) {
-      encoding = Attribute();
-      break;
-    }
-  }
-  Type elementType = tensorTypes[0].getElementType();
-  return RankedTensorType::get(sizes, elementType,
-                               propagateEncoding(encoding, sizes, elementType));
+  return RankedTensorType::get(sizes, tensorTypes[0].getElementType());
 }
 
 void ConcatOp::build(OpBuilder &builder, OperationState &result, int64_t dim,
@@ -843,17 +831,11 @@ struct InferConcatOperandTypes : public OpRewritePattern<ConcatOp> {
     SmallVector<int64_t> inferredOperandShape(inferredResultType.getShape());
     for (auto [operandIdx, operandType] :
          llvm::enumerate(concatOp->getOperandTypes())) {
-      // Compute inferred type for operand. The refined type is applied to the
-      // operand itself, so it must carry the operand's own encoding rather
-      // than the (potentially different or missing) result encoding, subject
-      // to the encoding still holding on the refined shape.
-      auto operandRankedType = cast<RankedTensorType>(operandType);
-      inferredOperandShape[dim] = operandRankedType.getDimSize(dim);
-      Type elementType = inferredResultType.getElementType();
+      // Compute inferred type for operand.
+      inferredOperandShape[dim] =
+          cast<RankedTensorType>(operandType).getDimSize(dim);
       auto inferredOperandType = RankedTensorType::get(
-          inferredOperandShape, elementType,
-          propagateEncoding(operandRankedType.getEncoding(),
-                            inferredOperandShape, elementType));
+          inferredOperandShape, inferredResultType.getElementType());
 
       // Check if inferred type is more static.
       if (!preservesStaticInformation(inferredOperandType, operandType)) {
@@ -2061,9 +2043,7 @@ CollapseShapeOp::inferCollapsedType(RankedTensorType type,
     currentDim += dim;
   }
 
-  return RankedTensorType::get(
-      newShape, type.getElementType(),
-      propagateEncoding(type.getEncoding(), newShape, type.getElementType()));
+  return RankedTensorType::get(newShape, type.getElementType());
 }
 
 void CollapseShapeOp::build(OpBuilder &b, OperationState &result, Value src,
