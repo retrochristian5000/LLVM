@@ -15,6 +15,7 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "clang/CIR/Dialect/IR/CIRTypes.h"
 #include "clang/CIR/MissingFeatures.h"
 
@@ -512,6 +513,8 @@ CIRGenFunction::emitCoroutineBody(const CoroutineBodyStmt &s) {
     }
   }
 
+  cir::CoroSuspendPointDest::create(builder, openCurlyLoc);
+
   emitCoroEndBuiltinCall(
       openCurlyLoc, builder.getNullPtr(builder.getVoidPtrTy(), openCurlyLoc));
   if (auto *ret = cast_or_null<ReturnStmt>(s.getReturnStmt())) {
@@ -595,7 +598,7 @@ emitSuspendExpression(CIRGenFunction &cgf, CGCoroData &coro,
         }
 
         // Signals the parent that execution flows to next region.
-        cir::YieldOp::create(builder, loc);
+        cir::CoroSuspendPoint::create(builder,loc);
       },
       /*resumeBuilder=*/
       [&](mlir::OpBuilder &b, mlir::Location loc) {
