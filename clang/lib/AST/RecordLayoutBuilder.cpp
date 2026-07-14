@@ -579,9 +579,9 @@ static bool CheckTypeForRequiredVectorAlignment(const ASTContext &Context,
   return false;
 }
 
-/// Check if a type (or any type it contains) is a standard SIMD vector requiring
-/// alignment preservation on Windows. This includes direct vectors, arrays of
-/// vectors, and structs containing vectors.
+/// Check if a type (or any type it contains) is a standard SIMD vector
+/// requiring alignment preservation on Windows. This includes direct vectors,
+/// arrays of vectors, and structs containing vectors.
 static bool RequiresVectorAlignment(const ASTContext &Context, QualType Ty) {
   if (!Context.getTargetInfo().getTriple().isOSWindows())
     return false;
@@ -590,7 +590,8 @@ static bool RequiresVectorAlignment(const ASTContext &Context, QualType Ty) {
 
 /// Check if we should prevent MaxFieldAlignment from reducing this field's
 /// alignment. Returns true if the field has ABI-required alignment or contains
-/// vectors requiring alignment, UNLESS the struct has explicit packed attribute.
+/// vectors requiring alignment, UNLESS the struct has explicit packed
+/// attribute.
 static bool ShouldPreserveFieldAlignment(const ASTContext &Context,
                                          const FieldDecl *FD,
                                          AlignRequirementKind AlignReq,
@@ -2817,7 +2818,8 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
   bool IsVectorRequiringAlignment = false;
   if (const RecordDecl *RD = FD->getParent()) {
     if (!RD->hasAttr<PackedAttr>()) {
-      IsVectorRequiringAlignment = RequiresVectorAlignment(Context, FD->getType());
+      IsVectorRequiringAlignment =
+          RequiresVectorAlignment(Context, FD->getType());
     }
   }
 
