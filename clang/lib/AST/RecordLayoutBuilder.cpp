@@ -559,6 +559,61 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(
 
 typedef llvm::SmallPtrSet<const CXXRecordDecl*, 4> ClassSetTy;
 
+/// Helper for RequiresVectorAlignment - recursively checks types.
+static bool CheckTypeForRequiredVectorAlignment(const ASTContext &Context,
+                                                QualType Ty) {
+  if (const auto *VT = Ty->getAs<VectorType>()) {
+    uint64_t VecWidth = Context.getTypeSize(VT);
+    return VT->getVectorKind() == VectorKind::Generic &&
+           (VecWidth == 128 || VecWidth == 256) &&
+           VecWidth == Context.getTypeAlign(VT);
+  }
+  if (const auto *AT = Ty->getAsArrayTypeUnsafe())
+    return CheckTypeForRequiredVectorAlignment(Context, AT->getElementType());
+
+  if (const auto *RT = Ty->getAs<RecordType>()) {
+    for (const auto *Field : RT->getDecl()->fields())
+      if (CheckTypeForRequiredVectorAlignment(Context, Field->getType()))
+        return true;
+  }
+  return false;
+}
+
+/// Check if a type (or any type it contains) is a standard SIMD vector requiring
+/// alignment preservation on Windows. This includes direct vectors, arrays of
+/// vectors, and structs containing vectors.
+static bool RequiresVectorAlignment(const ASTContext &Context, QualType Ty) {
+  if (!Context.getTargetInfo().getTriple().isOSWindows())
+    return false;
+  return CheckTypeForRequiredVectorAlignment(Context, Ty);
+}
+
+/// Check if we should prevent MaxFieldAlignment from reducing this field's
+/// alignment. Returns true if the field has ABI-required alignment or contains
+/// vectors requiring alignment, UNLESS the struct has explicit packed attribute.
+static bool ShouldPreserveFieldAlignment(const ASTContext &Context,
+                                         const FieldDecl *FD,
+                                         AlignRequirementKind AlignReq,
+                                         bool StructHasPackedAttr) {
+  if (AlignReq == AlignRequirementKind::RequiredByABI)
+    return true;
+  if (!StructHasPackedAttr && RequiresVectorAlignment(Context, FD->getType()))
+    return true;
+  return false;
+}
+
+/// Check if a record contains any fields with vectors requiring alignment.
+/// Returns false if the record has explicit __attribute__((packed)).
+static bool RecordContainsVectorRequiringAlignment(const ASTContext &Context,
+                                                   const RecordDecl *RD) {
+  if (RD->hasAttr<PackedAttr>())
+    return false;
+  for (const auto *Field : RD->fields())
+    if (RequiresVectorAlignment(Context, Field->getType()))
+      return true;
+  return false;
+}
+
 class ItaniumRecordLayoutBuilder {
 protected:
   // FIXME: Remove this and make the appropriate fields public.
@@ -2029,12 +2084,19 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
   UnpackedFieldAlign = std::max(UnpackedFieldAlign, MaxAlignmentInChars);
 
   // The maximum field alignment overrides the aligned attribute.
-  if (!MaxFieldAlignment.isZero()) {
+  // However, do not reduce alignment for ABI-required alignments (e.g.,
+  // x86_fp80, vector types) which must be preserved for correctness.
+  // On Windows, check if the field type is a vector with standard SIMD
+  // alignment (16 or 32 bytes with size == alignment) - these need their
+  // alignment preserved under #pragma pack. However, honor explicit
+  // __attribute__((packed)) on the struct (Packed=true means the struct
+  // has the packed attribute, not the field).
+  if (!MaxFieldAlignment.isZero() &&
+      !ShouldPreserveFieldAlignment(Context, D, AlignRequirement, Packed)) {
     PackedFieldAlign = std::min(PackedFieldAlign, MaxFieldAlignment);
     PreferredAlign = std::min(PreferredAlign, MaxFieldAlignment);
     UnpackedFieldAlign = std::min(UnpackedFieldAlign, MaxFieldAlignment);
   }
-
 
   if (!FieldPacked)
     FieldAlign = UnpackedFieldAlign;
@@ -2748,10 +2810,25 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
         std::max(RequiredAlignment,
                  std::max(DirectFieldAlignment, FieldTypeRequiredAlignment));
   }
-  // Respect pragma pack, attribute pack and declspec align, but not for types
-  // that require specific alignment for correctness (e.g., x86_fp80 needs
-  // 16-byte alignment for movaps instructions).
-  if (!MaxFieldAlignment.isZero())
+  // Check if this is a vector type (or contains vectors) requiring alignment
+  // preservation on Windows. This includes direct vectors, arrays of vectors,
+  // and structs containing vectors. However, honor __attribute__((packed))
+  // on the struct even for vectors (explicit intent to pack).
+  bool IsVectorRequiringAlignment = false;
+  if (const RecordDecl *RD = FD->getParent()) {
+    if (!RD->hasAttr<PackedAttr>()) {
+      IsVectorRequiringAlignment = RequiresVectorAlignment(Context, FD->getType());
+    }
+  }
+
+  // Respect pragma pack, attribute pack and declspec align.
+  // However, do not reduce alignment for ABI-required alignments (e.g.,
+  // x86_fp80, vector types) which must be preserved for correctness.
+  bool StructHasPackedAttr =
+      FD->getParent() && FD->getParent()->hasAttr<PackedAttr>();
+  if (!MaxFieldAlignment.isZero() &&
+      !ShouldPreserveFieldAlignment(Context, FD, TInfo.AlignRequirement,
+                                    StructHasPackedAttr))
     Info.Alignment = std::min(Info.Alignment, MaxFieldAlignment);
   if (FD->hasAttr<PackedAttr>())
     Info.Alignment = CharUnits::One();
@@ -3289,7 +3366,12 @@ void MicrosoftRecordLayoutBuilder::finalizeLayout(const RecordDecl *RD) {
   if (!RequiredAlignment.isZero()) {
     Alignment = std::max(Alignment, RequiredAlignment);
     auto RoundingAlignment = Alignment;
-    if (!MaxFieldAlignment.isZero())
+    // Check if this struct contains vectors that require ABI alignment before
+    // allowing MaxFieldAlignment (from #pragma pack) to reduce the overall
+    // struct alignment. However, if the struct has __attribute__((packed)),
+    // honor that explicit request even for vectors.
+    if (!MaxFieldAlignment.isZero() &&
+        !RecordContainsVectorRequiringAlignment(Context, RD))
       RoundingAlignment = std::min(RoundingAlignment, MaxFieldAlignment);
     RoundingAlignment = std::max(RoundingAlignment, RequiredAlignment);
     Size = Size.alignTo(RoundingAlignment);

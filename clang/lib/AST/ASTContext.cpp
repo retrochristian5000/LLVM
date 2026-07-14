@@ -2348,6 +2348,15 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
         Width = Target->getLongDoubleWidth();
         Align = Target->getLongDoubleAlign();
       }
+      // On Windows targets, x86_fp80 requires 16-byte alignment for ABI
+      // correctness (movaps instructions will fault on misaligned addresses).
+      // Mark this as an ABI requirement that must not be reduced by #pragma
+      // pack. GCC preserves such alignment on other targets, but Clang
+      // historically has not; changing this would break existing Clang ABI on
+      // non-Windows platforms.
+      if (Target->getTriple().isOSWindows() &&
+          &Target->getLongDoubleFormat() == &llvm::APFloat::x87DoubleExtended())
+        AlignRequirement = AlignRequirementKind::RequiredByABI;
       break;
     case BuiltinType::Float128:
       if (Target->hasFloat128Type() || !getLangOpts().OpenMP ||
@@ -2539,9 +2548,22 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
     const ASTRecordLayout &Layout = getASTRecordLayout(RD);
     Width = toBits(Layout.getSize());
     Align = toBits(Layout.getAlignment());
-    AlignRequirement = RD->hasAttr<AlignedAttr>()
-                           ? AlignRequirementKind::RequiredByRecord
-                           : AlignRequirementKind::None;
+    // Check if the record has an aligned attribute, or if it contains
+    // fields with ABI-required alignment (e.g., x86_fp80).
+    if (RD->hasAttr<AlignedAttr>()) {
+      AlignRequirement = AlignRequirementKind::RequiredByRecord;
+    } else {
+      // Check if any field has RequiredByABI alignment requirement.
+      // If so, propagate it to the record.
+      AlignRequirement = AlignRequirementKind::None;
+      for (const auto *Field : RD->fields()) {
+        TypeInfo FI = getTypeInfo(Field->getType().getTypePtr());
+        if (FI.AlignRequirement == AlignRequirementKind::RequiredByABI) {
+          AlignRequirement = AlignRequirementKind::RequiredByABI;
+          break;
+        }
+      }
+    }
     break;
   }
 

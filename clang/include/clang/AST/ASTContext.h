@@ -183,6 +183,9 @@ enum class AlignRequirementKind {
 
   /// The alignment comes from an alignment attribute on a enum type.
   RequiredByEnum,
+
+  /// The alignment is required by the ABI for correctness.
+  RequiredByABI,
 };
 
 struct TypeInfo {
