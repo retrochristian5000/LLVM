@@ -7526,7 +7526,8 @@ bool X86TTIImpl::isProfitableToSinkOperands(Instruction *I,
     return false;
 
   auto *Shuf = dyn_cast<ShuffleVectorInst>(I->getOperand(ShiftAmountOpNum));
-  if (Shuf && getSplatIndex(Shuf->getShuffleMask()) >= 0 &&
+  if (Shuf && Shuf->isConstantMask() &&
+      getSplatIndex(Shuf->getShuffleMask()) >= 0 &&
       isVectorShiftByScalarCheap(I->getType())) {
     Ops.push_back(&I->getOperandUse(ShiftAmountOpNum));
     return true;
