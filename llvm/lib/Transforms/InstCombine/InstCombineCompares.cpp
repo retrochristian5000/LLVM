@@ -7276,8 +7276,7 @@ static ICmpInst *canonicalizeCmpWithConstant(ICmpInst &I) {
   if (!Op1C)
     return nullptr;
 
-  auto FlippedStrictness =
-      getFlippedStrictnessPredicateAndConstant(Pred, Op1C);
+  auto FlippedStrictness = getFlippedStrictnessPredicateAndConstant(Pred, Op1C);
   if (!FlippedStrictness)
     return nullptr;
 
