@@ -97,6 +97,114 @@ Improvements to clang-tidy
 New checks
 ^^^^^^^^^^
 
+- New :doc:`bugprone-assignment-in-selection-statement
+  <clang-tidy/checks/bugprone/assignment-in-selection-statement>` check.
+
+  Finds assignments within selection statements.
+
+- New :doc:`bugprone-missing-end-comparison
+  <clang-tidy/checks/bugprone/missing-end-comparison>` check.
+
+  Finds instances where the result of a standard algorithm is used in a Boolean
+  context without being compared to the end iterator.
+
+- New :doc:`bugprone-unsafe-to-allow-exceptions
+  <clang-tidy/checks/bugprone/unsafe-to-allow-exceptions>` check.
+
+  Finds functions where throwing exceptions is unsafe but the function is still
+  marked as potentially throwing.
+
+- New :doc:`llvm-formatv-string
+  <clang-tidy/checks/llvm/formatv-string>` check.
+
+  Validates ``llvm::formatv`` format strings against the provided arguments,
+  diagnosing mismatched argument counts, unused arguments, and mixed index styles.
+
+- New :doc:`llvm-redundant-casting
+  <clang-tidy/checks/llvm/redundant-casting>` check.
+
+  Points out uses of ``cast<>``, ``dyn_cast<>`` and their ``or_null`` variants
+  that are unnecessary because the argument already is of the target type, or a
+  derived type thereof. Also does similar analysis for calls to ``isa<>`` that
+  always return ``true``.
+
+- New :doc:`llvm-type-switch-case-types
+  <clang-tidy/checks/llvm/type-switch-case-types>` check.
+
+  Finds ``llvm::TypeSwitch::Case`` calls with redundant explicit template
+  arguments that can be inferred from the lambda parameter type.
+
+- New :doc:`llvm-use-vector-utils
+  <clang-tidy/checks/llvm/use-vector-utils>` check.
+
+  Finds calls to ``llvm::to_vector(llvm::map_range(...))`` and
+  ``llvm::to_vector(llvm::make_filter_range(...))`` that can be replaced with
+  ``llvm::map_to_vector`` and ``llvm::filter_to_vector``.
+
+- New :doc:`misc-static-initialization-cycle
+  <clang-tidy/checks/misc/static-initialization-cycle>` check.
+
+  Finds cyclical initialization of static variables.
+
+- New :doc:`modernize-use-std-bit
+  <clang-tidy/checks/modernize/use-std-bit>` check.
+
+  Finds common idioms which can be replaced by standard functions from the
+  ``<bit>`` C++20 header.
+
+- New :doc:`modernize-use-string-view
+  <clang-tidy/checks/modernize/use-string-view>` check.
+
+  Looks for functions returning ``std::[w|u8|u16|u32]string`` and suggests to
+  change it to ``std::[...]string_view`` for performance reasons if possible.
+
+- New :doc:`modernize-use-structured-binding
+  <clang-tidy/checks/modernize/use-structured-binding>` check.
+
+  Finds places where structured bindings could be used to decompose pairs and
+  suggests replacing them.
+
+- New :doc:`performance-string-view-conversions
+  <clang-tidy/checks/performance/string-view-conversions>` check.
+
+  Finds and removes redundant conversions from ``std::[w|u8|u16|u32]string_view`` to
+  ``std::[...]string`` in call expressions expecting ``std::[...]string_view``.
+
+- New :doc:`performance-use-std-move
+  <clang-tidy/checks/performance/use-std-move>` check.
+
+  Suggests insertion of ``std::move(...)`` to turn copy assignment operator
+  calls into move assignment ones, when deemed valid and profitable.
+
+- New :doc:`readability-redundant-lambda-parameter-list
+  <clang-tidy/checks/readability/redundant-lambda-parameter-list>` check.
+
+  Finds lambda expressions with a redundant empty parameter list and removes it.
+
+- New :doc:`readability-redundant-nested-if
+  <clang-tidy/checks/readability/redundant-nested-if>` check.
+
+  Finds nested ``if`` statements that can be merged into a single ``if`` by
+  combining conditions with ``&&``.
+
+- New :doc:`readability-redundant-qualified-alias
+  <clang-tidy/checks/readability/redundant-qualified-alias>` check.
+
+  Finds redundant identity type aliases that re-expose a qualified name and can
+  be replaced with a ``using`` declaration.
+
+- New :doc:`readability-redundant-zero-initializer
+  <clang-tidy/checks/readability/redundant-zero-initializer>` check.
+
+  Finds explicit zero initializers of arrays that can be replaced with empty
+  braces.
+
+- New :doc:`readability-trailing-comma
+  <clang-tidy/checks/readability/trailing-comma>` check.
+
+  Checks for presence or absence of trailing commas in enum definitions and
+  initializer lists.
+
 New check aliases
 ^^^^^^^^^^^^^^^^^
 
