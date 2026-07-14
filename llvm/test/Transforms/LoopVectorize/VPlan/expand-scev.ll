@@ -321,14 +321,13 @@ exit:
 define void @scev_addrec_expanded(ptr %dst) {
 ; CHECK-LABEL: VPlan for loop in 'scev_addrec_expanded'
 ; CHECK:  VPlan 'Final VPlan for VF={4},UF={1}' {
-; CHECK-NEXT:  Live-in ir<%2> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT:  ir-bb<outer>:
 ; CHECK-NEXT:    IR   %outer.iv = phi i64 [ 0, %entry ], [ %outer.iv.next, %outer.latch ]
 ; CHECK-NEXT:    IR   %0 = add i64 %outer.iv, 4
-; CHECK-NEXT:    IR   %1 = udiv i64 %0, 3
-; CHECK-NEXT:    IR   %2 = add nuw nsw i64 %1, 1
-; CHECK-NEXT:    EMIT vp<%min.iters.check> = icmp ult ir<%2>, ir<4>
+; CHECK-NEXT:    EMIT vp<[[VP2:%[0-9]+]]> = udiv ir<%0>, ir<3>
+; CHECK-NEXT:    EMIT vp<[[VP3:%[0-9]+]]> = add nuw nsw vp<[[VP2]]>, ir<1>
+; CHECK-NEXT:    EMIT vp<%min.iters.check> = icmp ult vp<[[VP3]]>, ir<4>
 ; CHECK-NEXT:    EMIT branch-on-cond vp<%min.iters.check>
 ; CHECK-NEXT:  Successor(s): ir-bb<scalar.ph>, vector.ph
 ;
