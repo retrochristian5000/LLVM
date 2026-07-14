@@ -340,7 +340,8 @@ class MapInfoFinalizationPass
   /// base address can be utilised.
   mlir::Value getDescriptorFromBoxMap(mlir::omp::MapInfoOp boxMap,
                                       fir::FirOpBuilder &builder,
-                                      bool &canDescBeDeferred) {
+                                      bool &canDescBeDeferred,
+                                      bool &canOptimizeDescViaPrivatization) {
     mlir::Value descriptor = boxMap.getVarPtr();
     if (!fir::isTypeWithDescriptor(boxMap.getVarPtrType()))
       if (auto addrOp = mlir::dyn_cast_if_present<fir::BoxAddrOp>(
@@ -349,8 +350,13 @@ class MapInfoFinalizationPass
 
     canDescBeDeferred = canDeferDescriptorMapping(descriptor);
 
-    if (!mlir::isa<fir::BaseBoxType>(descriptor.getType()) &&
-        !fir::factory::isOptionalArgument(descriptor.getDefiningOp()))
+    // A restricted subset of canDeferDescriptorMapping for the moment
+    // can extend to encompass more as we find acceptable cases.
+    canOptimizeDescViaPrivatization = isDummyArgument(descriptor) &&
+                                      fir::isAssumedShape(descriptor.getType());
+
+    if ((!mlir::isa<fir::BaseBoxType>(descriptor.getType()) &&
+         !fir::factory::isOptionalArgument(descriptor.getDefiningOp())))
       return descriptor;
 
     mlir::Value &alloca = localBoxAllocas[descriptor.getDefiningOp()];
@@ -752,9 +758,19 @@ class MapInfoFinalizationPass
   /// issues.
   mlir::omp::ClauseMapFlags
   getDescriptorMapType(mlir::omp::ClauseMapFlags mapTypeFlag,
-                       mlir::Operation *target) {
+                       mlir::Operation *target, bool privatizeDescriptor) {
     using MapFlags = mlir::omp::ClauseMapFlags;
     MapFlags flags = MapFlags::none;
+
+    // Special runtime case for descriptor privatization requires the
+    // following map types in synergy:
+    //
+    //  PRIVATE | ATTACH | TARGET_PARAM
+    //
+    if (privatizeDescriptor) {
+      return MapFlags::priv | MapFlags::attach | MapFlags::always |
+             MapFlags::target_param | (mapTypeFlag & MapFlags::implicit);
+    }
 
     if (llvm::isa_and_nonnull<mlir::omp::TargetExitDataOp,
                               mlir::omp::TargetUpdateOp>(target)) {
@@ -817,6 +833,18 @@ class MapInfoFinalizationPass
     return false;
   }
 
+  /// Gets the underlying type of a pointer type, effectively unwrapping
+  /// fir.ref, and fir.array to get the underlying scalar type.
+  mlir::Type getUnderlyingVarType(mlir::Type baseAddrType) {
+    baseAddrType =
+        llvm::cast<mlir::omp::PointerLikeType>(fir::unwrapRefType(baseAddrType))
+            .getElementType();
+    if (auto seqType = llvm::dyn_cast<fir::SequenceType>(baseAddrType))
+      if (seqType.hasDynamicExtents())
+        baseAddrType = seqType.getEleTy();
+    return baseAddrType;
+  }
+
   /// This function generates an attach map, which is an type of OpenMP map that
   /// binds a pointer to its data. In the case of Fortran, this binding is
   /// primarily for binding the pointer inside of descriptors to the underlying
@@ -838,12 +866,8 @@ class MapInfoFinalizationPass
             ? reuseBaseAddr
             : fir::BoxOffsetOp::create(builder, descMapOp->getLoc(), descriptor,
                                        fir::BoxFieldAttr::base_addr);
-    mlir::Type underlyingVarType = llvm::cast<mlir::omp::PointerLikeType>(
-                                       fir::unwrapRefType(baseAddr.getType()))
-                                       .getElementType();
-    if (auto seqType = llvm::dyn_cast<fir::SequenceType>(underlyingVarType))
-      if (seqType.hasDynamicExtents())
-        underlyingVarType = seqType.getEleTy();
+
+    mlir::Type underlyingVarType = getUnderlyingVarType(baseAddr.getType());
 
     auto implicitAttachMap = mlir::omp::MapInfoOp::create(
         builder, descMapOp->getLoc(), descMapOp.getResult().getType(),
@@ -1068,7 +1092,8 @@ class MapInfoFinalizationPass
       mlir::Operation *target, mlir::Value descriptor,
       llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
       bool isAttachNever, bool isAttachAlways, bool isHasDeviceAddrFlag,
-      bool descCanBeDeferred, mlir::FlatSymbolRefAttr mapperId) {
+      bool descCanBeDeferred, bool canOptimizeDescViaPrivatization,
+      mlir::FlatSymbolRefAttr mapperId) {
     bool isRefPtrPtee =
         bitEnumContainsAll(op.getMapType(),
                            mlir::omp::ClauseMapFlags::ref_ptr) &&
@@ -1095,19 +1120,30 @@ class MapInfoFinalizationPass
                               newMembersAttr, newMembers, memberIndices);
     }
 
+    bool optDescMap = canOptimizeDescViaPrivatization &&
+                      llvm::isa<mlir::omp::TargetOp>(target);
+
     // If we have been provided RefPtrPtee, utilise the user specified map
     // types, otherwise, use the default descriptor map types.
     auto mapType = isRefPtrPtee ? op.getMapType()
-                                : getDescriptorMapType(op.getMapType(), target);
+                                : getDescriptorMapType(op.getMapType(), target,
+                                                       optDescMap);
 
     mapType = removeAttachModifiers(mapType);
+
+    mlir::Type underlyingVarType = mlir::Type{};
+    if (optDescMap)
+      underlyingVarType = getUnderlyingVarType(baseAddr.getType());
 
     auto newMapInfoOp = mlir::omp::MapInfoOp::create(
         builder, op->getLoc(), op.getResult().getType(), descriptor,
         mlir::TypeAttr::get(fir::unwrapRefType(descriptor.getType())),
         builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(mapType),
-        op.getMapCaptureTypeAttr(), /*varPtrPtr=*/mlir::Value{},
-        /*varPtrPtTyper=*/mlir::TypeAttr{}, newMembers, newMembersAttr,
+        op.getMapCaptureTypeAttr(),
+        optDescMap ? baseAddr.getVarPtrPtr() : mlir::Value{},
+        underlyingVarType ? mlir::TypeAttr::get(underlyingVarType)
+                          : mlir::TypeAttr{},
+        newMembers, newMembersAttr,
         /*bounds=*/mlir::SmallVector<mlir::Value>{},
         /*mapperId*/ mlir::FlatSymbolRefAttr(), op.getNameAttr(),
         /*partial_map=*/builder.getBoolAttr(false));
@@ -1143,6 +1179,7 @@ class MapInfoFinalizationPass
   void genDescriptorMaps(mlir::omp::MapInfoOp op, fir::FirOpBuilder &builder,
                          mlir::Operation *target) {
     bool descCanBeDeferred = false;
+    bool canOptimizeDescViaPrivatization = false;
     llvm::SmallVector<ParentAndPlacement> mapMemberUsers;
     getMemberUserList(op, mapMemberUsers);
 
@@ -1162,8 +1199,8 @@ class MapInfoFinalizationPass
                      !bitEnumContainsAll(op.getMapType(),
                                          mlir::omp::ClauseMapFlags::ref_ptr);
 
-    mlir::Value descriptor =
-        getDescriptorFromBoxMap(op, builder, descCanBeDeferred);
+    mlir::Value descriptor = getDescriptorFromBoxMap(
+        op, builder, descCanBeDeferred, canOptimizeDescViaPrivatization);
     mlir::FlatSymbolRefAttr mapperId = op.getMapperIdAttr();
 
     // If we're a derived type descriptor, that's been flagged as ref_ptr,
@@ -1189,9 +1226,10 @@ class MapInfoFinalizationPass
       genRefPteeMap(op, builder, target, descriptor, mapMemberUsers,
                     isAttachNever, isAttachAlways, mapperId);
     } else {
-      genRefPtrPteeOrDefaultMap(
-          op, builder, target, descriptor, mapMemberUsers, isAttachNever,
-          isAttachAlways, isHasDeviceAddrFlag, descCanBeDeferred, mapperId);
+      genRefPtrPteeOrDefaultMap(op, builder, target, descriptor, mapMemberUsers,
+                                isAttachNever, isAttachAlways,
+                                isHasDeviceAddrFlag, descCanBeDeferred,
+                                canOptimizeDescViaPrivatization, mapperId);
     }
   }
 
