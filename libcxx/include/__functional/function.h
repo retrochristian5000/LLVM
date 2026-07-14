@@ -145,10 +145,12 @@ public:
   virtual void destroy() _NOEXCEPT            = 0;
   virtual void destroy_deallocate() _NOEXCEPT = 0;
   virtual _Rp operator()(_ArgTypes&&...)      = 0;
-#  if _LIBCPP_HAS_RTTI
-  virtual const void* target(const type_info&) const _NOEXCEPT = 0;
-  virtual const std::type_info& target_type() const _NOEXCEPT  = 0;
-#  endif // _LIBCPP_HAS_RTTI
+  virtual const void* target(const type_info&) const _NOEXCEPT {
+    _LIBCPP_ASSERT_NON_NULL(false, "Trying to access type_info of std::function created in -fno-rtti mode!");
+  }
+  virtual const std::type_info& target_type() const _NOEXCEPT {
+    _LIBCPP_ASSERT_NON_NULL(false, "Trying to access type_info of std::function created in -fno-rtti-mode!");
+  }
 };
 _LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 
@@ -516,11 +518,19 @@ public:
   _LIBCPP_HIDE_FROM_ABI explicit operator bool() const _NOEXCEPT { return !__policy_->__is_null; }
 
 #  if _LIBCPP_HAS_RTTI
-  _LIBCPP_HIDE_FROM_ABI const std::type_info& target_type() const _NOEXCEPT { return *__policy_->__type_info; }
+  _LIBCPP_HIDE_FROM_ABI const std::type_info& target_type() const _NOEXCEPT {
+    _LIBCPP_ASSERT_NON_NULL(
+        __policy_->__type_info, "Trying to access type_info of std::functions created in -fno-rtti mode!");
+    return *__policy_->__type_info;
+  }
 
   template <typename _Tp>
   _LIBCPP_HIDE_FROM_ABI const _Tp* target() const _NOEXCEPT {
-    if (__policy_->__is_null || typeid(_Tp) != *__policy_->__type_info)
+    if (__policy_->__is_null)
+      return nullptr;
+    _LIBCPP_ASSERT_NON_NULL(
+        __policy_->__type_info, "Trying to access type_info of std::function created in -fno-rtti mode!");
+    if (typeid(_Tp) != *__policy_->__type_info)
       return nullptr;
     if (__policy_->__clone) // Out of line storage.
       return reinterpret_cast<const _Tp*>(__buf_.__large);
