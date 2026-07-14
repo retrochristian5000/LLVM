@@ -110,6 +110,10 @@ public:
   /// nullptr.
   Node *find_best_fit(size_t size);
 
+  /// Removes and returns any block from the trie.
+  /// @returns The block removed, or BlockRef() if empty.
+  BlockRef pop_any();
+
 private:
   /// @returns Whether a node is the head of its containing freelist.
   bool is_head(Node *node) const { return node->parent || node == root; }

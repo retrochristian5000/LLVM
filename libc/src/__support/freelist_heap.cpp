@@ -7,9 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/__support/freelist_heap.h"
-#include "src/__support/macros/config.h"
-
-#include <stddef.h>
 
 namespace LIBC_NAMESPACE_DECL {
 

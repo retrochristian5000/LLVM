@@ -102,7 +102,7 @@ class BlockRef {
   // Masks for the contents of the next field.
 #ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
   static constexpr size_t PREV_FREE_MASK = 0x3; // 2 bits
-  static constexpr size_t LAST_MASK = 1 << 2;  // bit 2
+  static constexpr size_t LAST_MASK = 1 << 2;   // bit 2
 
   static constexpr size_t PREV_FREE_NONE = 0;
   static constexpr size_t PREV_FREE_STORE_0 = 1;
@@ -210,6 +210,8 @@ public:
   ///
   /// Aligned to some multiple of MIN_ALIGN.
   LIBC_INLINE cpp::byte *usable_space() const {
+    if (!header_ptr)
+      return nullptr;
     auto *s = nonnull_header_ptr() + HEADER_SIZE;
     LIBC_ASSERT(reinterpret_cast<uintptr_t>(s) % MIN_ALIGN == 0 &&
                 "usable space must be aligned to MIN_ALIGN");
@@ -218,6 +220,8 @@ public:
 
   // @returns The region of memory the block manages, including the header.
   LIBC_INLINE ByteSpan region() const {
+    if (!header_ptr)
+      return {};
     return {nonnull_header_ptr(), outer_size()};
   }
 
@@ -237,14 +241,18 @@ public:
   /// @returns The block immediately after this one, or a null block if this is
   /// the last block.
   LIBC_INLINE BlockRef next() const {
+    if (!header_ptr)
+      return BlockRef();
     size_t next_value = load_next();
-    if (next_value & LAST_MASK)
+    if (!next_value || (next_value & LAST_MASK))
       return BlockRef();
     return BlockRef(nonnull_header_ptr() + (next_value & SIZE_MASK));
   }
 
   /// @returns The free block immediately before this one, otherwise null.
   LIBC_INLINE BlockRef prev_free() const {
+    if (!header_ptr)
+      return BlockRef();
 #ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
     if ((load_next() & PREV_FREE_MASK) == PREV_FREE_NONE)
       return BlockRef();
@@ -257,9 +265,13 @@ public:
 
 #ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
   LIBC_INLINE int prev_free_store_index() const {
+    if (!header_ptr)
+      return -1;
     size_t val = (load_next() & PREV_FREE_MASK);
-    if (val == PREV_FREE_STORE_0) return 0;
-    if (val == PREV_FREE_STORE_1) return 1;
+    if (val == PREV_FREE_STORE_0)
+      return 0;
+    if (val == PREV_FREE_STORE_1)
+      return 1;
     return -1; // Not free
   }
 #endif
@@ -269,19 +281,27 @@ public:
 
   /// Marks this block as in use.
   LIBC_INLINE void mark_used() const {
-    LIBC_ASSERT(next() && "last block is always considered used");
+    if (!header_ptr)
+      return;
     BlockRef next_block = next();
+    if (!next_block)
+      return;
     next_block.store_next(next_block.load_next() & ~PREV_FREE_MASK);
   }
 
   /// Marks this block as free.
 #ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
   LIBC_INLINE void mark_free(int store_index) const {
-    LIBC_ASSERT(next() && "last block is always considered used");
+    if (!header_ptr)
+      return;
     BlockRef next_block = next();
+    if (!next_block)
+      return;
     size_t val = 0;
-    if (store_index == 0) val = PREV_FREE_STORE_0;
-    else if (store_index == 1) val = PREV_FREE_STORE_1;
+    if (store_index == 0)
+      val = PREV_FREE_STORE_0;
+    else if (store_index == 1)
+      val = PREV_FREE_STORE_1;
     LIBC_ASSERT(val != 0 && "Invalid store index");
 
     size_t next_val = next_block.load_next() & ~PREV_FREE_MASK;
@@ -291,8 +311,11 @@ public:
   LIBC_INLINE void mark_free() const { mark_free(0); }
 #else
   LIBC_INLINE void mark_free() const {
-    LIBC_ASSERT(next() && "last block is always considered used");
+    if (!header_ptr)
+      return;
     BlockRef next_block = next();
+    if (!next_block)
+      return;
     next_block.store_next(next_block.load_next() | PREV_FREE_MASK);
     next_block.store_prev(outer_size());
   }
@@ -336,7 +359,7 @@ public:
     // With zero padding, the next block's usable space is HEADER_SIZE past it,
     // which is aligned to header alignment. Thus the max padding needed is
     // alignment - alignof(size_t).
-    if (add_overflow(size, alignment - alignof(size_t), size))
+    if (add_overflow(size, 2 * alignment + HEADER_SIZE, size))
       return 0;
     return size;
   }
@@ -351,7 +374,11 @@ public:
   LIBC_INLINE static uintptr_t
   next_possible_block_start(uintptr_t ptr,
                             size_t usable_space_alignment = MIN_ALIGN) {
-    return align_up(ptr + HEADER_SIZE, usable_space_alignment) - HEADER_SIZE;
+    uintptr_t start =
+        align_up(ptr + HEADER_SIZE, usable_space_alignment) - HEADER_SIZE;
+    if (start != ptr && start - ptr < HEADER_SIZE)
+      start += usable_space_alignment;
+    return start;
   }
   LIBC_INLINE static uintptr_t
   prev_possible_block_start(uintptr_t ptr,
@@ -391,10 +418,14 @@ private:
   }
 
   LIBC_INLINE size_t load_field(size_t offset) const {
+    if (!header_ptr)
+      return 0;
     return *reinterpret_cast<const size_t *>(field_ptr(offset));
   }
 
   LIBC_INLINE void store_field(size_t offset, size_t value) const {
+    if (!header_ptr)
+      return;
     new (field_ptr(offset)) size_t(value);
   }
 
@@ -503,6 +534,9 @@ BlockRef::BlockInfo BlockRef::allocate(BlockRef block, size_t alignment,
     LIBC_ASSERT(maybe_aligned_block.has_value() &&
                 "it should always be possible to split for alignment");
 
+#ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
+    info.prev = original;
+#else
     if (BlockRef prev = original.prev_free()) {
       // If there is a free block before this, we can merge the current one with
       // the newly created one.
@@ -510,6 +544,7 @@ BlockRef::BlockInfo BlockRef::allocate(BlockRef block, size_t alignment,
     } else {
       info.prev = original;
     }
+#endif
 
     BlockRef aligned_block = *maybe_aligned_block;
     LIBC_ASSERT(aligned_block.is_usable_space_aligned(alignment) &&
@@ -532,7 +567,8 @@ optional<BlockRef> BlockRef::split(size_t new_inner_size,
 
   // Compute the minimum outer size that produces a block of at least
   // `new_inner_size`.
-  size_t min_outer_size = outer_size(cpp::max(new_inner_size, PREV_FIELD_SIZE));
+  size_t min_outer_size = cpp::max(
+      outer_size(cpp::max(new_inner_size, MIN_ALIGN)), HEADER_SIZE + MIN_ALIGN);
 
   uintptr_t start = addr();
   uintptr_t next_block_start =
@@ -548,14 +584,24 @@ optional<BlockRef> BlockRef::split(size_t new_inner_size,
     return {};
 
   bool was_free = !used();
+#ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
+  int orig_store_idx = next().prev_free_store_index();
+  int store_to_set = orig_store_idx >= 0 ? orig_store_idx : 0;
+#endif
 
   ByteSpan new_region = region().subspan(new_outer_size);
   store_next((load_next() & ~SIZE_MASK) | new_outer_size);
 
   BlockRef new_block = as_block(new_region);
+#ifdef LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION
+  new_block.mark_free(store_to_set);
+  if (was_free)
+    mark_free(store_to_set);
+#else
   new_block.mark_free();
   if (was_free)
     mark_free();
+#endif
 
   LIBC_ASSERT(new_block.is_usable_space_aligned(usable_space_alignment) &&
               "usable space must have requested alignment");

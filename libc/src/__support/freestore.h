@@ -46,6 +46,19 @@ public:
   /// allocated. Returns nullptr if there is no such block.
   BlockRef remove_best_fit(size_t size);
 
+  /// Removes and returns any block from the store.
+  /// @returns The block removed, or BlockRef() if empty.
+  LIBC_INLINE BlockRef remove_any() {
+    for (FreeList &list : small_lists) {
+      if (!list.empty()) {
+        BlockRef block = list.front();
+        list.pop();
+        return block;
+      }
+    }
+    return large_trie.pop_any();
+  }
+
 private:
   static constexpr size_t MIN_OUTER_SIZE = align_up(
       BlockRef::HEADER_SIZE + sizeof(FreeList::Node), BlockRef::MIN_ALIGN);

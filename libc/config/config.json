@@ -187,7 +187,7 @@
   },
   "baremetal": {
     "LIBC_COPT_BAREMETAL_HEAP_ENABLE_FREESTORE_ROTATION": {
-      "value": false,
+      "value": true,
       "doc": "Enable rotational dual freestore in FreeListHeap to delay reuse of freed memory. This, when combined with sanitizers, helps detect Use-After-Free (UAF) bugs more reliably by preventing rapid reallocation of recently freed blocks."
     }
   },
