@@ -24,6 +24,23 @@ body: |
 ...
 
 ---
+name: merge_hi_zero_lo_from_hi_vop3
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr128
+
+    ; CHECK-LABEL: name: merge_hi_zero_lo_from_hi_vop3
+    ; CHECK: liveins: $vgpr128
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0 = V_LSHRREV_B32_e64 16, $vgpr128, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e64 0, $vgpr128_hi16, 0, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 0, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
 # Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.l
 #   => v_lshlrev_b32 v0, 16, v2
 name: merge_lo_zero_hi_from_lo
@@ -39,6 +56,82 @@ body: |
     ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
     $vgpr0_lo16 = V_MOV_B16_t16_e32 0, implicit $exec
     $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+# Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, s2
+#   => v_lshlrev_b32 v0, 16, s2
+name: merge_lo_zero_hi_from_lo_sgpr
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr2
+
+    ; CHECK-LABEL: name: merge_lo_zero_hi_from_lo_sgpr
+    ; CHECK: liveins: $sgpr2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0 = V_LSHLREV_B32_e64 16, $sgpr2, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 0, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $sgpr2, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+# Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.h
+#   => v_and_b32 v0, 0xffff0000, v2
+name: merge_lo_zero_hi_from_hi
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr2
+
+    ; CHECK-LABEL: name: merge_lo_zero_hi_from_hi
+    ; CHECK: liveins: $vgpr2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0 = V_AND_B32_e32 4294901760, $vgpr2, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 0, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr2_hi16, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+# Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.l
+#   => v_and_b32 v0, 0x0000ffff, v2
+name: merge_hi_zero_lo_from_lo
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr2
+
+    ; CHECK-LABEL: name: merge_hi_zero_lo_from_lo
+    ; CHECK: liveins: $vgpr2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0 = V_AND_B32_e32 65535, $vgpr2, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 0, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+# Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, s2
+#   => v_and_b32 v0, 0x0000ffff, s2
+name: merge_hi_zero_lo_from_lo_sgpr
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr2
+
+    ; CHECK-LABEL: name: merge_hi_zero_lo_from_lo_sgpr
+    ; CHECK: liveins: $sgpr2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0 = V_AND_B32_e64 65535, $sgpr2, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 $sgpr2, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 0, implicit $exec
     S_ENDPGM 0, implicit $vgpr0
 ...
 
@@ -119,40 +212,21 @@ body: |
 ...
 
 ---
-# Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.h
-#   => v_and_b32 v0, 0xffff0000, v2
-name: merge_lo_zero_hi_from_hi
+# Pattern: v_mov_b16 v0.l, s2  +  v_mov_b16 v0.h, s3
+#   => v_pack_b32_f16 v0, s2, s3
+name: merge_lo_from_lo_hi_from_lo_sgpr
 tracksRegLiveness: true
 body: |
   bb.0:
-    liveins: $vgpr2
+    liveins: $sgpr2, $sgpr3
 
-    ; CHECK-LABEL: name: merge_lo_zero_hi_from_hi
-    ; CHECK: liveins: $vgpr2
+    ; CHECK-LABEL: name: merge_lo_from_lo_hi_from_lo_sgpr
+    ; CHECK: liveins: $sgpr2, $sgpr3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $vgpr0 = V_AND_B32_e32 4294901760, $vgpr2, implicit $exec
+    ; CHECK-NEXT: $vgpr0 = V_PACK_B32_F16_t16_e64 0, $sgpr2, 0, $sgpr3, 0, 0, implicit $mode, implicit $exec
     ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
-    $vgpr0_lo16 = V_MOV_B16_t16_e32 0, implicit $exec
-    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr2_hi16, implicit $exec
-    S_ENDPGM 0, implicit $vgpr0
-...
-
----
-# Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.l
-#   => v_and_b32 v0, 0x0000ffff, v2
-name: merge_hi_zero_lo_from_lo
-tracksRegLiveness: true
-body: |
-  bb.0:
-    liveins: $vgpr2
-
-    ; CHECK-LABEL: name: merge_hi_zero_lo_from_lo
-    ; CHECK: liveins: $vgpr2
-    ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $vgpr0 = V_AND_B32_e32 65535, $vgpr2, implicit $exec
-    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
-    $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
-    $vgpr0_hi16 = V_MOV_B16_t16_e32 0, implicit $exec
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 $sgpr2, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $sgpr3, implicit $exec
     S_ENDPGM 0, implicit $vgpr0
 ...
 
@@ -178,22 +252,62 @@ body: |
 ...
 
 ---
-# Negative: intervening instruction that clobbers src — must NOT merge.
-name: no_merge_src_clobbered
+name: merge_src_clobbered_First_Src
 tracksRegLiveness: true
 body: |
   bb.0:
-    liveins: $vgpr2
+    liveins: $vgpr2, $vgpr3
 
-    ; CHECK-LABEL: name: no_merge_src_clobbered
-    ; CHECK: liveins: $vgpr2
+    ; CHECK-LABEL: name: merge_src_clobbered_First_Src
+    ; CHECK: liveins: $vgpr2, $vgpr3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    ; CHECK-NEXT: $vgpr0 = V_PACK_B32_F16_t16_e64 0, $vgpr2_lo16, 0, $vgpr3_hi16, 0, 0, implicit $mode, implicit $exec
     ; CHECK-NEXT: $vgpr2 = V_MOV_B32_e32 0, implicit $exec
-    ; CHECK-NEXT: $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr2_hi16, implicit $exec
     ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
     $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
     $vgpr2 = V_MOV_B32_e32 0, implicit $exec
-    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr2_hi16, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr3_hi16, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+name: merge_src_clobbered_Second_Src
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr2, $vgpr3
+
+    ; CHECK-LABEL: name: merge_src_clobbered_Second_Src
+    ; CHECK: liveins: $vgpr2, $vgpr3
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr3 = V_MOV_B32_e32 0, implicit $exec
+    ; CHECK-NEXT: $vgpr0 = V_PACK_B32_F16_t16_e64 0, $vgpr2_lo16, 0, $vgpr3_hi16, 0, 0, implicit $mode, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    $vgpr3 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr3_hi16, implicit $exec
+    S_ENDPGM 0, implicit $vgpr0
+...
+
+---
+# Negative: intervening instruction that clobbers both src — must NOT merge.
+name: no_merge_src_clobbered_both
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr2, $vgpr3
+
+    ; CHECK-LABEL: name: no_merge_src_clobbered_both
+    ; CHECK: liveins: $vgpr2, $vgpr3
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    ; CHECK-NEXT: $vgpr2 = V_MOV_B32_e32 0, implicit $exec
+    ; CHECK-NEXT: $vgpr3 = V_MOV_B32_e32 0, implicit $exec
+    ; CHECK-NEXT: $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr3_hi16, implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit $vgpr0
+    $vgpr0_lo16 = V_MOV_B16_t16_e32 $vgpr2_lo16, implicit $exec
+    $vgpr2 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr3 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr0_hi16 = V_MOV_B16_t16_e32 $vgpr3_hi16, implicit $exec
     S_ENDPGM 0, implicit $vgpr0
 ...

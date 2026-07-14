@@ -44,9 +44,14 @@ private:
   void updateMLIBeforeRemovingEdge(MachineBasicBlock *From,
                                    MachineBasicBlock *To) const;
   bool optimizeSetGPR(MachineInstr &First, MachineInstr &MI) const;
+  void getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
+                     MCRegister &SrcReg16, bool &SrcIsVGPR,
+                     MCRegister &SrcReg32, bool &SrcIsHi, bool &SrcIsImm,
+                     int64_t &ImmVal) const;
+
   bool mergeSingleMovB16Pair(MachineInstr &Lo, MachineInstr &Hi,
                              bool IsHiFirst) const;
-  bool mergeMovB16Pair(MachineFunction &MF) const;
+  bool mergeMovB16Pairs(MachineFunction &MF) const;
   bool getBlockDestinations(MachineBasicBlock &SrcMBB,
                             MachineBasicBlock *&TrueMBB,
                             MachineBasicBlock *&FalseMBB,
@@ -767,50 +772,36 @@ MachineInstrBuilder SIPreEmitPeephole::createUnpackedMI(MachineInstr &I,
 }
 
 // Helper: extract the src operand and whether it is from the hi16 half.
-// Post-RA, both V_MOV_B16_t16_e32 and V_MOV_B16_t16_e64 use VGPR_16 physical
-// registers whose encoding already encodes hi/lo (IS_HI16 bit).
-// Returns false if the source is not a physical VGPR_16 or immediate zero.
-//
-// Operand layouts (post-RA, physical registers):
-//   V_MOV_B16_t16_e32: dst(0), src0(1)
-//   V_MOV_B16_t16_e64: dst(0), src0_mods(1), src0(2), op_sel(3)
-static bool getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
-                          MCRegister &SrcReg16, MCRegister &SrcReg32,
-                          bool &SrcIsHi, bool &SrcIsImm, int64_t &ImmVal) {
+// Post-RA, both V_MOV_B16_t16_e32 and V_MOV_B16_t16_e64 use VGPR_16 dst
+// physical registers whose encoding already encodes hi/lo (IS_HI16 bit).
+void SIPreEmitPeephole::getMovB16Info(const MachineInstr &MI,
+                                      const SIRegisterInfo *TRI,
+                                      MCRegister &SrcReg16, bool &SrcIsVGPR,
+                                      MCRegister &SrcReg32, bool &SrcIsHi,
+                                      bool &SrcIsImm, int64_t &ImmVal) const {
   SrcIsImm = false;
   SrcIsHi = false;
+  SrcIsVGPR = false;
   SrcReg16 = MCRegister();
   SrcReg32 = MCRegister();
 
-  unsigned Opc = MI.getOpcode();
-  const MachineOperand *SrcOp = nullptr;
-
-  if (Opc == AMDGPU::V_MOV_B16_t16_e64)
-    SrcOp = &MI.getOperand(2);
-  else if (Opc == AMDGPU::V_MOV_B16_t16_e32)
-    SrcOp = &MI.getOperand(1);
-  else
-    return false;
+  const MachineOperand *SrcOp = TII->getNamedOperand(MI, AMDGPU::OpName::src0);
 
   if (SrcOp->isImm()) {
     SrcIsImm = true;
     ImmVal = SrcOp->getImm();
-    return true;
+    return;
   }
 
-  if (!SrcOp->isReg() || !SrcOp->getReg().isPhysical())
-    return false;
-
-  MCRegister SrcReg = SrcOp->getReg().asMCReg();
-
-  // We require the source to be a 16-bit VGPR so we can determine hi/lo.
-  if (!AMDGPU::VGPR_16RegClass.contains(SrcReg))
-    return false;
-
-  SrcIsHi = AMDGPU::isHi16Reg(SrcReg, *TRI);
-  SrcReg16 = SrcReg;
-  SrcReg32 = TRI->get32BitRegister(SrcReg);
-  return SrcReg32.isValid();
+  SrcReg16 = SrcOp->getReg().asMCReg();
+  SrcIsVGPR = AMDGPU::VGPR_16RegClass.contains(SrcReg16);
+  if (SrcIsVGPR) {
+    SrcIsHi = AMDGPU::isHi16Reg(SrcReg16, *TRI);
+    SrcReg32 = TRI->get32BitRegister(SrcReg16);
+  } else {
+    SrcIsHi = false;
+    SrcReg32 = SrcReg16;
+  }
 }
 
 // clang-format off
@@ -820,11 +811,11 @@ static bool getMovB16Info(const MachineInstr &MI, const SIRegisterInfo *TRI,
 // Caller guarantee the pair to be two v_mov_b16 and targets the same dst32
 //
 // Patterns:
-//   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.l  => v_and_b32  v0,0xffff,v2
-//   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.h  => v_lshrrev_b32 v0,16,v2
-//   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.l  => v_lshlrev_b32 v0,16,v2
-//   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.h  => v_and_b32  v0,0xffff0000,v2
-//   v_mov_b16 v0.l, v2.x     v_mov_b16 v0.h, v3.y  => v_pack_b32_f16 v0,v2.x,v3.y
+//   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.l/s2  => v_and_b32  v0,0xffff,v2/s2
+//   v_mov_b16 v0.h, 0        v_mov_b16 v0.l, v2.h     => v_lshrrev_b32 v0,16,v2
+//   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.l/s2  => v_lshlrev_b32 v0,16,v2/s2
+//   v_mov_b16 v0.l, 0        v_mov_b16 v0.h, v2.h     => v_and_b32  v0,0xffff0000,v2
+//   v_mov_b16 v0.l, v.x/s    v_mov_b16 v0.h, v.y/s    => v_pack_b32_f16 v0, v/s, v/s
 // clang-format on
 bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
                                               MachineInstr &Hi,
@@ -835,43 +826,51 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
 
   // Extract source info for Lo and Hi.
   MCRegister LoSrc16, LoSrc32, HiSrc16, HiSrc32;
-  bool LoSrcIsHi, HiSrcIsHi, LoSrcIsImm, HiSrcIsImm;
+  bool LoSrcIsHi, HiSrcIsHi, LoSrcIsImm, HiSrcIsImm, LoSrcIsVGPR, HiSrcIsVGPR;
   int64_t LoImm = 0, HiImm = 0;
 
-  if (!getMovB16Info(Lo, TRI, LoSrc16, LoSrc32, LoSrcIsHi, LoSrcIsImm, LoImm))
-    return false;
-  if (!getMovB16Info(Hi, TRI, HiSrc16, HiSrc32, HiSrcIsHi, HiSrcIsImm, HiImm))
-    return false;
+  getMovB16Info(Lo, TRI, LoSrc16, LoSrcIsVGPR, LoSrc32, LoSrcIsHi, LoSrcIsImm,
+                LoImm);
+  getMovB16Info(Hi, TRI, HiSrc16, HiSrcIsVGPR, HiSrc32, HiSrcIsHi, HiSrcIsImm,
+                HiImm);
 
   MachineInstr &FirstMI = IsHiFirst ? Hi : Lo;
   MachineInstr &SecondMI = IsHiFirst ? Lo : Hi;
-  bool IsSecondImm = IsHiFirst ? LoSrcIsImm : HiSrcIsImm;
 
-  MachineBasicBlock &MBB = *FirstMI.getParent();
-  const DebugLoc &DL = FirstMI.getDebugLoc();
+  bool DataConflictOnFirst = false, DataConflictOnSecond = false;
+
+  MachineBasicBlock &MBB = *Lo.getParent();
 
   // Check that between Lo and Hi, there are no instructions that:
-  // - modify Dst32 (except through Lo/Hi themselves)
-  // - modify LoSrc16 or HiSrc16 dependinig on order (data dependency)
+  // - modify Dst32
+  // - modify LoSrc16 or HiSrc16 depending on order (data dependency)
   // We scan from the instruction after the first mov up to (but not including)
   // the second mov.
+  MCRegister FirstSrc16 = IsHiFirst ? HiSrc16 : LoSrc16;
   MCRegister SecondSrc16 = IsHiFirst ? LoSrc16 : HiSrc16;
-  for (auto &It :
+  for (const MachineInstr &Scan :
        drop_begin(make_range(FirstMI.getIterator(), SecondMI.getIterator()))) {
-    const MachineInstr &Scan = It;
+
     if (Scan.modifiesRegister(Dst32, TRI))
       return false;
-    if (!IsSecondImm && Scan.modifiesRegister(SecondSrc16, TRI))
+    DataConflictOnFirst |=
+        (FirstSrc16 && Scan.modifiesRegister(FirstSrc16, TRI));
+    DataConflictOnSecond |=
+        (SecondSrc16 && Scan.modifiesRegister(SecondSrc16, TRI));
+    if (DataConflictOnFirst && DataConflictOnSecond)
       return false;
   }
 
-  // Now match patterns and emit the replacement instruction.
-  // Insert before the first (Lo) instruction, then remove both.
+  MachineInstr &Selected = DataConflictOnSecond ? SecondMI : FirstMI;
+  const DebugLoc &DL = Selected.getDebugLoc();
 
-  // Pattern: v_mov_b16 v0.l, v2.x + v_mov_b16 v0.h, v3.y
-  //   => v_pack_b32_f16 v0,v2.x,v3.y
+  // Now match patterns and emit the replacement instruction.
+  // Insert on Selected MI location, then remove both mov.
+
+  // Pattern: v_mov_b16 v0.l, v2.x/s2 + v_mov_b16 v0.h, v3.y/s3
+  //   => v_pack_b32_f16 v0,v2.x/s2,v3.y/s3
   if (!HiSrcIsImm && !LoSrcIsImm) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_PACK_B32_F16_t16_e64), Dst32)
+    BuildMI(MBB, Selected, DL, TII->get(AMDGPU::V_PACK_B32_F16_t16_e64), Dst32)
         .addImm(0) // SrcMod
         .addReg(LoSrc16)
         .addImm(0) // SrcMod
@@ -883,10 +882,19 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
     return true;
   }
 
-  // Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.l
-  //   => v_and_b32 v0, 0x0000ffff, v2
+  bool Usevop2 =
+      AMDGPU::VGPR_32_Lo128RegClass.contains(Dst32) &&
+      (LoSrcIsImm ||
+       (LoSrcIsVGPR && AMDGPU::VGPR_32_Lo128RegClass.contains(LoSrc32))) &&
+      (HiSrcIsImm ||
+       (HiSrcIsVGPR && AMDGPU::VGPR_32_Lo128RegClass.contains(HiSrc32)));
+
+  // Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.l/s2
+  //   => v_and_b32 v0, 0x0000ffff, v2/s2
   if (HiSrcIsImm && HiImm == 0 && !LoSrcIsImm && !LoSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e32), Dst32)
+    BuildMI(MBB, Selected, DL,
+            TII->get(Usevop2 ? AMDGPU::V_AND_B32_e32 : AMDGPU::V_AND_B32_e64),
+            Dst32)
         .addImm(0x0000ffff)
         .addReg(LoSrc32);
     Lo.eraseFromParent();
@@ -897,7 +905,10 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // Pattern: v_mov_b16 v0.h, 0  +  v_mov_b16 v0.l, v2.h
   //   => v_lshrrev_b32 v0, 16, v2
   if (HiSrcIsImm && HiImm == 0 && !LoSrcIsImm && LoSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHRREV_B32_e32), Dst32)
+    BuildMI(MBB, Selected, DL,
+            TII->get(Usevop2 ? AMDGPU::V_LSHRREV_B32_e32
+                             : AMDGPU::V_LSHRREV_B32_e64),
+            Dst32)
         .addImm(16)
         .addReg(LoSrc32);
     Lo.eraseFromParent();
@@ -905,10 +916,13 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
     return true;
   }
 
-  // Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.l
-  //   => v_lshlrev_b32 v0, 16, v2
+  // Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.l/s2
+  //   => v_lshlrev_b32 v0, 16, v2/s2
   if (LoSrcIsImm && LoImm == 0 && !HiSrcIsImm && !HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_LSHLREV_B32_e32), Dst32)
+    BuildMI(MBB, Selected, DL,
+            TII->get(Usevop2 ? AMDGPU::V_LSHLREV_B32_e32
+                             : AMDGPU::V_LSHLREV_B32_e64),
+            Dst32)
         .addImm(16)
         .addReg(HiSrc32);
     Lo.eraseFromParent();
@@ -919,7 +933,9 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // Pattern: v_mov_b16 v0.l, 0  +  v_mov_b16 v0.h, v2.h
   //   => v_and_b32 v0, 0xffff0000, v2
   if (LoSrcIsImm && LoImm == 0 && !HiSrcIsImm && HiSrcIsHi) {
-    BuildMI(MBB, Lo, DL, TII->get(AMDGPU::V_AND_B32_e32), Dst32)
+    BuildMI(MBB, Selected, DL,
+            TII->get(Usevop2 ? AMDGPU::V_AND_B32_e32 : AMDGPU::V_AND_B32_e64),
+            Dst32)
         .addImm(0xffff0000)
         .addReg(HiSrc32);
     Lo.eraseFromParent();
@@ -932,12 +948,12 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
 
 // Merge pairs of v_mov_b16 targeting the lo16 and hi16 halves of the same
 // VGPR into a single 32-bit instruction (true16 mode only).
-bool SIPreEmitPeephole::mergeMovB16Pair(MachineFunction &MF) const {
+bool SIPreEmitPeephole::mergeMovB16Pairs(MachineFunction &MF) const {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF) {
     // Map from 32-bit VGPR to the pending v_mov_b16 and its age.
     // Age tracks how many non-mov-b16 instructions have passed since the
-    // lo16 write, used to bound the search window.
+    // 16-bit write, used to bound the search window.
     struct Pending {
       MachineInstr *MI;
       unsigned Age; // instructions since was seen
@@ -948,14 +964,17 @@ bool SIPreEmitPeephole::mergeMovB16Pair(MachineFunction &MF) const {
     SmallDenseMap<MCRegister, Pending> PendingWrites;
 
     for (auto &MI : make_early_inc_range(MBB)) {
+      if (MI.isDebugInstr())
+        continue;
+
       unsigned Opc = MI.getOpcode();
       bool IsMovB16 = (Opc == AMDGPU::V_MOV_B16_t16_e32 ||
                        Opc == AMDGPU::V_MOV_B16_t16_e64);
 
       if (!IsMovB16) {
-        // Age all pending lo writes and invalidate stale or clobbered ones.
-        for (auto &[key, value] : PendingWrites)
-          value.Age++;
+        // Age all pending writes and invalidate stale or clobbered ones.
+        for (auto &[key, Value] : PendingWrites)
+          Value.Age++;
 
         PendingWrites.remove_if([&](const auto &KV) {
           return (KV.second.Age >= ScanLimit ||
@@ -968,20 +987,24 @@ bool SIPreEmitPeephole::mergeMovB16Pair(MachineFunction &MF) const {
 
       bool DstIsHi = AMDGPU::isHi16Reg(DstReg, *TRI);
       MCRegister Dst32 = TRI->get32BitRegister(DstReg);
-      if (!Dst32.isValid())
-        continue;
 
-      auto It = PendingWrites.find(Dst32);
-      if (It != PendingWrites.end() && It->second.IsHi != DstIsHi) {
+      auto [It, Inserted] = PendingWrites.insert({Dst32, {&MI, 0, DstIsHi}});
+      if (!Inserted) {
+        if (It->second.IsHi == DstIsHi) {
+          It->second = {&MI, 0, DstIsHi};
+          continue;
+        }
+
         // Look for a matching pending write.
         MachineInstr &LoMI = !DstIsHi ? MI : *It->second.MI;
         MachineInstr &HiMI = DstIsHi ? MI : *It->second.MI;
         bool IsHiFirst = It->second.IsHi;
-        if (mergeSingleMovB16Pair(LoMI, HiMI, IsHiFirst))
+        if (mergeSingleMovB16Pair(LoMI, HiMI, IsHiFirst)) {
           Changed = true;
-        PendingWrites.erase(It);
-      } else {
-        PendingWrites[Dst32] = {&MI, 0, DstIsHi};
+          PendingWrites.erase(It);
+        } else {
+          It->second = {&MI, 0, DstIsHi};
+        }
       }
     }
   }
@@ -1064,7 +1087,7 @@ bool SIPreEmitPeephole::run(MachineFunction &MF, MachineLoopInfo *LoopInfo) {
 
   // Try merge B16 Pair in true16 mode
   if (ST.useRealTrue16Insts())
-    Changed |= mergeMovB16Pair(MF);
+    Changed |= mergeMovB16Pairs(MF);
 
   // TODO: Fold this into previous block, if possible. Evaluate and handle any
   // side effects.
