@@ -22,6 +22,8 @@ llvm::StringRef Token::GetTokenName(Kind kind) {
   switch (kind) {
   case Kind::amp:
     return "amp";
+  case Kind::ampamp:
+    return "ampamp";
   case Kind::arrow:
     return "arrow";
   case Kind::colon:
@@ -30,6 +32,8 @@ llvm::StringRef Token::GetTokenName(Kind kind) {
     return "coloncolon";
   case Kind::equal:
     return "equal";
+  case Kind::exclaim:
+    return "exclaim";
   case Kind::eof:
     return "eof";
   case Kind::float_constant:
@@ -58,6 +62,8 @@ llvm::StringRef Token::GetTokenName(Kind kind) {
     return "percent";
   case Kind::period:
     return "period";
+  case Kind::pipepipe:
+    return "pipepipe";
   case Kind::plus:
     return "plus";
   case Kind::plusequal:
@@ -198,25 +204,17 @@ llvm::Expected<Token> DILLexer::Lex(llvm::StringRef expr,
   // be ordered longest-to-shortest in the list below. E.g. '::' must come
   // before ':', and '+=' must come before '+'.
   constexpr std::pair<Token::Kind, const char *> operators[] = {
-      {Token::arrow, "->"},
-      {Token::coloncolon, "::"},
-      {Token::greatergreater, ">>"},
-      {Token::lessless, "<<"},
-      {Token::minusequal, "-="},
-      {Token::plusequal, "+="},
-      {Token::amp, "&"},
-      {Token::colon, ":"},
-      {Token::equal, "="},
-      {Token::l_paren, "("},
-      {Token::l_square, "["},
-      {Token::minus, "-"},
-      {Token::percent, "%"},
-      {Token::period, "."},
-      {Token::plus, "+"},
-      {Token::r_paren, ")"},
-      {Token::r_square, "]"},
-      {Token::slash, "/"},
-      {Token::star, "*"},
+      {Token::arrow, "->"},      {Token::ampamp, "&&"},
+      {Token::coloncolon, "::"}, {Token::greatergreater, ">>"},
+      {Token::lessless, "<<"},   {Token::minusequal, "-="},
+      {Token::pipepipe, "||"},   {Token::plusequal, "+="},
+      {Token::amp, "&"},         {Token::colon, ":"},
+      {Token::equal, "="},       {Token::exclaim, "!"},
+      {Token::l_paren, "("},     {Token::l_square, "["},
+      {Token::minus, "-"},       {Token::percent, "%"},
+      {Token::period, "."},      {Token::plus, "+"},
+      {Token::r_paren, ")"},     {Token::r_square, "]"},
+      {Token::slash, "/"},       {Token::star, "*"},
   };
   for (auto [kind, str] : operators) {
     if (remainder.consume_front(str))
