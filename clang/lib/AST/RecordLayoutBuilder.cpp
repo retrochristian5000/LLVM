@@ -2811,17 +2811,6 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
         std::max(RequiredAlignment,
                  std::max(DirectFieldAlignment, FieldTypeRequiredAlignment));
   }
-  // Check if this is a vector type (or contains vectors) requiring alignment
-  // preservation on Windows. This includes direct vectors, arrays of vectors,
-  // and structs containing vectors. However, honor __attribute__((packed))
-  // on the struct even for vectors (explicit intent to pack).
-  bool IsVectorRequiringAlignment = false;
-  if (const RecordDecl *RD = FD->getParent()) {
-    if (!RD->hasAttr<PackedAttr>()) {
-      IsVectorRequiringAlignment =
-          RequiresVectorAlignment(Context, FD->getType());
-    }
-  }
 
   // Respect pragma pack, attribute pack and declspec align.
   // However, do not reduce alignment for ABI-required alignments (e.g.,
