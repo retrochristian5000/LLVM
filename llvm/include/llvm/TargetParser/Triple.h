@@ -347,7 +347,8 @@ public:
     Firmware,
     QURT,
     H2,
-    LastOSType = H2
+    Trusty, // TEE OS for Android
+    LastOSType = Trusty
   };
   enum EnvironmentType {
     UnknownEnvironment,
@@ -858,6 +859,9 @@ public:
 
   /// Tests whether the OS is H2.
   bool isOSH2() const { return getOS() == Triple::H2; }
+
+  /// Tests whether the OS is Trusty.
+  bool isOSTrusty() const { return getOS() == Triple::Trusty; }
 
   /// Tests whether the OS uses the ELF binary format.
   bool isOSBinFormatELF() const { return getObjectFormat() == Triple::ELF; }
