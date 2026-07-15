@@ -2534,7 +2534,7 @@ void ASTStmtWriter::VisitOMPMetaDirective(OMPMetaDirective *D) {
   Record.push_back(D->getNumVariants());
   VisitOMPExecutableDirective(D);
   // Write directive kinds and conditions.
-   const OMPMetaDirective *ConstD = D;
+  const OMPMetaDirective *ConstD = D;
   for (auto DK : ConstD->getDirectiveKinds())
     Record.push_back(static_cast<unsigned>(DK));
 

@@ -225,10 +225,11 @@ public:
       ArrayRef<OpenMPDirectiveKind> DirectiveKinds, Stmt *AStmt,
       ArrayRef<Stmt *> VariantDirectives = {});
 
-  private:
+private:
   StmtResult createParallelDirectiveForMetadirective(Stmt *Body,
                                                      SourceLocation StartLoc,
                                                      SourceLocation EndLoc);
+
 public:
   // OpenMP directives and clauses.
   /// Called on correct id-expression from the '#pragma omp

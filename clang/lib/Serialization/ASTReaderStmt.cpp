@@ -2516,9 +2516,9 @@ void ASTStmtReader::VisitOMPLoopDirective(OMPLoopDirective *D) {
 
 void ASTStmtReader::VisitOMPMetaDirective(OMPMetaDirective *D) {
   VisitStmt(D);
-  // The NumClauses field was read in ReadStmtFromStream.
-  Record.skipInts(1);
-  unsigned NumVariants = Record.readInt();
+  // The NumClauses and NumVariants fields were read in ReadStmtFromStream.
+  Record.skipInts(2);
+  unsigned NumVariants = D->getNumVariants();
   VisitOMPExecutableDirective(D);
 
   // Read directive kinds and conditions.

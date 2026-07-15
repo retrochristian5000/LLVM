@@ -2686,8 +2686,9 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
         }
       }
 
-      // Skip Directive for now. We will parse directive in the second iteration
-     skipToMatchingParen();
+      // Skip Directive for now. We will parse directive in the second
+      // iteration.
+      skipToMatchingParen();
       if (Tok.is(tok::annot_pragma_openmp_end)) {
         Diag(Tok, diag::err_omp_expected_punc)
             << getOpenMPClauseName(CKind) << 0;
@@ -2722,20 +2723,21 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
     // A single match is returned for OpenMP 5.0
     int BestIdx = getBestVariantMatchForContext(VMIs, OMPCtx);
 
-    // Check if we have any user conditions that need runtime or deferred
-    // evaluation:
-    // - Value-dependent conditions (template parameters): defer until
-    // instantiation.
-    // - Non-constant conditions (runtime variables): create runtime selection.
+    // Check if we have user conditions that are not simple IntegerLiterals.
+    // For simple IntegerLiterals (like condition(0) or condition(1)), we can
+    // evaluate them here. For anything else (variables, templates, complex
+    // expressions), we need to send to Sema for proper handling.
     bool HasNonConstantUserCondition = false;
     for (OMPTraitInfo *TI : TraitInfos) {
       if (TI && TI->hasUserCondition()) {
-        // Found a user condition - check if it's non-constant
+        // Check if all user conditions are simple IntegerLiterals.
         TI->anyScoreOrCondition([&](Expr *&E, bool IsScore) {
-          if (!IsScore && E &&
-              (E->isValueDependent() || !E->isEvaluatable(ASTContext))) {
-            HasNonConstantUserCondition = true;
-            return true;
+          if (!IsScore && E) {
+            // If it's not a simple IntegerLiteral, we need Sema
+            if (!isa<IntegerLiteral>(E->IgnoreParenImpCasts())) {
+              HasNonConstantUserCondition = true;
+              return true;
+            }
           }
           return false;
         });
@@ -2743,10 +2745,53 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
           break;
       }
     }
-
-    // If we have non-constant conditions, collect all variants and send to Sema
-    // Sema handles both runtime selection and re-evaluation after template
-    // instantiation.
+    // For simple IntegerLiteral user conditions, re-evaluate BestIdx
+    // considering them. If the current BestIdx has a false user condition, find
+    // the next match.
+    if (!HasNonConstantUserCondition) {
+      // Helper to evaluate IntegerLiteral user conditions.
+      // All conditions were verified to be IntegerLiterals above.
+      auto evaluateUserCondition = [](OMPTraitInfo *TI) -> bool {
+        bool Result = true;
+        TI->anyScoreOrCondition([&](Expr *&E, bool IsScore) {
+          if (!IsScore && E) {
+            if (auto *IL = dyn_cast<IntegerLiteral>(E->IgnoreParenImpCasts())) {
+              Result = IL->getValue().getBoolValue();
+              return true;
+            }
+            llvm_unreachable("All user conditions verified as IntegerLiterals");
+          }
+          return false;
+        });
+        return Result;
+      };
+      if (BestIdx >= 0 && BestIdx < static_cast<int>(TraitInfos.size())) {
+        OMPTraitInfo *SelectedTI = TraitInfos[BestIdx];
+        if (SelectedTI && SelectedTI->hasUserCondition()) {
+          if (!evaluateUserCondition(SelectedTI)) {
+            // Current BestIdx has false condition, try to find next match.
+            BestIdx = -1;
+            for (int I = 0; I < static_cast<int>(VMIs.size()); ++I) {
+              if (I < static_cast<int>(TraitInfos.size())) {
+                OMPTraitInfo *TI = TraitInfos[I];
+                if (TI && TI->hasUserCondition()) {
+                  if (evaluateUserCondition(TI)) {
+                    BestIdx = I;
+                    break;
+                  }
+                } else {
+                  // No user condition or always-true context selector.
+                  BestIdx = I;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    // If we have non-constant user conditions, collect all variants and send to
+    // Sema.
     if (HasNonConstantUserCondition) {
       // Collect all variants with their conditions.
       SmallVector<OpenMPDirectiveKind, 4> DirectiveKinds;

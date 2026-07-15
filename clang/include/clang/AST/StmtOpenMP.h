@@ -6377,33 +6377,81 @@ class OMPMetaDirective final : public OMPExecutableDirective {
   friend class ASTStmtWriter;
   friend class OMPExecutableDirective;
   unsigned NumVariants;
-  OpenMPDirectiveKind *DirectiveKinds;
-  Expr **Conditions;
-  Stmt **VariantDirectives;
 
   OMPMetaDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumVariants)
       : OMPExecutableDirective(OMPMetaDirectiveClass,
                                llvm::omp::OMPD_metadirective, StartLoc, EndLoc),
-        NumVariants(NumVariants), DirectiveKinds(nullptr), Conditions(nullptr),
-        VariantDirectives(nullptr) {}
+        NumVariants(NumVariants) {}
   explicit OMPMetaDirective(unsigned NumVariants)
       : OMPExecutableDirective(OMPMetaDirectiveClass,
                                llvm::omp::OMPD_metadirective, SourceLocation(),
                                SourceLocation()),
-        NumVariants(NumVariants), DirectiveKinds(nullptr), Conditions(nullptr),
-        VariantDirectives(nullptr) {}
+        NumVariants(NumVariants) {}
 
   void setIfStmt(Stmt *S) { Data->getChildren()[0] = S; }
-  void setDirectiveKinds(OpenMPDirectiveKind *DK) { DirectiveKinds = DK; }
-  void setConditions(Expr **C) { Conditions = C; }
-  void setVariantDirectives(Stmt **VD) { VariantDirectives = VD; }
-  static void allocateVariantStorage(const ASTContext &C, OMPMetaDirective *Dir,
-                                     unsigned NumVariants);
 
-  OpenMPDirectiveKind *getDirectiveKinds() { return DirectiveKinds; }
-  Expr **getConditions() { return Conditions; }
-  Stmt **getVariantDirectives() { return VariantDirectives; }
+  // Helper to calculate the aligned offset to Conditions array.
+  size_t offsetToConditions() const {
+    return llvm::alignTo(NumVariants * sizeof(OpenMPDirectiveKind),
+                         alignof(Expr *));
+  }
+
+  // Helper to calculate total size needed for trailing arrays.
+  static size_t sizeOfTrailingArrays(unsigned NumVariants) {
+    size_t DirectiveKindsSize = NumVariants * sizeof(OpenMPDirectiveKind);
+    size_t ConditionsSize = NumVariants * sizeof(Expr *);
+    size_t VariantDirectivesSize = NumVariants * sizeof(Stmt *);
+    return llvm::alignTo(DirectiveKindsSize, alignof(Expr *)) + ConditionsSize +
+           VariantDirectivesSize;
+  }
+
+  // Helper to allocate memory for OMPMetaDirective with trailing arrays and
+  // OMPChildren. Returns a pair of (main memory, children memory).
+  static std::pair<void *, void *> allocateMemory(const ASTContext &C,
+                                                  unsigned NumVariants,
+                                                  unsigned NumClauses,
+                                                  unsigned NumChildren);
+
+  // Helper to get the trailing storage for arrays.
+  // Layout:
+  // [OMPMetaDirective][DirectiveKinds...][padding][Conditions...][VariantDirectives...]
+  // Each array is properly aligned for its element type.
+  OpenMPDirectiveKind *getTrailingDirectiveKinds() {
+    return reinterpret_cast<OpenMPDirectiveKind *>(this + 1);
+  }
+
+  const OpenMPDirectiveKind *getTrailingDirectiveKinds() const {
+    return reinterpret_cast<const OpenMPDirectiveKind *>(this + 1);
+  }
+
+  Expr **getTrailingConditions() {
+    return reinterpret_cast<Expr **>(
+        reinterpret_cast<char *>(getTrailingDirectiveKinds()) +
+        offsetToConditions());
+  }
+
+  const Expr *const *getTrailingConditions() const {
+    return reinterpret_cast<const Expr *const *>(
+        reinterpret_cast<const char *>(getTrailingDirectiveKinds()) +
+        offsetToConditions());
+  }
+
+  Stmt **getTrailingVariantDirectives() {
+    return reinterpret_cast<Stmt **>(getTrailingConditions() + NumVariants);
+  }
+
+  const Stmt *const *getTrailingVariantDirectives() const {
+    return reinterpret_cast<const Stmt *const *>(getTrailingConditions() +
+                                                 NumVariants);
+  }
+
+  OpenMPDirectiveKind *getDirectiveKinds() {
+    return getTrailingDirectiveKinds();
+  }
+  Expr **getConditions() { return getTrailingConditions(); }
+
+  Stmt **getVariantDirectives() { return getTrailingVariantDirectives(); }
 
 public:
   static OMPMetaDirective *
@@ -6418,15 +6466,18 @@ public:
   unsigned getNumVariants() const { return NumVariants; }
 
   ArrayRef<OpenMPDirectiveKind> getDirectiveKinds() const {
-    return ArrayRef<OpenMPDirectiveKind>(DirectiveKinds, NumVariants);
+    return ArrayRef<OpenMPDirectiveKind>(getTrailingDirectiveKinds(),
+                                         NumVariants);
   }
 
   ArrayRef<Expr *> getConditions() const {
-    return ArrayRef<Expr *>(Conditions, NumVariants);
+    return ArrayRef<Expr *>(const_cast<Expr **>(getTrailingConditions()),
+                            NumVariants);
   }
 
   ArrayRef<Stmt *> getVariantDirectives() const {
-    return ArrayRef<Stmt *>(VariantDirectives, NumVariants);
+    return ArrayRef<Stmt *>(const_cast<Stmt **>(getTrailingVariantDirectives()),
+                            NumVariants);
   }
 
   child_range children() {

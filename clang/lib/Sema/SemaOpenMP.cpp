@@ -3796,6 +3796,7 @@ StmtResult SemaOpenMP::ActOnOpenMPMetaDirective(
     ArrayRef<Expr *> Conditions, ArrayRef<OpenMPDirectiveKind> DirectiveKinds,
     Stmt *AStmt, ArrayRef<Stmt *> VariantDirectives) {
 
+  assert(!TraitInfos.empty() && "TraitInfos should not be empty");
   assert(TraitInfos.size() == ClauseKinds.size() &&
          ClauseKinds.size() == Conditions.size() &&
          Conditions.size() == DirectiveKinds.size() &&
@@ -3803,9 +3804,6 @@ StmtResult SemaOpenMP::ActOnOpenMPMetaDirective(
   assert((VariantDirectives.empty() ||
           VariantDirectives.size() == DirectiveKinds.size()) &&
          "VariantDirectives, if provided, must match DirectiveKinds size");
-
-  if (TraitInfos.empty())
-    return StmtError();
 
   ASTContext &Context = getASTContext();
 
@@ -3843,23 +3841,20 @@ StmtResult SemaOpenMP::ActOnOpenMPMetaDirective(
         if (SelectedKind == OMPD_unknown || SelectedKind == OMPD_nothing)
           return AStmt;
 
-        // Create the selected directive.
-        if (SelectedKind == OMPD_parallel) {
-          DeclarationNameInfo DirName;
-          DSAStack->push(OMPD_parallel, DirName, SemaRef.getCurScope(),
-                         StartLoc);
-          StmtResult ParallelStmt =
-              createParallelDirectiveForMetadirective(AStmt, StartLoc, EndLoc);
+        // Create the selected directive - need to create CapturedStmt first.
+        DeclarationNameInfo DirName;
+        DSAStack->push(SelectedKind, DirName, SemaRef.getCurScope(), StartLoc);
+        ActOnOpenMPRegionStart(SelectedKind, SemaRef.getCurScope());
+        StmtResult CapturedBody = ActOnOpenMPRegionEnd(AStmt, /*Clauses=*/{});
+        if (!CapturedBody.isUsable()) {
           DSAStack->pop();
-
-          if (ParallelStmt.isUsable())
-            return ParallelStmt;
           return StmtError();
-        } else {
-          // TODO: Handle other directive kinds
-          // For now, just return the statement
-          return AStmt;
         }
+        StmtResult DirectiveStmt = ActOnOpenMPExecutableDirective(
+            SelectedKind, DirName, /*CancelRegion=*/OMPD_unknown,
+            /*Clauses=*/{}, CapturedBody.get(), StartLoc, EndLoc);
+        DSAStack->pop();
+        return DirectiveStmt;
       }
     }
     return AStmt;
