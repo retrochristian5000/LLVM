@@ -1147,7 +1147,7 @@ VPlanTransforms::expandSCEVs(VPlan &Plan, ScalarEvolution &SE) {
   auto EI = Entry->begin();
   for (Instruction &I : drop_end(*EntryBB)) {
     if (EI != Entry->end() && isa<VPIRInstruction>(*EI) &&
-        &cast<VPIRInstruction>(&*EI)->getInstruction() == &I) {
+        cast<VPIRInstruction>(&*EI)->getUnderlyingInstr() == &I) {
       EI++;
       continue;
     }

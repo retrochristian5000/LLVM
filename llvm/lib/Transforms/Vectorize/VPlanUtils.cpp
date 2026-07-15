@@ -15,6 +15,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Analysis/InstSimplifyFolder.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ScalarEvolutionPatternMatch.h"
@@ -985,6 +986,58 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
       Result = Builder.createScalarIntrinsic(IntrinsicID, {Result, Op},
                                              ResultTy, DL);
     return Result;
+  }
+  case scAddRecExpr: {
+    // AddRecs never appear in the vector loop; the AR's loop would correspond
+    // to an outer loop outside the vector loop, and its header would be modeled
+    // as a VPIRBasicBlock.
+    auto *AR = cast<SCEVAddRecExpr>(S);
+    VPlan &Plan = Builder.getPlan();
+
+    // We cannot create a phi in the Plan's entry, which would be required in
+    // the absence of a canonical IV to re-use or if AddRec is non-affine,
+    // because its predecessors are not modeled: fall back to the IR expander.
+    PHINode *ARCanIV = AR->getLoop()->getCanonicalInductionVariable();
+    if (!AR->isAffine() || !ARCanIV)
+      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
+
+    // If a canonical IV to re-use is present, it would be in the Plan's entry.
+    VPBasicBlock *Header = Plan.getEntry();
+    auto FoundCanIV = find_if(*Header, [ARCanIV](VPRecipeBase &R) {
+      auto *IRPhi = dyn_cast<VPIRPhi>(&R);
+      return IRPhi && &IRPhi->getIRPhi() == ARCanIV;
+    });
+
+    // The AR's loop refers to a loop that doesn't exist in the Plan: fall back
+    // to the IR expander.
+    if (FoundCanIV == Header->end())
+      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
+
+    VPValue *CanonicalIV = FoundCanIV->getVPSingleValue();
+    VPValue *Start;
+    Start = tryToExpand(AR->getStart());
+    if (!Start)
+      return nullptr;
+    VPValue *Step = tryToExpand(AR->getStepRecurrence(SE));
+    if (!Step)
+      return nullptr;
+
+    GEPNoWrapFlags GEPFlags;
+    VPIRFlags::WrapFlagsTy NWFlags;
+    if (AR->hasNoUnsignedWrap()) {
+      GEPFlags = GEPNoWrapFlags::noUnsignedSignedWrap();
+      NWFlags = {true, false};
+    }
+
+    // {X,+,F} --> X + {0,+,F}
+    // {0,+,F} --> {0,+,1} * F
+    CanonicalIV = Builder.createScalarZExtOrTrunc(
+        CanonicalIV, AR->getStepRecurrence(SE)->getType(), DL);
+    VPValue *Offset = Builder.createOverflowingOp(Instruction::Mul,
+                                                  {CanonicalIV, Step}, NWFlags);
+    return AR->getType()->isPointerTy()
+               ? Builder.createNoWrapPtrAdd(Start, Offset, GEPFlags, DL)
+               : Builder.createAdd(Start, Offset, DL, "", NWFlags);
   }
   default:
     return nullptr;
