@@ -2100,7 +2100,7 @@ bool VectorCombine::foldInsertElementsToStores(Instruction &I) {
 
   for (auto [InsertVal, Idx] : InsertElements) {
     auto ScalarizableIdx =
-        canScalarizeAccess(VecTy, Idx, SQ.getWithInstruction(Load));
+        canScalarizeAccess(VecTy, Idx, SQ.getWithInstruction(&I));
     assert(!ScalarizableIdx.isUnsafe() && "already checked above");
 
     if (ScalarizableIdx.isSafeWithFreeze())
