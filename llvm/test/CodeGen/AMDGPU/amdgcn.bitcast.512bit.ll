@@ -90526,19 +90526,19 @@ define inreg <64 x i8> @bitcast_v32bf16_to_v64i8_scalar(<32 x bfloat> inreg %a, 
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v55, 16, v7
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v8, v8, v11, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_cmp_u_f32_e32 vcc_lo, v14, v14
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_4) | instid1(VALU_DEP_1)
 ; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v68, v55.l, v50.l
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v6.h, v25.l
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v11, v15, v51, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_cmp_u_f32_e32 vcc_lo, v13, v13
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v51, 16, v8
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v67, v51.l, v53.l
 ; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v5, v26.l, v27.l
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v4.l, v20.l
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v10, v10, v52, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v52, 16, v11
-; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v67, v51.l, v53.l
 ; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v3, v22.l, v24.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v54, 16, v10
 ; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v66, v52.l, v54.l
 ; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v1, v18.l, v19.l

@@ -837,7 +837,10 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   MachineInstr &FirstMI = IsHiFirst ? Hi : Lo;
   MachineInstr &SecondMI = IsHiFirst ? Lo : Hi;
 
-  bool DataConflictOnFirst = false, DataConflictOnSecond = false;
+  // Data Conflict counter
+  auto UpperBound = SecondMI.getIterator();
+  auto LowerBound = FirstMI.getIterator();
+  unsigned LoopCnt = 0, UpperBoundCnt = UINT_MAX, LowerBoundCnt = 0;
 
   MachineBasicBlock &MBB = *Lo.getParent();
 
@@ -848,20 +851,30 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   // the second mov.
   MCRegister FirstSrc16 = IsHiFirst ? HiSrc16 : LoSrc16;
   MCRegister SecondSrc16 = IsHiFirst ? LoSrc16 : HiSrc16;
-  for (const MachineInstr &Scan :
+  for (MachineInstr &Scan :
        drop_begin(make_range(FirstMI.getIterator(), SecondMI.getIterator()))) {
-
     if (Scan.modifiesRegister(Dst32, TRI))
       return false;
-    DataConflictOnFirst |=
-        (FirstSrc16 && Scan.modifiesRegister(FirstSrc16, TRI));
-    DataConflictOnSecond |=
-        (SecondSrc16 && Scan.modifiesRegister(SecondSrc16, TRI));
-    if (DataConflictOnFirst && DataConflictOnSecond)
-      return false;
+    LoopCnt++;
+    if (FirstSrc16 && LoopCnt < UpperBoundCnt &&
+        Scan.modifiesRegister(FirstSrc16, TRI)) {
+      UpperBound = Scan.getIterator();
+      UpperBoundCnt = LoopCnt;
+    }
+    if (SecondSrc16 && LoopCnt > LowerBoundCnt &&
+        Scan.modifiesRegister(SecondSrc16, TRI)) {
+      LowerBound = Scan.getIterator();
+      LowerBoundCnt = LoopCnt;
+    }
   }
 
-  MachineInstr &Selected = DataConflictOnSecond ? SecondMI : FirstMI;
+  // No spot maintains data dependency
+  if (LowerBoundCnt >= UpperBoundCnt)
+    return false;
+
+  // Insert MI before selected. Any spots between (LowerBound, UpperBound] would
+  // work
+  MachineInstr &Selected = *(++LowerBound);
   const DebugLoc &DL = Selected.getDebugLoc();
 
   // Now match patterns and emit the replacement instruction.
@@ -955,13 +968,15 @@ bool SIPreEmitPeephole::mergeMovB16Pairs(MachineFunction &MF) const {
     // Age tracks how many non-mov-b16 instructions have passed since the
     // 16-bit write, used to bound the search window.
     struct Pending {
+      MCRegister Dst32;
       MachineInstr *MI;
-      unsigned Age; // instructions since was seen
       unsigned IsHi;
     };
     // Search window size
     const unsigned ScanLimit = 16;
-    SmallDenseMap<MCRegister, Pending> PendingWrites;
+    std::array<Pending, ScanLimit> CirBuf = {{{MCRegister(), nullptr, false}}};
+    SmallDenseMap<MCRegister, unsigned> PendingWrites;
+    unsigned Head = 0;
 
     for (auto &MI : make_early_inc_range(MBB)) {
       if (MI.isDebugInstr())
@@ -971,39 +986,40 @@ bool SIPreEmitPeephole::mergeMovB16Pairs(MachineFunction &MF) const {
       bool IsMovB16 = (Opc == AMDGPU::V_MOV_B16_t16_e32 ||
                        Opc == AMDGPU::V_MOV_B16_t16_e64);
 
-      if (!IsMovB16) {
-        // Age all pending writes and invalidate stale or clobbered ones.
-        for (auto &[key, Value] : PendingWrites)
-          Value.Age++;
+      if (++Head == ScanLimit)
+        Head = 0;
 
-        PendingWrites.remove_if([&](const auto &KV) {
-          return (KV.second.Age >= ScanLimit ||
-                  MI.modifiesRegister(KV.first, TRI));
-        });
+      // Expire the last one
+      PendingWrites.erase(CirBuf[Head].Dst32);
+
+      if (!IsMovB16) {
+        CirBuf[Head] = {MCRegister(), nullptr, false};
         continue;
       }
 
       MCRegister DstReg = MI.getOperand(0).getReg().asMCReg();
-
       bool DstIsHi = AMDGPU::isHi16Reg(DstReg, *TRI);
       MCRegister Dst32 = TRI->get32BitRegister(DstReg);
 
-      auto [It, Inserted] = PendingWrites.insert({Dst32, {&MI, 0, DstIsHi}});
+      // Insert new one
+      CirBuf[Head] = {Dst32, &MI, DstIsHi};
+
+      auto [It, Inserted] = PendingWrites.insert({Dst32, Head});
       if (!Inserted) {
-        if (It->second.IsHi == DstIsHi) {
-          It->second = {&MI, 0, DstIsHi};
+        if (CirBuf[It->second].IsHi == DstIsHi) {
+          It->second = Head;
           continue;
         }
 
         // Look for a matching pending write.
-        MachineInstr &LoMI = !DstIsHi ? MI : *It->second.MI;
-        MachineInstr &HiMI = DstIsHi ? MI : *It->second.MI;
-        bool IsHiFirst = It->second.IsHi;
+        MachineInstr &LoMI = !DstIsHi ? MI : *CirBuf[It->second].MI;
+        MachineInstr &HiMI = DstIsHi ? MI : *CirBuf[It->second].MI;
+        bool IsHiFirst = CirBuf[It->second].IsHi;
         if (mergeSingleMovB16Pair(LoMI, HiMI, IsHiFirst)) {
           Changed = true;
           PendingWrites.erase(It);
         } else {
-          It->second = {&MI, 0, DstIsHi};
+          It->second = Head;
         }
       }
     }

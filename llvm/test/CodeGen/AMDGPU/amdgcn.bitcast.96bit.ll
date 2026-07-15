@@ -8788,12 +8788,11 @@ define inreg <12 x i8> @bitcast_v6bf16_to_v12i8_scalar(<6 x bfloat> inreg %a, i3
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v8, 16, v3
 ; GFX11-TRUE16-NEXT:    v_cndmask_b32_e32 v1, v1, v10, vcc_lo
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v10, 16, v1
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_2) | instid1(VALU_DEP_4)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_4)
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v11, v8.l, v10.l
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[14:15]
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v14
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v4, v13
-; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v11, v8.l, v10.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v9, 8, v11
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b64 v[11:12], 24, v[11:12]
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]

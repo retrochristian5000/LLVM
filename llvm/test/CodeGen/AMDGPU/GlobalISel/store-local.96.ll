@@ -236,11 +236,12 @@ define amdgpu_kernel void @store_lds_v3i32_align1(ptr addrspace(3) %out, <3 x i3
 ; GFX11-NEXT:    v_pack_b32_f16 v1, s2, s4
 ; GFX11-NEXT:    s_lshr_b32 s7, s2, 16
 ; GFX11-NEXT:    s_lshr_b32 s2, s2, 24
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX11-NEXT:    v_pack_b32_f16 v4, s5, s2
 ; GFX11-NEXT:    v_pack_b32_f16 v2, s0, s3
 ; GFX11-NEXT:    s_lshr_b32 s0, s6, 8
 ; GFX11-NEXT:    v_pack_b32_f16 v3, s1, s7
 ; GFX11-NEXT:    s_lshr_b32 s1, s8, 8
-; GFX11-NEXT:    v_pack_b32_f16 v4, s5, s2
 ; GFX11-NEXT:    v_pack_b32_f16 v5, s0, s1
 ; GFX11-NEXT:    ds_store_b8 v6, v0
 ; GFX11-NEXT:    ds_store_b8 v6, v4 offset:1
