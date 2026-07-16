@@ -838,8 +838,8 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
   MachineInstr &SecondMI = IsHiFirst ? Lo : Hi;
 
   // Data Conflict counter
-  auto UpperBound = SecondMI.getIterator();
-  auto LowerBound = FirstMI.getIterator();
+  MachineBasicBlock::iterator UpperBound = SecondMI.getIterator();
+  MachineBasicBlock::iterator LowerBound = FirstMI.getIterator();
   unsigned LoopCnt = 0, UpperBoundCnt = UINT_MAX, LowerBoundCnt = 0;
 
   MachineBasicBlock &MBB = *Lo.getParent();
@@ -874,7 +874,7 @@ bool SIPreEmitPeephole::mergeSingleMovB16Pair(MachineInstr &Lo,
 
   // Insert MI before selected. Any spots between (LowerBound, UpperBound] would
   // work
-  MachineInstr &Selected = *(++LowerBound);
+  MachineInstr &Selected = *UpperBound;
   const DebugLoc &DL = Selected.getDebugLoc();
 
   // Now match patterns and emit the replacement instruction.
@@ -978,7 +978,7 @@ bool SIPreEmitPeephole::mergeMovB16Pairs(MachineFunction &MF) const {
     SmallDenseMap<MCRegister, unsigned> PendingWrites;
     unsigned Head = 0;
 
-    for (auto &MI : make_early_inc_range(MBB)) {
+    for (MachineInstr &MI : make_early_inc_range(MBB)) {
       if (MI.isDebugInstr())
         continue;
 

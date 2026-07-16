@@ -672,8 +672,8 @@ define amdgpu_kernel void @v_test_add_v2i16_zext_to_v2i32(ptr addrspace(1) %out,
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_pk_add_u16 v2, v1, v0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v2
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v0, 0xffff, v2
+; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v2
 ; GFX11-TRUE16-NEXT:    global_store_b64 v3, v[0:1], s[0:1]
 ; GFX11-TRUE16-NEXT:    s_endpgm
 ;

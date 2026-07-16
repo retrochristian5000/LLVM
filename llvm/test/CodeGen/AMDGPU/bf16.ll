@@ -38131,9 +38131,9 @@ define <2 x bfloat> @v_uitofp_v2i16_to_v2bf16(<2 x i16> %x) #0 {
 ; GFX1250TRUE16:       ; %bb.0:
 ; GFX1250TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX1250TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v0
 ; GFX1250TRUE16-NEXT:    v_and_b32_e32 v2, 0xffff, v0
-; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
+; GFX1250TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v0
+; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v0, v2
 ; GFX1250TRUE16-NEXT:    v_cvt_f32_u32_e32 v1, v1
 ; GFX1250TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
