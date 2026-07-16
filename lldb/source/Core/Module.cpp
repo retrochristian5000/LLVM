@@ -1464,7 +1464,7 @@ bool Module::SetLoadAddress(Target &target, lldb::addr_t value,
 // This is a fall back which compares the canonicalized real paths.
 static bool FileSpecsResolveToSameFile(const FileSpec &pattern,
                                        const FileSpec &file) {
-  if (!pattern.GetDirectory() || !file)
+  if (pattern.GetDirectory().empty() || !file)
     return false;
   FileSystem &fs = FileSystem::Instance();
   llvm::SmallString<256> pattern_real, file_real;
