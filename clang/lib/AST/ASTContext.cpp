@@ -2348,13 +2348,15 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
         Width = Target->getLongDoubleWidth();
         Align = Target->getLongDoubleAlign();
       }
-      // On Windows targets, x86_fp80 requires 16-byte alignment for ABI
+      // On Windows MSVC targets, x86_fp80 requires 16-byte alignment for ABI
       // correctness (movaps instructions will fault on misaligned addresses).
       // Mark this as an ABI requirement that must not be reduced by #pragma
-      // pack. GCC preserves such alignment on other targets, but Clang
-      // historically has not; changing this would break existing Clang ABI on
-      // non-Windows platforms.
+      // pack. This is MSVC-specific; MinGW has different layout rules. GCC
+      // preserves such alignment on other targets, but Clang historically has
+      // not; changing this would break existing Clang ABI on non-Windows
+      // platforms.
       if (Target->getTriple().isOSWindows() &&
+          Target->getTriple().isWindowsMSVCEnvironment() &&
           &Target->getLongDoubleFormat() == &llvm::APFloat::x87DoubleExtended())
         AlignRequirement = AlignRequirementKind::RequiredByABI;
       break;
@@ -2549,7 +2551,7 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
     Width = toBits(Layout.getSize());
     Align = toBits(Layout.getAlignment());
     // Check if the record has an aligned attribute, or if it contains
-    // fields with ABI-required alignment (e.g., x86_fp80).
+    // fields with ABI-required alignment (e.g., vectors on MSVC).
     if (RD->hasAttr<AlignedAttr>()) {
       AlignRequirement = AlignRequirementKind::RequiredByRecord;
     } else {
@@ -2558,7 +2560,8 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
       AlignRequirement = AlignRequirementKind::None;
       for (const auto *Field : RD->fields()) {
         TypeInfo FI = getTypeInfo(Field->getType().getTypePtr());
-        if (FI.AlignRequirement == AlignRequirementKind::RequiredByABI) {
+        if (FI.AlignRequirement == AlignRequirementKind::RequiredByABI ||
+            FI.AlignRequirement == AlignRequirementKind::RequiredByRecord) {
           AlignRequirement = AlignRequirementKind::RequiredByABI;
           break;
         }
