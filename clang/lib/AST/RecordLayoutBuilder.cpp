@@ -583,7 +583,7 @@ static bool CheckTypeForRequiredVectorAlignment(const ASTContext &Context,
 /// requiring alignment preservation on Windows. This includes direct vectors,
 /// arrays of vectors, and structs containing vectors.
 static bool RequiresVectorAlignment(const ASTContext &Context, QualType Ty) {
-  if (!Context.getTargetInfo().getTriple().isOSWindows()  ||
+  if (!Context.getTargetInfo().getTriple().isOSWindows() ||
       !Context.getTargetInfo().getTriple().isWindowsMSVCEnvironment())
     return false;
   return CheckTypeForRequiredVectorAlignment(Context, Ty);
