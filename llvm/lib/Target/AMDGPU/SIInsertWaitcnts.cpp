@@ -375,12 +375,15 @@ public:
   AMDGPU::InstCounterType SmemAccessCounter;
   AMDGPU::InstCounterType MaxCounter;
   bool IsExpertMode = false;
+  const bool TgSplit;
 
   SIInsertWaitcnts(MachineLoopInfo &MLI, MachinePostDominatorTree &PDT,
                    AliasAnalysis *AA, MachineFunction &MF)
       : MLI(MLI), PDT(PDT), AA(AA), MF(MF), ST(MF.getSubtarget<GCNSubtarget>()),
         TII(*ST.getInstrInfo()), TRI(TII.getRegisterInfo()),
-        MRI(MF.getRegInfo()) {}
+        MRI(MF.getRegInfo()),
+        TgSplit(ST.hasTgSplitSupport() &&
+                AMDGPU::isTgSplitEnabled(MF.getFunction())) {}
 
   const AMDGPU::HardwareLimits &getLimits() const { return Limits; }
 
@@ -1140,7 +1143,8 @@ void WaitcntBrackets::print(raw_ostream &OS) const {
           continue;
         unsigned RelScore = RegScore - LB - 1;
         if (ID < REGUNITS_END) {
-          OS << ' ' << RelScore << ":vRU" << ID;
+          OS << ' ' << RelScore << ':'
+             << printRegUnit(static_cast<MCRegUnit>(ID), &Context->TRI);
         } else {
           assert(ID >= LDSDMA_BEGIN && ID < LDSDMA_END &&
                  "Unhandled/unexpected ID value!");
@@ -1157,7 +1161,8 @@ void WaitcntBrackets::print(raw_ostream &OS) const {
           if (RegScore <= LB)
             continue;
           unsigned RelScore = RegScore - LB - 1;
-          OS << ' ' << RelScore << ":sRU" << static_cast<unsigned>(ID);
+          OS << ' ' << RelScore << ':'
+             << printRegUnit(static_cast<MCRegUnit>(ID), &Context->TRI);
         }
       }
 
@@ -1410,8 +1415,8 @@ MCPhysReg WaitcntBrackets::determineVGPR16Dependency(const MachineInstr &MI,
     return Reg32;
 
   // If hi/lo16 mixed events
-  HWEvents MIEvents =
-      AMDGPU::getEventsFor(MI, Context->ST, Context->IsExpertMode);
+  HWEvents MIEvents = AMDGPU::getEventsFor(
+      MI, Context->ST, Context->IsExpertMode, Context->TgSplit);
   HWEvents OtherHalfEvents = Context->getWaitEvents(T);
   HWEvents Events = MIEvents & OtherHalfEvents;
   if (Events.size() > 1)
@@ -1527,9 +1532,7 @@ bool WaitcntBrackets::counterOutOfOrder(AMDGPU::InstCounterType T) const {
         HWEvents::VMEM_SAMPLER_READ_ACCESS | HWEvents::VMEM_BVH_READ_ACCESS;
     if (!Context->ST.hasExtendedWaitCounts() &&
         (Events & ExtendedImageEvents).any()) {
-      Events -= ExtendedImageEvents; // TODO: Tests pass even if I only use
-                                     // VMEM_SAMPLER_READ_ACCESS which isn't
-                                     // normal; indicates weak testing coverage
+      Events -= ExtendedImageEvents;
       Events |= HWEvents::VMEM_READ_ACCESS;
     }
 
@@ -2497,7 +2500,7 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
   // waits on VA_VDST if the instruction it would precede is not a VALU
   // instruction, since hardware handles VALU->VGPR->VALU hazards in
   // expert scheduling mode.
-  if (TII.isVALU(MI, /*AllowLDSDMA=*/true) && !SIInstrInfo::isLDSDMA(MI))
+  if (TII.isVALU(MI, /*AllowLDSDMA=*/false))
     Wait.set(AMDGPU::VA_VDST, ~0u);
 
   // Since the translation for VMEM addresses occur in-order, we can apply the
@@ -2641,7 +2644,7 @@ bool SIInsertWaitcnts::insertForcedWaitAfter(MachineInstr &Inst,
 void SIInsertWaitcnts::updateEventWaitcntAfter(MachineInstr &Inst,
                                                WaitcntBrackets *ScoreBrackets) {
 
-  HWEvents InstEvents = AMDGPU::getEventsFor(Inst, ST, IsExpertMode);
+  HWEvents InstEvents = AMDGPU::getEventsFor(Inst, ST, IsExpertMode, TgSplit);
   for (HWEvents E : InstEvents)
     ScoreBrackets->updateByEvent(E, Inst);
 
@@ -2652,7 +2655,8 @@ void SIInsertWaitcnts::updateEventWaitcntAfter(MachineInstr &Inst,
     }
   } else if (TII.isFLAT(Inst)) {
     if (Inst.mayLoadOrStore() && TII.mayAccessVMEMThroughFlat(Inst) &&
-        TII.mayAccessLDSThroughFlat(Inst) && !SIInstrInfo::isLDSDMA(Inst)) {
+        TII.mayAccessLDSThroughFlat(Inst, TgSplit) &&
+        !SIInstrInfo::isLDSDMA(Inst)) {
       // Async/LDSDMA operations have FLAT encoding but do not actually use flat
       // pointers. They do have two operands that each access global and LDS,
       // thus making it appear at this point that they are using a flat pointer.
@@ -3090,8 +3094,8 @@ bool SIInsertWaitcnts::removeRedundantSoftXcnts(MachineBasicBlock &Block) {
 
   for (MachineInstr &MI : drop_begin(Block)) {
     // Ignore last atomic if non-LDS VMEM and SMEM.
-    bool IsLDS =
-        TII.isDS(MI) || (TII.isFLAT(MI) && TII.mayAccessLDSThroughFlat(MI));
+    bool IsLDS = TII.isDS(MI) ||
+                 (TII.isFLAT(MI) && TII.mayAccessLDSThroughFlat(MI, TgSplit));
     if (!IsLDS && (MI.mayLoad() ^ MI.mayStore()))
       LastAtomicWithSoftXcnt = nullptr;
 
@@ -3625,6 +3629,17 @@ bool SIInsertWaitcnts::run() {
         Modified = true;
       }
     }
+  }
+
+  if (MFI->isEntryFunction() && ST.hasRequiresInitialUnclausedVmem()) {
+    // Hardware entrypoints must begin with a specific sequence:
+    //   GLOBAL_WB SCOPE:SCOPE_CU
+    //   V_NOP
+    MachineBasicBlock::iterator I = EntryBB.begin();
+    BuildMI(EntryBB, I, DebugLoc(), TII.get(AMDGPU::GLOBAL_WB))
+        .addImm(AMDGPU::CPol::SCOPE_CU);
+    BuildMI(EntryBB, I, DebugLoc(), TII.get(AMDGPU::V_NOP_e32));
+    Modified = true;
   }
 
   return Modified;
