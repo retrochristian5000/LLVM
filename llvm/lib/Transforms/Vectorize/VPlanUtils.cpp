@@ -13,6 +13,7 @@
 #include "VPlanDominatorTree.h"
 #include "VPlanPatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ScalarEvolutionPatternMatch.h"
@@ -760,7 +761,7 @@ VPValue *VPSCEVExpander::tryToReuseIRValue(const SCEV *S) {
   return nullptr;
 }
 
-VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
+VPValue *VPSCEVExpander::expand(const SCEV *S) {
   if (VPValue *V = tryToReuseIRValue(S))
     return V;
 
@@ -777,15 +778,11 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
     VPIRFlags::WrapFlagsTy WrapFlags(NAry->hasNoUnsignedWrap(),
                                      NAry->hasNoSignedWrap());
 
-    // Expanded poiner SCEVAddExpr as a ptradd of the pointer base and the
+    // Expand pointer SCEVAddExpr as a ptradd of the pointer base and the
     // integer offset, matching SCEVExpander.
     if (S->getType()->isPointerTy()) {
-      VPValue *Base = tryToExpand(SE.getPointerBase(S));
-      if (!Base)
-        return nullptr;
-      VPValue *Offset = tryToExpand(SE.removePointerBase(S));
-      if (!Offset)
-        return nullptr;
+      VPValue *Base = expand(SE.getPointerBase(S));
+      VPValue *Offset = expand(SE.removePointerBase(S));
       GEPNoWrapFlags GEPFlags = WrapFlags.HasNUW
                                     ? GEPNoWrapFlags::noUnsignedWrap()
                                     : GEPNoWrapFlags::none();
@@ -796,12 +793,8 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
         S->getSCEVType() == scAddExpr ? Instruction::Add : Instruction::Mul;
     // Iterate in reverse so that constants are emitted last.
     SmallVector<VPValue *, 2> Ops;
-    for (const SCEVUse &Op : reverse(NAry->operands())) {
-      VPValue *OpV = tryToExpand(Op);
-      if (!OpV)
-        return nullptr;
-      Ops.push_back(OpV);
-    }
+    for (const SCEVUse &Op : reverse(NAry->operands()))
+      Ops.push_back(expand(Op));
     VPValue *Result = Ops.front();
     for (VPValue *Op : drop_begin(Ops))
       Result = Builder.createOverflowingOp(Opcode, {Result, Op}, WrapFlags, DL);
@@ -809,12 +802,22 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
   }
   case scUDivExpr: {
     auto *UDiv = cast<SCEVUDivExpr>(S);
-    VPValue *LHS = tryToExpand(UDiv->getLHS());
-    if (!LHS)
-      return nullptr;
-    VPValue *RHS = tryToExpand(UDiv->getRHS());
-    if (!RHS)
-      return nullptr;
+    VPValue *LHS = expand(UDiv->getLHS());
+    const SCEV *RHSExpr = UDiv->getRHS();
+    VPValue *RHS = expand(RHSExpr);
+    if (SafeUDivMode) {
+      // Make sure the UDiv's divisor is guaranteed to not be zero/poison, to
+      // avoid UB.
+      Type *RHSTy = RHSExpr->getType();
+      bool GuaranteedNotPoison =
+          ScalarEvolution::isGuaranteedNotToBePoison(RHSExpr);
+      if (!GuaranteedNotPoison)
+        RHS = Builder.createScalarFreeze(RHS, RHSTy, DL);
+      if (!SE.isKnownNonZero(RHSExpr) || !GuaranteedNotPoison)
+        RHS = Builder.createScalarIntrinsic(
+            Intrinsic::umax, {RHS, Builder.getPlan().getConstantInt(RHSTy, 1)},
+            RHSTy, DL);
+    }
     return Builder.createNaryOp(Instruction::UDiv, {LHS, RHS},
                                 VPIRFlags::getDefaultFlags(Instruction::UDiv),
                                 DL);
@@ -825,9 +828,7 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
   case scPtrToInt:
   case scPtrToAddr: {
     auto *Cast = cast<SCEVCastExpr>(S);
-    VPValue *Op = tryToExpand(Cast->getOperand());
-    if (!Op)
-      return nullptr;
+    VPValue *Op = expand(Cast->getOperand());
     Instruction::CastOps Opcode;
     switch (S->getSCEVType()) {
     case scTruncate:
@@ -853,8 +854,9 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
   case scUMaxExpr:
   case scSMaxExpr:
   case scUMinExpr:
-  case scSMinExpr: {
-    auto *MinMax = cast<SCEVMinMaxExpr>(S);
+  case scSMinExpr:
+  case scSequentialUMinExpr: {
+    auto *MinMax = cast<SCEVNAryExpr>(S);
     Intrinsic::ID IntrinsicID;
     switch (S->getSCEVType()) {
     case scUMaxExpr:
@@ -864,6 +866,7 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
       IntrinsicID = Intrinsic::smax;
       break;
     case scUMinExpr:
+    case scSequentialUMinExpr:
       IntrinsicID = Intrinsic::umin;
       break;
     case scSMinExpr:
@@ -873,22 +876,37 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
       llvm_unreachable("Unexpected min/max SCEV type");
     }
     // Chain operands in reverse order matching SCEVExpander's expansion of
-    // min/max expressions.
-    SmallVector<VPValue *, 2> Ops;
-    for (const SCEVUse &Op : reverse(MinMax->operands())) {
-      VPValue *OpV = tryToExpand(Op);
-      if (!OpV)
-        return nullptr;
-      Ops.push_back(OpV);
-    }
+    // min/max expressions. In SafeUDivMode freeze expansion results of operands
+    // other than the first for sequential UMins, to avoid short-circuiting
+    // divide-by-0/poison.
+    bool IsSequential = S->getSCEVType() == scSequentialUMinExpr;
     Type *ResultTy = MinMax->getType();
-    VPValue *Result = Ops.front();
-    for (VPValue *Op : drop_begin(Ops))
-      Result = Builder.createScalarIntrinsic(IntrinsicID, {Result, Op},
-                                             ResultTy, DL);
+    bool PrevSafeMode = SafeUDivMode;
+    VPValue *Result = nullptr;
+    for (const auto &[I, SCEVOp] : enumerate(reverse(MinMax->operands()))) {
+      bool MayShortCircuit = IsSequential && I != MinMax->getNumOperands() - 1;
+      SafeUDivMode = MayShortCircuit || PrevSafeMode;
+      VPValue *Op = expand(SCEVOp);
+      SafeUDivMode = PrevSafeMode;
+      if (MayShortCircuit)
+        Op = Builder.createScalarFreeze(Op, ResultTy, DL);
+      Result = Result ? Builder.createScalarIntrinsic(IntrinsicID, {Result, Op},
+                                                      ResultTy, DL)
+                      : Op;
+    }
     return Result;
   }
-  default:
-    return nullptr;
+  case scAddRecExpr: {
+    [[maybe_unused]] BasicBlock *PH =
+        cast<VPIRBasicBlock>(Builder.getPlan().getEntry())->getIRBasicBlock();
+    assert(
+        SE.DT.dominates(cast<SCEVAddRecExpr>(S)->getLoop()->getHeader(), PH) &&
+        "can only expand AddRecs for loops outside VPlan's scope");
+    // AddRecs outside VPlan's scope must be expanded via VPExpandSCEV.
+    return vputils::getOrCreateVPValueForSCEVExpr(Builder.getPlan(), S);
   }
+  case scCouldNotCompute:
+    llvm_unreachable("Attempt to expand a SCEVCouldNotCompute");
+  }
+  llvm_unreachable("Unknown SCEV kind!");
 }
