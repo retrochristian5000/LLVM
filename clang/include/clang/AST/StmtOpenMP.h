@@ -6417,41 +6417,53 @@ class OMPMetaDirective final : public OMPExecutableDirective {
   // Layout:
   // [OMPMetaDirective][DirectiveKinds...][padding][Conditions...][VariantDirectives...]
   // Each array is properly aligned for its element type.
-  OpenMPDirectiveKind *getTrailingDirectiveKinds() {
-    return reinterpret_cast<OpenMPDirectiveKind *>(this + 1);
+  MutableArrayRef<OpenMPDirectiveKind> getTrailingDirectiveKinds() {
+    return MutableArrayRef<OpenMPDirectiveKind>(
+        reinterpret_cast<OpenMPDirectiveKind *>(this + 1), NumVariants);
   }
 
-  const OpenMPDirectiveKind *getTrailingDirectiveKinds() const {
-    return reinterpret_cast<const OpenMPDirectiveKind *>(this + 1);
+  const ArrayRef<OpenMPDirectiveKind> getTrailingDirectiveKinds() const {
+    return ArrayRef<OpenMPDirectiveKind>(
+        reinterpret_cast<const OpenMPDirectiveKind *>(this + 1), NumVariants);
   }
 
-  Expr **getTrailingConditions() {
-    return reinterpret_cast<Expr **>(
-        reinterpret_cast<char *>(getTrailingDirectiveKinds()) +
-        offsetToConditions());
+  MutableArrayRef<Expr *> getTrailingConditions() {
+    return MutableArrayRef<Expr *>(
+        reinterpret_cast<Expr **>(reinterpret_cast<char *>(this + 1) +
+                                  offsetToConditions()),
+        NumVariants);
   }
 
-  const Expr *const *getTrailingConditions() const {
-    return reinterpret_cast<const Expr *const *>(
-        reinterpret_cast<const char *>(getTrailingDirectiveKinds()) +
-        offsetToConditions());
+  ArrayRef<Expr *> getTrailingConditions() const {
+    return ArrayRef<Expr *>(
+        reinterpret_cast<Expr *const *>(
+            reinterpret_cast<const char *>(this + 1) + offsetToConditions()),
+        NumVariants);
   }
 
-  Stmt **getTrailingVariantDirectives() {
-    return reinterpret_cast<Stmt **>(getTrailingConditions() + NumVariants);
+  MutableArrayRef<Stmt *> getTrailingVariantDirectives() {
+    auto Conditions = getTrailingConditions();
+    return MutableArrayRef<Stmt *>(
+        reinterpret_cast<Stmt **>(Conditions.data() + NumVariants),
+        NumVariants);
   }
 
-  const Stmt *const *getTrailingVariantDirectives() const {
-    return reinterpret_cast<const Stmt *const *>(getTrailingConditions() +
-                                                 NumVariants);
+  ArrayRef<Stmt *> getTrailingVariantDirectives() const {
+    auto Conditions = getTrailingConditions();
+    return ArrayRef<Stmt *>(
+        reinterpret_cast<Stmt *const *>(Conditions.data() + NumVariants),
+        NumVariants);
   }
 
-  OpenMPDirectiveKind *getDirectiveKinds() {
+  MutableArrayRef<OpenMPDirectiveKind> getDirectiveKinds() {
     return getTrailingDirectiveKinds();
   }
-  Expr **getConditions() { return getTrailingConditions(); }
 
-  Stmt **getVariantDirectives() { return getTrailingVariantDirectives(); }
+  MutableArrayRef<Expr *> getConditions() { return getTrailingConditions(); }
+
+  MutableArrayRef<Stmt *> getVariantDirectives() {
+    return getTrailingVariantDirectives();
+  }
 
 public:
   static OMPMetaDirective *
@@ -6466,18 +6478,13 @@ public:
   unsigned getNumVariants() const { return NumVariants; }
 
   ArrayRef<OpenMPDirectiveKind> getDirectiveKinds() const {
-    return ArrayRef<OpenMPDirectiveKind>(getTrailingDirectiveKinds(),
-                                         NumVariants);
+    return getTrailingDirectiveKinds();
   }
 
-  ArrayRef<Expr *> getConditions() const {
-    return ArrayRef<Expr *>(const_cast<Expr **>(getTrailingConditions()),
-                            NumVariants);
-  }
+  ArrayRef<Expr *> getConditions() const { return getTrailingConditions(); }
 
   ArrayRef<Stmt *> getVariantDirectives() const {
-    return ArrayRef<Stmt *>(const_cast<Stmt **>(getTrailingVariantDirectives()),
-                            NumVariants);
+    return getTrailingVariantDirectives();
   }
 
   child_range children() {

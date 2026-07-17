@@ -2527,13 +2527,13 @@ void ASTStmtReader::VisitOMPMetaDirective(OMPMetaDirective *D) {
     DirectiveKinds.push_back(
         static_cast<OpenMPDirectiveKind>(Record.readInt()));
   std::copy(DirectiveKinds.begin(), DirectiveKinds.end(),
-            D->getDirectiveKinds());
+            D->getDirectiveKinds().begin());
 
   for (unsigned I = 0; I < NumVariants; ++I)
     D->getConditions()[I] = Record.readSubExpr();
 
   // Read variant directives if present.
-  if (D->getVariantDirectives()) {
+  if (!D->getVariantDirectives().empty()) {
     for (unsigned I = 0; I < NumVariants; ++I)
       D->getVariantDirectives()[I] = Record.readSubStmt();
   }

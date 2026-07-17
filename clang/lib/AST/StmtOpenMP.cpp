@@ -300,15 +300,16 @@ OMPMetaDirective *OMPMetaDirective::Create(
   Dir->setIfStmt(IfStmt);
   if (NumVariants > 0) {
     std::copy(DirectiveKinds.begin(), DirectiveKinds.end(),
-              Dir->getDirectiveKinds());
-    std::copy(Conditions.begin(), Conditions.end(), Dir->getConditions());
+              Dir->getDirectiveKinds().begin());
+    std::copy(Conditions.begin(), Conditions.end(),
+              Dir->getConditions().begin());
 
     if (!VariantDirectives.empty())
       std::copy(VariantDirectives.begin(), VariantDirectives.end(),
-                Dir->getVariantDirectives());
+                Dir->getVariantDirectives().begin());
     else
       // Initialize VariantDirectives to nullptr.
-      std::fill_n(Dir->getVariantDirectives(), NumVariants, nullptr);
+      std::fill_n(Dir->getVariantDirectives().data(), NumVariants, nullptr);
   }
   return Dir;
 }
