@@ -1282,11 +1282,14 @@ static bool expandStoreOutput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *OutputSigId = Orig->getArgOperand(0);
-  Value *RowIndex = Orig->getArgOperand(1);
+  // Intrinsic args: (sigpointId, sigElementId, rowIndex, colIndex:i8,
+  //                  gsVertexOrPrimIndex, value)
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
   Value *StartCol = Orig->getArgOperand(3); // i8
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
   Value *Data = Orig->getArgOperand(5);
-  Value *Unused = PoisonValue::get(Int32Ty);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1298,11 +1301,8 @@ static bool expandStoreOutput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    // Args: (outputSigId, rowIndex, colIndex:i32, startCol:i8, unused:i32,
-    // value) startCol (arg 3) carries the per-component column used by
-    // lowerStoreOutput.
-    Builder.CreateCall(ScalarFn,
-                       {OutputSigId, RowIndex, ColIdx, ColI8, Unused, Scalar});
+    Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
+                                  GsVertexOrPrimIndex, Scalar});
   }
 
   Orig->eraseFromParent();
@@ -1323,10 +1323,13 @@ static Value *expandLoadInput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *InputSigId = Orig->getArgOperand(0);
-  Value *RowIndex = Orig->getArgOperand(1);
+  // Intrinsic args: (sigpointId, sigElementId, rowIndex, colIndex:i8,
+  //                  gsVertexOrPrimIndex)
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
   Value *StartCol = Orig->getArgOperand(3); // i8
-  Value *Unused = PoisonValue::get(Int32Ty);
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1337,10 +1340,9 @@ static Value *expandLoadInput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    // Args: (inputSigId, rowIndex, colIndex:i32, startCol:i8, unused:i32)
-    // colIndex (arg 2) carries the per-component column used by lowerLoadInput.
-    Value *Scalar = Builder.CreateCall(
-        ScalarFn, {InputSigId, RowIndex, ColIdx, ColI8, Unused});
+    Value *Scalar =
+        Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
+                                      GsVertexOrPrimIndex});
     Vec =
         Builder.CreateInsertElement(Vec, Scalar, ConstantInt::get(Int32Ty, I));
   }
