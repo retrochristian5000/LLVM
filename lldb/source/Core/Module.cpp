@@ -1462,16 +1462,16 @@ bool Module::SetLoadAddress(Target &target, lldb::addr_t value,
 //   - POSIX: a symbolic link
 // In those cases, MatchesModuleSpec fails even though both name the same file.
 // This is a fall back which compares the canonicalized real paths.
-static bool FileSpecsResolveToSameFile(const FileSpec &pattern,
-                                       const FileSpec &file) {
-  if (pattern.GetDirectory().empty() || !file)
+static bool FileSpecsResolveToSameFile(const FileSpec &lhs,
+                                       const FileSpec &rhs) {
+  if (lhs.GetDirectory().empty() || rhs.GetDirectory().empty())
     return false;
   FileSystem &fs = FileSystem::Instance();
-  llvm::SmallString<256> pattern_real, file_real;
-  if (fs.GetRealPath(pattern.GetPath(), pattern_real) ||
-      fs.GetRealPath(file.GetPath(), file_real))
+  llvm::SmallString<256> lhs_real, rhs_real;
+  if (fs.GetRealPath(lhs.GetPath(), lhs_real) ||
+      fs.GetRealPath(rhs.GetPath(), rhs_real))
     return false;
-  return FileSpec::Equal(FileSpec(pattern_real), FileSpec(file_real),
+  return FileSpec::Equal(FileSpec(lhs_real), FileSpec(rhs_real),
                          /*full=*/true);
 }
 

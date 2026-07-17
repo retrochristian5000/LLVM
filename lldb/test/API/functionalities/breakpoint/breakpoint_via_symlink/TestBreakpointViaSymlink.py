@@ -18,13 +18,9 @@ from lldbsuite.test import lldbutil
 class TestBreakpointViaSymlink(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
-    @skipIfRemote
-    def test_breakpoint_resolves_once_via_symlink(self):
-        self.build()
-        real_exe = self.getBuildArtifact("a.out")
-
-        # A symlink whose real path differs from the path used to create the
-        # target.
+    def make_symlink(self, real_exe):
+        """Create a symlink to real_exe whose real path differs, skipping the
+        test if the platform can't create one."""
         link_exe = self.getBuildArtifact("a.out.symlink")
         try:
             if os.path.lexists(link_exe):
@@ -35,6 +31,13 @@ class TestBreakpointViaSymlink(TestBase):
             self.skipTest("could not create a symlink: %s" % e)
         self.addTearDownHook(lambda: os.remove(link_exe))
         self.assertNotEqual(os.path.realpath(link_exe), link_exe)
+        return link_exe
+
+    @skipIfRemote
+    def test_breakpoint_resolves_once_via_symlink(self):
+        self.build()
+        real_exe = self.getBuildArtifact("a.out")
+        link_exe = self.make_symlink(real_exe)
 
         target = self.dbg.CreateTarget(link_exe)
         self.assertTrue(target, VALID_TARGET)
@@ -67,4 +70,40 @@ class TestBreakpointViaSymlink(TestBase):
         ]
         self.assertEqual(
             len(matches), 1, "exactly one executable module, got %d" % len(matches)
+        )
+
+    @skipIfRemote
+    def test_arg0_preserved_when_module_reused_via_symlink(self):
+        """Canonical-path module matching lets a second target reuse the module
+        of a first target that named the same file differently. That must not
+        change how the second target is launched: argv[0] has to stay the path
+        the user created *that* target with (multicall binaries dispatch on it).
+        """
+        self.build()
+        real_exe = self.getBuildArtifact("a.out")
+        link_exe = self.make_symlink(real_exe)
+
+        # Create a target with the *real* path first.
+        real_target = self.dbg.CreateTarget(real_exe)
+        self.assertTrue(real_target, VALID_TARGET)
+
+        # Create a second target via the *symlink*.
+        link_target = self.dbg.CreateTarget(link_exe)
+        self.assertTrue(link_target, VALID_TARGET)
+
+        wd = self.get_process_working_directory()
+        process = link_target.LaunchSimple(None, None, wd)
+        self.assertTrue(process, PROCESS_IS_VALID)
+        self.assertState(process.GetState(), lldb.eStateExited)
+        arg0 = lldbutil.read_file_from_process_wd(self, "arg0.txt").strip()
+
+        self.assertEqual(
+            os.path.basename(arg0),
+            os.path.basename(link_exe),
+            "argv[0] should be the symlink used to create the target, got %r" % arg0,
+        )
+        self.assertNotEqual(
+            os.path.basename(arg0),
+            os.path.basename(real_exe),
+            "argv[0] leaked the reused module's real path: %r" % arg0,
         )
