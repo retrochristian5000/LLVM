@@ -3567,6 +3567,9 @@ bool IRTranslator::translateBitInsert(const User &U,
   LLT BaseTy = MRI.getType(Base);
   LLT ValTy = MRI.getType(Val);
 
+  assert(BaseTy.getSizeInBits() >= ValTy.getSizeInBits() &&
+        "bitinsert val wider than base should be rejected by verifier");
+
   // If Val is a floating-point type, bitcast it to an integer of the same
   // size so buildZExtOrTrunc can safely extend or truncate it.
   if (ValTy.isFloat()) {
