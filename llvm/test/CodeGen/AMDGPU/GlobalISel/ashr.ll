@@ -2008,8 +2008,7 @@ define <4 x i2> @v_ashr_v4i2(<4 x i2> %value, <4 x i2> %amount) {
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v2.l
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.h, v3.l
+; GFX11-TRUE16-NEXT:    v_pack_b32_f16 v1, v2.l, v3.l
 ; GFX11-TRUE16-NEXT:    v_and_b16 v2.h, v5.l, 3
 ; GFX11-TRUE16-NEXT:    v_and_b16 v2.l, v4.l, 3
 ; GFX11-TRUE16-NEXT:    v_pk_lshlrev_b16 v0, 14, v0 op_sel_hi:[0,1]
