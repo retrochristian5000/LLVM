@@ -423,6 +423,10 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 
 ### Sanitizers
 
+- Introduced `-fsanitize=unaligned-pointer-subtraction`, a new UndefinedBehaviorSanitizer check that
+  flag subtraction of two pointers whose byte distance is not a multiple of the element size.
+  It is part of the `undefined` group.
+
 ### Python Binding Changes
 
 ### OpenMP Support
