@@ -3240,7 +3240,6 @@ SDValue DAGTypeLegalizer::SoftPromoteHalfOp_BITCAST(SDNode *N) {
 SDValue DAGTypeLegalizer::SoftPromoteHalfOp_BUILD_VECTOR(SDNode *N) {
   SDLoc dl(N);
   EVT VT = N->getValueType(0);
-  assert(VT.isVector() && VT.getVectorElementType() == MVT::f16);
 
   SmallVector<SDValue, 8> Ops(N->getNumOperands());
   for (unsigned i = 0, e = N->getNumOperands(); i != e; ++i)
