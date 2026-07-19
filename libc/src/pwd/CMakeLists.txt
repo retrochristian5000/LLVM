@@ -1,0 +1,71 @@
+#===-- CMakeLists.txt ----------------------------------------------------===#
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+#===----------------------------------------------------------------------===#
+
+add_object_library(
+  pwd_utils
+  SRCS
+    pwd_utils.cpp
+  HDRS
+    pwd_utils.h
+  DEPENDS
+    libc.hdr.types.struct_passwd
+    libc.src.__support.str_to_integer
+    libc.src.string.string_utils
+    libc.src.__support.macros.config
+)
+
+add_entrypoint_object(
+  getpwent
+  SRCS
+    getpwent.cpp
+  HDRS
+    getpwent.h
+  DEPENDS
+    libc.include.pwd
+    libc.hdr.types.struct_passwd
+    libc.src.errno.errno
+    libc.src.__support.common
+    libc.src.__support.macros.config
+    libc.src.__support.File.file
+    libc.src.__support.File.platform_file
+    libc.src.__support.OSUtil.linux.syscall_wrappers.open
+    libc.src.__support.OSUtil.linux.syscall_wrappers.close
+    libc.hdr.fcntl_macros
+    libc.hdr.stdio_macros
+    .pwd_utils
+)
+
+add_entrypoint_object(
+  setpwent
+  SRCS
+    setpwent.cpp
+  HDRS
+    setpwent.h
+  DEPENDS
+    libc.include.pwd
+    libc.src.errno.errno
+    libc.src.__support.common
+    libc.src.__support.macros.config
+    .getpwent
+    .pwd_utils
+)
+
+add_entrypoint_object(
+  endpwent
+  SRCS
+    endpwent.cpp
+  HDRS
+    endpwent.h
+  DEPENDS
+    libc.include.pwd
+    libc.src.errno.errno
+    libc.src.__support.common
+    libc.src.__support.macros.config
+    .getpwent
+    .pwd_utils
+)
