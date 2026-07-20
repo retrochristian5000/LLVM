@@ -435,6 +435,16 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 - Added parsing and semantic support for `dims` modifier in `num_teams` and
   `thread_limit` clauses for OpenMP 6.1 or later.
 
+- Added support for capturing structured bindings in OpenMP regions
+  (a C++20 extension; warned as an extension in C++17). Individual bindings
+  form aggregate decompositions(structs, classes, and arrays) can now be used
+  in data-sharing clauses (``private``, ``firstprivate``, ``lastprivate``,
+  ``shared``, ``reduction``, ``linear``) and ``map`` clauses for target
+  directives.
+  Tuple-like bindings (types using the tuple protocol with ``get<N>()``,
+  such as ``std::pair`` or ``std::tuple``) are not yet supported and
+  will produce a compilation error.
+
 ### SYCL Support
 
 #### Improvements
