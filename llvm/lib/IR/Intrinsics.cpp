@@ -1098,6 +1098,11 @@ matchIntrinsicType(Type *Ty, ArrayRef<Intrinsic::IITDescriptor> &Infos,
            "Table consistency error");
     OverloadTys.push_back(Ty);
 
+    // Token and label types have no mangling (see getMangledTypeStr), so
+    // they cannot be overload types; reject them with a signature error.
+    if (Ty->isTokenTy() || Ty->isLabelTy())
+      return PrintMsg(false, "any manglable type", OIdx);
+
     IITDescriptor::AnyKindVectorConstraint VC;
     IITDescriptor::AnyKindElementConstraint EC;
     std::tie(VC, EC) = D.getOverloadConstraints();
