@@ -575,6 +575,11 @@ Interpreter::Visit(const UnaryOpNode &node) {
     return operand;
   }
   case UnaryOpKind::LNot: {
+    if (operand->GetCompilerType().IsReferenceType()) {
+      operand = operand->Dereference(error);
+      if (error.Fail())
+        return error.ToError();
+    }
     CompilerType operand_type = operand->GetCompilerType();
     if (!operand_type.IsContextuallyConvertibleToBool()) {
       std::string errMsg =
