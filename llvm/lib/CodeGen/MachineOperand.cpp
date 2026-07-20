@@ -1169,13 +1169,14 @@ MachinePointerInfo MachinePointerInfo::getUnknownStack(MachineFunction &MF) {
   return MachinePointerInfo(MF.getDataLayout().getAllocaAddrSpace());
 }
 
-MachineMemOperand::MachineMemOperand(MachinePointerInfo ptrinfo, Flags f,
-                                     LLT type, Align a, const AAMDNodes &AAInfo,
-                                     const MDNode *Ranges, SyncScope::ID SSID,
+MachineMemOperand::MachineMemOperand(MachinePointerInfo PtrInfo, Flags F,
+                                     LLT Type, Align A, MMOMetadata Metadata,
+                                     SyncScope::ID SSID,
                                      AtomicOrdering Ordering,
                                      AtomicOrdering FailureOrdering)
-    : PtrInfo(ptrinfo), MemoryType(type), FlagVals(f), BaseAlign(a),
-      AAInfo(AAInfo), Ranges(Ranges) {
+    : PtrInfo(PtrInfo), MemoryType(Type), FlagVals(F), BaseAlign(A),
+      AAInfo(Metadata.AAInfo), Ranges(Metadata.Ranges),
+      MemCacheHint(Metadata.MemCacheHint) {
   assert((PtrInfo.V.isNull() || isa<const PseudoSourceValue *>(PtrInfo.V) ||
           isa<PointerType>(cast<const Value *>(PtrInfo.V)->getType())) &&
          "invalid pointer value");
@@ -1189,19 +1190,18 @@ MachineMemOperand::MachineMemOperand(MachinePointerInfo ptrinfo, Flags f,
   assert(getFailureOrdering() == FailureOrdering && "Value truncated");
 }
 
-MachineMemOperand::MachineMemOperand(MachinePointerInfo ptrinfo, Flags F,
+MachineMemOperand::MachineMemOperand(MachinePointerInfo PtrInfo, Flags F,
                                      LocationSize TS, Align BaseAlignment,
-                                     const AAMDNodes &AAInfo,
-                                     const MDNode *Ranges, SyncScope::ID SSID,
+                                     MMOMetadata Metadata, SyncScope::ID SSID,
                                      AtomicOrdering Ordering,
                                      AtomicOrdering FailureOrdering)
     : MachineMemOperand(
-          ptrinfo, F,
+          PtrInfo, F,
           !TS.isPrecise() ? LLT()
           : TS.isScalable()
               ? LLT::scalable_vector(1, 8 * TS.getValue().getKnownMinValue())
               : LLT::scalar(8 * TS.getValue().getKnownMinValue()),
-          BaseAlignment, AAInfo, Ranges, SSID, Ordering, FailureOrdering) {}
+          BaseAlignment, Metadata, SSID, Ordering, FailureOrdering) {}
 
 void MachineMemOperand::refineAlignment(const MachineMemOperand *MMO) {
   // The Value and Offset may differ due to CSE. But the flags and size
@@ -1366,6 +1366,10 @@ void MachineMemOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
   if (getRanges()) {
     OS << ", !range ";
     getRanges()->printAsOperand(OS, MST);
+  }
+  if (getMemCacheHint()) {
+    OS << ", !mem.cache_hint ";
+    getMemCacheHint()->printAsOperand(OS, MST);
   }
   // FIXME: Implement addrspace printing/parsing in MIR.
   // For now, print this even though parsing it is not available in MIR.
