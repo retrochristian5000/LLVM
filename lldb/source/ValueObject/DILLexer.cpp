@@ -62,6 +62,8 @@ llvm::StringRef Token::GetTokenName(Kind kind) {
     return "plus";
   case Kind::plusequal:
     return "plusequal";
+  case Kind::question:
+    return "question";
   case Kind::r_paren:
     return "r_paren";
   case Kind::r_square:
@@ -213,6 +215,7 @@ llvm::Expected<Token> DILLexer::Lex(llvm::StringRef expr,
       {Token::percent, "%"},
       {Token::period, "."},
       {Token::plus, "+"},
+      {Token::question, "?"},
       {Token::r_paren, ")"},
       {Token::r_square, "]"},
       {Token::slash, "/"},

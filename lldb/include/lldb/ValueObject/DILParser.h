@@ -82,7 +82,7 @@ private:
   ASTNodeUP Run();
 
   ASTNodeUP ParseExpression();
-
+  ASTNodeUP ParseConditionalExpression();
   ASTNodeUP ParseAssignmentExpression();
   ASTNodeUP ParseShiftExpression();
   ASTNodeUP ParseAdditiveExpression();
