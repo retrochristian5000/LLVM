@@ -90,6 +90,10 @@ features cannot lower the translation-unit ABI level;
 
 #### Resolutions to C++ Defect Reports
 
+- Clang now converts floating-point values to boolean first when converting
+  them to an enumeration type with a fixed `bool` underlying type. This
+  resolves [CWG1094](https://wg21.link/cwg1094).
+
 ### C Language Changes
 
 #### C2y Feature Support
