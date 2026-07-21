@@ -17,6 +17,7 @@
 #include "benchmark/benchmark.h"
 #include "make_string.h"
 #include "test_macros.h"
+#include "test_iterators.h"
 
 constexpr size_t small_size = 5;
 constexpr size_t large_size = 30;
@@ -498,6 +499,45 @@ int main(int argc, char** argv) {
           [](auto bm) { bm->Arg(small_size); }); // for naming
 
     bench("std::basic_string::compare(const std::basic_string&) (transparent)",
+          std::bind_front(bench_impl, std::integral_constant<size_t, large_size>{}, std::false_type{}),
+          [](auto bm) { bm->Arg(large_size); }); // for naming
+  }
+
+  {
+    static auto bench_impl =
+        []<size_t size, bool opaque, class CharT>(
+            std::integral_constant<size_t, size>,
+            std::bool_constant<opaque>,
+            std::type_identity<CharT>,
+            benchmark::State& state) {
+          std::basic_string<CharT> src(size, 'a');
+          auto getIterator = [&src](size_t i) {
+            // INT_MAX because we want overhead of ThrowingIterator without actually throwing
+            return ThrowingIterator<CharT>(src.data() + i, src.data() + src.size(), INT_MAX);
+          };
+          std::basic_string<CharT> string = src;
+          for (auto _ : state) {
+            benchmark::DoNotOptimize(string);
+            string.clear();
+            if constexpr (opaque)
+              benchmark::DoNotOptimize(src);
+            benchmark::DoNotOptimize(string.append(getIterator(0), getIterator(size)));
+          }
+        };
+
+    bench("std::basic_string::append(ForwardIt, ForwardIt) (opaque)",
+          std::bind_front(bench_impl, std::integral_constant<size_t, small_size>{}, std::true_type{}),
+          [](auto bm) { bm->Arg(small_size); }); // for naming
+
+    bench("std::basic_string::append(ForwardIt, ForwardIt) (opaque)",
+          std::bind_front(bench_impl, std::integral_constant<size_t, large_size>{}, std::true_type{}),
+          [](auto bm) { bm->Arg(large_size); }); // for naming
+
+    bench("std::basic_string::append(ForwardIt, ForwardIt) (transparent)",
+          std::bind_front(bench_impl, std::integral_constant<size_t, small_size>{}, std::false_type{}),
+          [](auto bm) { bm->Arg(small_size); }); // for naming
+
+    bench("std::basic_string::append(ForwardIt, ForwardIt) (transparent)",
           std::bind_front(bench_impl, std::integral_constant<size_t, large_size>{}, std::false_type{}),
           [](auto bm) { bm->Arg(large_size); }); // for naming
   }
