@@ -1263,4 +1263,4 @@ exit:
 attributes #0 = { "target-cpu"="znver2" }
 
 !0 = distinct !{!0, !1}
-!1 = !{!"llvm.loop.vectorize.enable", i1 true}
+!1 = !{!"llvm.loop.vectorize.enable"}
