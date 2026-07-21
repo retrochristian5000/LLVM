@@ -15,8 +15,8 @@
 #include <llvm/Object/OffloadBinary.h>
 
 // Libsycl is built with RTTI while LLVM is not, which would normally cause this
-// function to break debug builds. To address that, its definition is placed in a
-// separate source file that's compiled without RTTI.
+// function to break debug builds. To address that, its definition is placed in
+// a separate source file that's compiled without RTTI.
 _LIBSYCL_BEGIN_NAMESPACE_SYCL
 namespace detail {
 void consumeBinaryError(
