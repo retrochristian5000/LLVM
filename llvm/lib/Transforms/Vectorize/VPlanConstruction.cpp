@@ -1936,6 +1936,11 @@ static bool handleFirstArgMinOrMax(
   assert(FindLastIVPhiR->getVFScaleFactor() == 1 &&
          "FindIV reduction must not be scaled");
 
+  // TODO: support for FP in handleFirstArgMinOrMax
+  if (RecurrenceDescriptor::isFloatingPointRecurrenceKind(
+          MinOrMaxPhiR->getRecurrenceKind()))
+    return false;
+
   Type *Ty = Plan.getVectorLoopRegion()->getCanonicalIVType();
   // TODO: Support non (i.e., narrower than) canonical IV types.
   // TODO: Emit remarks for failed transformations.
@@ -2217,7 +2222,7 @@ bool VPlanTransforms::handleMultiUseReductions(VPlan &Plan,
     MinOrMaxResult->moveBefore(*FindIVRdxResult->getParent(),
                                FindIVRdxResult->getIterator());
 
-    bool IsStrictPredicate = ICmpInst::isLT(Pred) || ICmpInst::isGT(Pred);
+    bool IsStrictPredicate = CmpInst::isStrictPredicate(Pred);
     if (IsStrictPredicate) {
       if (!handleFirstArgMinOrMax(Plan, MinOrMaxPhiR, FindIVPhiR,
                                   cast<VPWidenIntOrFpInductionRecipe>(IVOp),
