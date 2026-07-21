@@ -29,14 +29,6 @@ def : Pat<(p0 (ptradd p0:$lhs, p0i:$rhs)),
 def : Pat<(p0 (ptradd p0:$lhs, p0i:$rhs)),
           (ADD_I64 I64:$lhs, I64:$rhs)>, Requires<[HasAddr64]>;
 
-
-def to_tframeindex : SDNodeXForm<frameindex, [{
-  return CurDAG->getTargetFrameIndex(N->getIndex(), N->getValueType(0));
-}]>;
-
-def : GICustomOperandRenderer<"renderFrameIndex">,
-      GISDNodeXFormEquiv<to_tframeindex>;
-
 def : Pat<(frameindex:$fi),
           (COPY_I32 (to_tframeindex $fi))>, Requires<[HasAddr32]>;
 def : Pat<(frameindex:$fi),

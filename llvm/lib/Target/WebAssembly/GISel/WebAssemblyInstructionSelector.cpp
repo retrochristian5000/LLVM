@@ -55,9 +55,6 @@ private:
   bool selectImpl(MachineInstr &I, CodeGenCoverage &CoverageInfo) const;
   bool selectCopy(MachineInstr &I, MachineRegisterInfo &MRI) const;
 
-  void renderFrameIndex(MachineInstrBuilder &MIB, const MachineInstr &MI,
-                        int OpIdx) const;
-
   InstructionSelector::ComplexRendererFns
   selectAddrOperands(LLT AddrType, unsigned int ConstOpc,
                      MachineOperand &Root) const;
@@ -96,14 +93,6 @@ WebAssemblyInstructionSelector::WebAssemblyInstructionSelector(
 #include "WebAssemblyGenGlobalISel.inc"
 #undef GET_GLOBALISEL_TEMPORARIES_INIT
 {
-}
-
-void WebAssemblyInstructionSelector::renderFrameIndex(MachineInstrBuilder &MIB,
-                                                      const MachineInstr &MI,
-                                                      int OpIdx) const {
-  assert(MI.getOpcode() == TargetOpcode::G_FRAME_INDEX && OpIdx == -1 &&
-         "Expected G_FRAME_INDEX");
-  MIB.add(MI.getOperand(1));
 }
 
 InstructionSelector::ComplexRendererFns
