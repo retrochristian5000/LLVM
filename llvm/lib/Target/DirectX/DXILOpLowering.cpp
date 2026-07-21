@@ -989,6 +989,10 @@ public:
       Value *SigElementId = CI->getArgOperand(1);
       Value *RowIndex = CI->getArgOperand(2);
       Value *ColI8 = CI->getArgOperand(3);
+      [[maybe_unused]] Value *UnusedIndex = CI->getArgOperand(4);
+      assert(isa<PoisonValue>(UnusedIndex) &&
+             "gsVertexOrPrimIndex was expected to be used but isn't currently "
+             "handled");
       Value *Data = CI->getArgOperand(5);
 
       SmallVector<Value *, 4> Args{SigElementId, RowIndex, ColI8, Data};
@@ -1014,6 +1018,10 @@ public:
       Value *SigElementId = CI->getArgOperand(1);
       Value *RowIndex = CI->getArgOperand(2);
       Value *ColI8 = CI->getArgOperand(3);
+      [[maybe_unused]] Value *UnusedIndex = CI->getArgOperand(4);
+      assert(isa<PoisonValue>(UnusedIndex) &&
+             "gsVertexOrPrimIndex was expected to be used but isn't currently "
+             "handled");
 
       Type *ScalarTy = CI->getType();
       SmallVector<Value *, 3> Args{SigElementId, RowIndex, ColI8};
