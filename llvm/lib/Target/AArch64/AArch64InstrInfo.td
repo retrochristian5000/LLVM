@@ -509,6 +509,9 @@ def SDT_AArch64Insr  : SDTypeProfile<1, 2, [SDTCisVec<0>]>;
 def SDT_AArch64Zip   : SDTypeProfile<1, 2, [SDTCisVec<0>,
                                           SDTCisSameAs<0, 1>,
                                           SDTCisSameAs<0, 2>]>;
+def SDT_AArch64Addhn : SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisVec<1>,
+                                            SDTCisSameAs<1, 2>,
+                                            SDTCisOpSmallerThanOp<0, 1>]>;
 def SDT_AArch64MOVIedit : SDTypeProfile<1, 1, [SDTCisInt<1>]>;
 def SDT_AArch64MOVIshift : SDTypeProfile<1, 2, [SDTCisInt<1>, SDTCisInt<2>]>;
 def SDT_AArch64vecimm : SDTypeProfile<1, 3, [SDTCisVec<0>, SDTCisSameAs<0,1>,
@@ -1107,6 +1110,8 @@ def AArch64usdot    : SDNode<"AArch64ISD::USDOT", SDT_AArch64Dot>;
 // Only the lower result lane is defined.
 def AArch64saddv    : SDNode<"AArch64ISD::SADDV", SDT_AArch64UnaryVec>;
 def AArch64uaddv    : SDNode<"AArch64ISD::UADDV", SDT_AArch64UnaryVec>;
+
+def AArch64addhn     : SDNode<"AArch64ISD::ADDHN", SDT_AArch64Addhn>;
 
 // Vector across-lanes min/max
 // Only the lower result lane is defined.
@@ -7558,6 +7563,17 @@ defm : AddSubHNPatterns<ADDHNv4i32_v4i16, ADDHNv4i32_v8i16,
 defm : AddSubHNPatterns<ADDHNv2i64_v2i32, ADDHNv2i64_v4i32,
                         SUBHNv2i64_v2i32, SUBHNv2i64_v4i32,
                         v2i32, v2i64, 32>;
+
+multiclass AddHNPat<ValueType SrcVT, ValueType DstVT,
+                    Instruction Inst> {
+  def : Pat< (DstVT (AArch64addhn (SrcVT V128:$Rn), 
+                    (SrcVT V128:$Rm))), 
+                    (Inst V128:$Rn, V128:$Rm)>;
+}
+
+defm : AddHNPat<v8i16, v8i8,  ADDHNv8i16_v8i8>;
+defm : AddHNPat<v4i32, v4i16, ADDHNv4i32_v4i16>;
+defm : AddHNPat<v2i64, v2i32, ADDHNv2i64_v2i32>;
 
 //----------------------------------------------------------------------------
 // AdvSIMD bitwise extract from vector instruction.
