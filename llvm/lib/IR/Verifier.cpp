@@ -1245,6 +1245,30 @@ void Verifier::visitDILocation(const DILocation &N) {
     CheckDI(isa<DILocation>(IA), "inlined-at should be a location", &N, IA);
   if (auto *SP = dyn_cast<DISubprogram>(N.getRawScope()))
     CheckDI(SP->isDefinition(), "scope points into the type hierarchy", &N);
+  if (auto *L = N.getRawIRLayers())
+    CheckDI(isa<DILayerLocList>(L), "irlayers must be a DILayerLocList", &N, L);
+}
+
+void Verifier::visitDILayerLoc(const DILayerLoc &N) {
+  CheckDI(isa_and_nonnull<MDString>(N.getRawKind()),
+          "layer kind must be a non-null MDString", &N, N.getRawKind());
+  CheckDI(!N.getRawFile() || isa<DIFile>(N.getRawFile()),
+          "layer file must be a DIFile", &N, N.getRawFile());
+  // The intermediate file must carry a checksum (any kind); NVPTX emit uses the
+  // digest as the secondary .file name, so this is a load-bearing invariant.
+  // Hard Check (not CheckDI): a missing checksum rejects the module outright
+  // rather than silently stripping its debug info, so emit can rely on it with
+  // no fallback.
+  DIFile *F = N.getFile();
+  Check(F && F->getRawChecksum(),
+        "intermediate DILayerLoc file requires a checksum", &N, F);
+}
+
+void Verifier::visitDILayerLocList(const DILayerLocList &N) {
+  CheckDI(N.getNumLayers() > 0, "DILayerLocList must be non-empty", &N);
+  for (const MDOperand &Op : N.layers())
+    CheckDI(isa_and_nonnull<DILayerLoc>(Op.get()),
+            "DILayerLocList entry must be a DILayerLoc", &N, Op.get());
 }
 
 void Verifier::visitGenericDINode(const GenericDINode &N) {

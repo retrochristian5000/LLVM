@@ -398,6 +398,8 @@ enum MetadataCodes {
   METADATA_ASSIGN_ID = 47,        // [distinct, ...]
   METADATA_SUBRANGE_TYPE = 48,    // [distinct, ...]
   METADATA_FIXED_POINT_TYPE = 49, // [distinct, ...]
+  METADATA_LAYERLOC = 50,         // [distinct, kind, file, line, col]
+  METADATA_LAYERLOCLIST = 51,     // [distinct, n x layerloc]
 };
 
 // The constants block (CONSTANTS_BLOCK_ID) describes emission for each

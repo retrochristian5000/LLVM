@@ -1483,8 +1483,10 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     break;
   }
   case bitc::METADATA_LOCATION: {
-    // 5: inlinedAt, 6: isImplicit, 8: Key Instructions fields.
-    if (Record.size() != 5 && Record.size() != 6 && Record.size() != 8)
+    // 5: inlinedAt, 6: isImplicit, 8: Key Instructions fields, 9: irlayers.
+    // Relaxed from an exact-size check to `>=` so appended fields extend
+    // cleanly (forward-compat; lets `irlayers` ride as an optional 9th field).
+    if (Record.size() < 5)
       return error("Invalid record");
 
     IsDistinct = Record[0];
@@ -1493,12 +1495,42 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     Metadata *Scope = getMD(Record[3]);
     Metadata *InlinedAt = getMDOrNull(Record[4]);
     bool ImplicitCode = Record.size() >= 6 && Record[5];
-    uint64_t AtomGroup = Record.size() == 8 ? Record[6] : 0;
-    uint8_t AtomRank = Record.size() == 8 ? Record[7] : 0;
+    uint64_t AtomGroup = Record.size() >= 8 ? Record[6] : 0;
+    uint8_t AtomRank = Record.size() >= 8 ? Record[7] : 0;
+    Metadata *IRLayers = Record.size() >= 9 ? getMDOrNull(Record[8]) : nullptr;
     MetadataList.assignValue(
-        GET_OR_DISTINCT(DILocation, (Context, Line, Column, Scope, InlinedAt,
-                                     ImplicitCode, AtomGroup, AtomRank)),
+        GET_OR_DISTINCT(DILocation,
+                        (Context, Line, Column, Scope, InlinedAt, ImplicitCode,
+                         AtomGroup, AtomRank, IRLayers)),
         NextMetadataNo);
+    NextMetadataNo++;
+    break;
+  }
+  case bitc::METADATA_LAYERLOC: {
+    if (Record.size() != 5)
+      return error("Invalid record");
+
+    IsDistinct = Record[0];
+    unsigned Line = Record[1];
+    unsigned Column = Record[2];
+    Metadata *File = getMD(Record[3]);
+    MDString *Kind = cast<MDString>(getMD(Record[4]));
+    MetadataList.assignValue(
+        GET_OR_DISTINCT(DILayerLoc, (Context, Kind, File, Line, Column)),
+        NextMetadataNo);
+    NextMetadataNo++;
+    break;
+  }
+  case bitc::METADATA_LAYERLOCLIST: {
+    if (Record.empty())
+      return error("Invalid record");
+
+    IsDistinct = Record[0];
+    SmallVector<Metadata *, 4> Elts;
+    for (unsigned I = 1, E = Record.size(); I != E; ++I)
+      Elts.push_back(getMDOrNull(Record[I]));
+    MetadataList.assignValue(GET_OR_DISTINCT(DILayerLocList, (Context, Elts)),
+                             NextMetadataNo);
     NextMetadataNo++;
     break;
   }
