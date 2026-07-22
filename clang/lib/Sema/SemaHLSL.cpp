@@ -4299,8 +4299,7 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     if (SemaRef.checkArgCount(TheCall, 1))
       return true;
     QualType ArgTy = TheCall->getArg(0)->getType();
-    if (ArgTy->isConstantMatrixType()) {
-      const auto *MT = ArgTy->getAs<ConstantMatrixType>();
+    if (const auto *MT = ArgTy->getAs<ConstantMatrixType>()) {
       if (!MT->getElementType()->isRealFloatingType())
         return SemaRef.Diag(TheCall->getArg(0)->getBeginLoc(),
                             diag::err_builtin_invalid_arg_type)
