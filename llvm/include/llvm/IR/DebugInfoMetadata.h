@@ -3539,6 +3539,15 @@ public:
     /// Get the operand code.
     uint64_t getOp() const { return *Op; }
 
+    /// Return true if this is \p Opcode.
+    bool is(uint64_t Opcode) const { return getOp() == Opcode; }
+
+    /// Return true if this is one of \p Opcodes.
+    template <typename... Ts> bool isOneOf(Ts... Opcodes) const {
+      static_assert(sizeof...(Ts) > 0, "requires at least one opcode");
+      return (is(Opcodes) || ...);
+    }
+
     /// Get an argument to the operand.
     ///
     /// Never returns the operand itself.
