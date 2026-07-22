@@ -227,6 +227,8 @@ createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
 
 static MCTargetStreamer *
 createNullTargetStreamer(MCStreamer &S) {
+  if (S.getContext().getTargetTriple().isOSzOS())
+    return new SystemZTargetGOFFStreamer(S);
   return new SystemZTargetStreamer(S);
 }
 
