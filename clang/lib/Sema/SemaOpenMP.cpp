@@ -11521,7 +11521,7 @@ StmtResult SemaOpenMP::ActOnOpenMPTargetTeamsGenericLoopDirective(
                                             Clauses))
     return StmtError();
 
-   if (checkOriginalVarMappedButOnlyBindingsUsed(SemaRef, Clauses, AStmt))
+  if (checkOriginalVarMappedButOnlyBindingsUsed(SemaRef, Clauses, AStmt))
     return StmtError();
 
   CapturedStmt *CS =
