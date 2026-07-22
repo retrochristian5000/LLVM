@@ -8461,8 +8461,10 @@ TreeTransform<Derived>::TransformSwitchStmt(SwitchStmt *S) {
 
   // Transform the body of the switch statement.
   StmtResult Body = getDerived().TransformStmt(S->getBody());
+  // Finish the switch even on error to pop it from Sema's switch stack.
   if (Body.isInvalid())
-    return StmtError();
+    return getDerived().RebuildSwitchStmtBody(S->getSwitchLoc(), Switch.get(),
+                                              nullptr);
 
   // Complete the switch statement.
   return getDerived().RebuildSwitchStmtBody(S->getSwitchLoc(), Switch.get(),
