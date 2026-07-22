@@ -90,7 +90,7 @@ baz:
 # CHECK-NEXT:         Value:           65536
 # CHECK-NEXT:     - Index:           1
 # CHECK-NEXT:       Type:            I32
-# CHECK-NEXT:       Mutable:         false
+# CHECK-NEXT:       Mutable:         true
 # CHECK-NEXT:       InitExpr:
 # CHECK-NEXT:         Opcode:          I32_CONST
 # CHECK-NEXT:         Value:           65544

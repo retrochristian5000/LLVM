@@ -973,17 +973,19 @@ static void createSyntheticSymbols() {
     // TLS symbols are all hidden/dso-local, and note that the `tlsBase` global
     // serves a different purpose depending on `libcallThreadContext`. If
     // `libcallThreadContext` is `false` it's the base address of TLS and it's
-    // initialized fresh by each thread. This requires a mutable global.
-    //
-    // If `libcallThreadContext` is `true`, however, then it records the
-    // initial thread's TLS address at `start`-time. In non-PIC mode this is a
-    // constant determined during linking, but in PIC mode it's calculated
-    // during instantiation.
+    // initialized fresh by each thread. If `libcallThreadContext` is `true`,
+    // however, then it records the initial thread's TLS address at
+    // `start`-time. In non-PIC mode this is a constant determined during
+    // linking, but in PIC mode it's calculated during instantiation. For
+    // simplicity this global is always mutable despite technically not being
+    // necessary in `libcallThreadContext` non-PIC mode. Given that the global
+    // type must match across linkage units it's easier to have it always be one
+    // type instead of depending on flags, for example it means that `libc.a`
+    // (not PIC) is compatible with `libc.so` (PIC) for linking.
     auto tls_base_name =
         ctx.arg.libcallThreadContext ? "__init_tls_base" : "__tls_base";
-    ctx.sym.tlsBase = createGlobalVariable(
-        tls_base_name, !ctx.arg.libcallThreadContext || ctx.isPic,
-        WASM_SYMBOL_VISIBILITY_HIDDEN);
+    ctx.sym.tlsBase = createGlobalVariable(tls_base_name, true,
+                                           WASM_SYMBOL_VISIBILITY_HIDDEN);
     ctx.sym.tlsSize = createGlobalVariable("__tls_size", false,
                                            WASM_SYMBOL_VISIBILITY_HIDDEN);
     ctx.sym.tlsAlign = createGlobalVariable("__tls_align", false,
