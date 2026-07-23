@@ -9757,12 +9757,20 @@ void DeclarationVisitor::Initialization(const parser::Name &name,
                     "Pointer initializer must be intrinsic NULL()"_err_en_US);
               } else if (IsPointer(ultimate)) {
                 if (auto *object{ultimate.detailsIf<ObjectEntityDetails>()}) {
-                  CHECK(!object->init());
-                  object->set_init(std::move(*nullInit));
+                  if (object->init()) {
+                    Say(name, "'%s' was previously initialized"_err_en_US);
+                    context().SetError(ultimate);
+                  } else {
+                    object->set_init(std::move(*nullInit));
+                  }
                 } else if (auto *procPtr{
                                ultimate.detailsIf<ProcEntityDetails>()}) {
-                  CHECK(!procPtr->init());
-                  procPtr->set_init(nullptr);
+                  if (procPtr->init()) {
+                    Say(name, "'%s' was previously initialized"_err_en_US);
+                    context().SetError(ultimate);
+                  } else {
+                    procPtr->set_init(nullptr);
+                  }
                 }
               } else {
                 Say(name,
@@ -9796,18 +9804,25 @@ void DeclarationVisitor::PointerInitialization(
         if (MaybeExpr expr{EvaluateExpr(target)}) {
           // Validation is done in declaration checking.
           if (auto *details{ultimate.detailsIf<ObjectEntityDetails>()}) {
-            CHECK(!details->init());
-            details->set_init(std::move(*expr));
-            ultimate.set(Symbol::Flag::InDataStmt, false);
+            if (details->init()) {
+              Say(name, "'%s' was previously initialized"_err_en_US);
+              context().SetError(ultimate);
+            } else {
+              details->set_init(std::move(*expr));
+              ultimate.set(Symbol::Flag::InDataStmt, false);
+            }
           } else if (auto *details{ultimate.detailsIf<ProcEntityDetails>()}) {
             // something like "REAL, EXTERNAL, POINTER :: p => t"
-            if (evaluate::IsNullProcedurePointer(&*expr)) {
-              CHECK(!details->init());
+            if (details->init()) {
+              Say(name, "'%s' was previously initialized"_err_en_US);
+              context().SetError(ultimate);
+            } else if (evaluate::IsNullProcedurePointer(&*expr)) {
               details->set_init(nullptr);
-            } else if (const Symbol *
-                targetSymbol{evaluate::UnwrapWholeSymbolDataRef(*expr)}) {
-              CHECK(!details->init());
+              ultimate.set(Symbol::Flag::InDataStmt, false);
+            } else if (const Symbol *targetSymbol{
+                           evaluate::UnwrapWholeSymbolDataRef(*expr)}) {
               details->set_init(*targetSymbol);
+              ultimate.set(Symbol::Flag::InDataStmt, false);
             } else {
               Say(name,
                   "Procedure pointer '%s' must be initialized with a procedure name or NULL()"_err_en_US);
