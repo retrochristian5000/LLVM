@@ -1080,7 +1080,7 @@ MachineIRBuilder::buildAtomicCmpXchg(const DstOp &OldValRes, const SrcOp &Addr,
 MachineInstrBuilder MachineIRBuilder::buildAtomicRMW(
   unsigned Opcode, const DstOp &OldValRes,
   const SrcOp &Addr, const SrcOp &Val,
-  MachineMemOperand &MMO) {
+  MachineMemOperand &MMO, std::optional<unsigned> Flags) {
 
 #ifndef NDEBUG
   LLT OldValResTy = OldValRes.getLLTTy(*getMRI());
@@ -1097,6 +1097,8 @@ MachineInstrBuilder MachineIRBuilder::buildAtomicRMW(
   Addr.addSrcToMIB(MIB);
   Val.addSrcToMIB(MIB);
   MIB.addMemOperand(&MMO);
+  if (Flags)
+    MIB->setFlags(*Flags);
   return MIB;
 }
 
