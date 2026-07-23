@@ -471,23 +471,30 @@ What are the expectations around a revert?
 (obtaining_commit_access)=
 ### Obtaining Commit Access
 
-LLVM grants contributor permissions liberally. We believe that empowering new
-contributors is part of what makes LLVM a successful project. The first step on
-your journey to becoming an LLVM contributor is to apply to join the "LLVM
-committers" team. Committers have "commit-with-review" access. They cannot
-unilaterally land changes or approve other people's pull requests.
+The first step on your journey to becoming an LLVM contributor is to apply to
+join the [llvm-committers team]. Committers are granted the GitHub [`Write`
+repository role][gh-roles], which lets them push `users/*` branches and use the
+merge button on pull requests. Committers nonetheless have only
+"commit-with-review" access: as described under {ref}`merging pull requests
+<merging_pull_requests>`, a branch [ruleset][gh-rulesets] only allows a pull
+request to merge into `main` after a code owner, typically a member of the
+[llvm-reviewers team], has approved it. Committers cannot unilaterally land
+changes, and their own approval does not count toward that requirement.
 
-Commit access grants *commit-after-approval* to all parts of LLVM. To merge
-changes into `main`, you need to make a pull request and get it approved by a
-member of the LLVM reviewers team (see below). For information on how to get
-approval for a patch, please see {doc}`CodeReview`. Once a PR is approved by a
-reviewer, a committer can push the merge button to land any PR, whether it is
-their own, or someone else's (see {ref}`merging pull requests
-<merging_pull_requests>`).
+For information on how to get approval for a patch, please see
+{doc}`CodeReview`. Once a PR is approved by a reviewer, a committer can push
+the merge button to land any PR, whether it is their own, or someone else's
+(see {ref}`merging pull requests <merging_pull_requests>`).
 
-To apply to be a committer, read the following developer policy docs, and file
-an issue using [this template][commit-access-request], stating that you've read
-the policies and agree to abide by them:
+LLVM grants contributor permissions freely. We believe that empowering new
+contributors is part of what makes LLVM a successful project.
+
+The only requirements for applying to become a committer are to have at least
+one PR (open or closed), and to have someone on the [reviewers
+team][llvm-reviewers team] vouch for you. To apply to be a committer, read the
+following developer policy docs, and file an issue using [this
+template][commit-access-request], stating that you've read the policies and
+agree to abide by them:
 
 * {ref}`LLVM Community Code of Conduct` -- Be welcoming, respectful, and
   considerate in all project spaces.
@@ -498,15 +505,15 @@ the policies and agree to abide by them:
 Once approved, a GitHub invitation will be sent to your GitHub account. In case
 you don't get notification from GitHub, go to [Invitation Link] directly. Once
 you accept the invitation, you'll be granted LLVM github org affiliation and
-LLVM committers team membership. If you fail to follow the policies, you may
-lose commit access.
+[llvm-committers team] membership. If other contributors flag your
+contributions for failing to follow project policies, you may be removed from
+the team.
 
-Prior to obtaining commit access, it is common practice to request that someone
-with commit access commits on your behalf. Note that GitHub will use your
-configured profile name and email in the squashed commit, so make sure it is
-configured correctly. Once your pull request has been approved by a reviewer,
-any committer can merge it for you (see {ref}`merging pull requests
-<merging_pull_requests>`).
+Prior to obtaining commit access, you can request that someone else merge your
+PR on your behalf. Note that GitHub will use your configured profile name and
+email in the squashed commit, so make sure it is configured correctly. Once
+your pull request has been approved by a reviewer, any committer can merge it
+for you (see {ref}`merging pull requests <merging_pull_requests>`).
 
 For external tracking purposes, committed changes are automatically reflected
 on a commits mailing list soon after the commit lands (e.g.
@@ -520,23 +527,25 @@ required to do so. No special access is needed to leave review feedback on a
 pull request, and a track record of helpful reviews is the main criterion for
 joining the reviewers team (see below).
 
+[llvm-committers team]: https://github.com/orgs/llvm/teams/llvm-committers
 [commit-access-request]: https://github.com/llvm/llvm-project/issues/new?template=commit-access-request.yml
 [Invitation Link]: https://github.com/orgs/llvm/invitation
 [llvm-commits@lists.llvm.org]: https://lists.llvm.org/pipermail/llvm-commits/
+[llvm-reviewers team]: https://github.com/orgs/llvm/teams/llvm-reviewers
 
 (becoming_a_reviewer)=
 ### Becoming a Reviewer
 
-The next step in becoming an LLVM contributor is joining the LLVM reviewers
-team, which grants the right to approve landing PRs on the `main` branch. We
-use the GitHub [CODEOWNERS] file to require that all PRs get a review.
+The next step in growing your contributions to LLVM is becoming a reviewer. The
+[llvm-reviewers team] has broad code ownership over the [llvm-project
+repository], so they are able to fulfill the requirement that all PRs are
+reviewed by a code owner. They are also able to [bypass][gh-bypass] this
+ruleset, so they are empowered to unilaterally fix urgent issues by reverting a
+bad change or fixing the build. Current ownership is defined in the GitHub
+[CODEOWNERS] file.
 
-We allow reviewers to bypass this check and land their own changes, so they are
-able to unilaterally land changes quickly to fix urgent issues, e.g. build
-breaks (see {ref}`merging pull requests <merging_pull_requests>`). GitHub does
-not allow authors to approve their own PRs, so this is implemented as a merge
-requirement bypass. When to bypass the review check is clearly a subjective
-decision \-\-- we trust reviewers to use good judgement. Valid reasons include:
+Bypassing checks is clearly a subjective decision \-\-- we trust reviewers to
+use good judgement. Valid reasons include:
 
 - fixing build breakage
 - reverting obviously broken patches
@@ -576,31 +585,42 @@ favor to expedite this process.
 
 [CODEOWNERS]: https://github.com/llvm/llvm-project/blob/main/.github/CODEOWNERS
 [review-access-issue]: https://github.com/llvm/llvm-project/issues/new?template=reviewer-access-request.yml
+[llvm-project repository]: https://github.com/llvm/llvm-project/
 
 (merging_pull_requests)=
 ### Merging Pull Requests
 
-All changes to the `main` branch must land through a pull request. GitHub
-permits a pull request to be merged once it has been approved by a member of
-the reviewer team. This is enforced with GitHub's branch protection feature
-with the "require review from code owners" branch rule and a `CODEOWNERS`
-configuration that assigns ownership of all paths to the reviewers team.
+All changes to the `main` branch must land through a pull request. Our ruleset
+forbids pushing directly to `main`, and this applies to committers and
+reviewers alike. GitHub permits a pull request to be merged once it has been
+approved by a member of the reviewers team. This is enforced with a GitHub
+[repository ruleset][gh-rulesets] containing the *Require review from Code
+Owners* rule, together with a [`CODEOWNERS`][CODEOWNERS] configuration that
+assigns ownership of all paths to the reviewers team. Both committers and
+reviewers hold the same [`Write` repository role][gh-roles]; the difference in
+what they can merge comes entirely from the ruleset, not from the repository
+role:
 
-- Reviewers may merge their own pull requests without waiting for an approval
-  by using GitHub's option to merge without meeting the review requirement (a
-  rule "bypass" that is restricted to pull requests, and never permits pushing
-  directly to the branch). This mechanism implements the
-  commit-without-approval policies described above (obvious changes and code
-  you maintain), as well as the normal pre-commit review flow, where the author
-  chooses when to merge after receiving approval.
-- Members of the committers team have sufficient repository access to merge pull
-  requests, but may only merge a pull request after it has been approved by a
-  reviewer. A committer team member's own approval does not satisfy the review
-  requirement.
-- Any pull request author, i.e. any github user, may enable GitHub's auto-merge
+- Reviewers are the only actors on the ruleset's [bypass list][gh-bypass],
+  configured in *For pull requests only* mode. This lets a reviewer merge a
+  pull request (their own, or anyone else's) without waiting for the required
+  approval, while still preventing direct pushes to `main`. This mechanism
+  implements the commit-without-approval cases described above (urgent fixes,
+  obvious changes, and code you maintain), as well as the normal pre-commit
+  review flow, where the author chooses when to merge after receiving approval.
+- Committers are not on the bypass list. The `Write` role would normally let
+  them merge, but the ruleset requires an approving review from a code owner
+  first. Because only the reviewers team is listed in `CODEOWNERS`, a
+  committer's own approval does not satisfy the requirement; a committer can
+  only merge a pull request that a reviewer has already approved.
+- Any pull request author, i.e. any GitHub user, may enable GitHub's auto-merge
   ("merge when ready") feature on their pull request to record their intent
   that the change should land as soon as it has been approved and premerge
   checks pass.
+
+[gh-roles]: https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization
+[gh-rulesets]: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets
+[gh-bypass]: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository
 
 (discuss the change/gather consensus)=
 ### Proposing Major Changes (RFCs)
