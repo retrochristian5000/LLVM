@@ -84,9 +84,6 @@ using namespace llvm;
 using namespace llvm::VNCoercion;
 using namespace PatternMatch;
 
-using AvailableValue = GVNPass::AvailableValue;
-using AvailableValueInBlock = GVNPass::AvailableValueInBlock;
-
 #define DEBUG_TYPE "gvn"
 
 STATISTIC(NumGVNInstr, "Number of instructions deleted");
@@ -145,7 +142,7 @@ static cl::opt<uint32_t> MaxNumInsnsPerBlock(
     cl::desc("Max number of instructions to scan in each basic block in GVN "
              "(default = 100)"));
 
-struct llvm::GVNPass::Expression {
+struct llvm::GVNValueTable::Expression {
   uint32_t Opcode;
   bool Commutative = false;
   // The type is not necessarily the result type of the expression, it may be
@@ -178,24 +175,793 @@ struct llvm::GVNPass::Expression {
   }
 };
 
-template <> struct llvm::DenseMapInfo<GVNPass::Expression> {
-  static unsigned getHashValue(const GVNPass::Expression &E) {
+template <> struct llvm::DenseMapInfo<GVNValueTable::Expression> {
+  static unsigned getHashValue(const GVNValueTable::Expression &E) {
     using llvm::hash_value;
 
     return static_cast<unsigned>(hash_value(E));
   }
 
-  static bool isEqual(const GVNPass::Expression &LHS,
-                      const GVNPass::Expression &RHS) {
+  static bool isEqual(const GVNValueTable::Expression &LHS,
+                      const GVNValueTable::Expression &RHS) {
     return LHS == RHS;
   }
+};
+
+//===----------------------------------------------------------------------===//
+//                     ValueTable Internal Functions
+//===----------------------------------------------------------------------===//
+
+GVNValueTable::Expression GVNValueTable::createExpr(Instruction *I) {
+  Expression E;
+  E.Ty = I->getType();
+  E.Opcode = I->getOpcode();
+  if (const GCRelocateInst *GCR = dyn_cast<GCRelocateInst>(I)) {
+    // gc.relocate is 'special' call: its second and third operands are
+    // not real values, but indices into statepoint's argument list.
+    // Use the refered to values for purposes of identity.
+    E.VarArgs.push_back(lookupOrAdd(GCR->getOperand(0)));
+    E.VarArgs.push_back(lookupOrAdd(GCR->getBasePtr()));
+    E.VarArgs.push_back(lookupOrAdd(GCR->getDerivedPtr()));
+  } else {
+    for (Use &Op : I->operands())
+      E.VarArgs.push_back(lookupOrAdd(Op));
+  }
+  if (I->isCommutative()) {
+    // Ensure that commutative instructions that only differ by a permutation
+    // of their operands get the same value number by sorting the operand value
+    // numbers.  Since commutative operands are the 1st two operands it is more
+    // efficient to sort by hand rather than using, say, std::sort.
+    assert(I->getNumOperands() >= 2 && "Unsupported commutative instruction!");
+    if (E.VarArgs[0] > E.VarArgs[1])
+      std::swap(E.VarArgs[0], E.VarArgs[1]);
+    E.Commutative = true;
+  }
+
+  if (auto *C = dyn_cast<CmpInst>(I)) {
+    // Sort the operand value numbers so x<y and y>x get the same value number.
+    CmpInst::Predicate Predicate = C->getPredicate();
+    if (E.VarArgs[0] > E.VarArgs[1]) {
+      std::swap(E.VarArgs[0], E.VarArgs[1]);
+      Predicate = CmpInst::getSwappedPredicate(Predicate);
+    }
+    E.Opcode = (C->getOpcode() << 8) | Predicate;
+    E.Commutative = true;
+  } else if (auto *IVI = dyn_cast<InsertValueInst>(I)) {
+    E.VarArgs.append(IVI->idx_begin(), IVI->idx_end());
+  } else if (auto *SVI = dyn_cast<ShuffleVectorInst>(I)) {
+    ArrayRef<int> ShuffleMask = SVI->getShuffleMask();
+    E.VarArgs.append(ShuffleMask.begin(), ShuffleMask.end());
+  } else if (auto *CB = dyn_cast<CallBase>(I)) {
+    E.Attrs = CB->getAttributes();
+  }
+
+  return E;
+}
+
+GVNValueTable::Expression
+GVNValueTable::createCmpExpr(unsigned Opcode, CmpInst::Predicate Predicate,
+                             Value *LHS, Value *RHS) {
+  assert((Opcode == Instruction::ICmp || Opcode == Instruction::FCmp) &&
+         "Not a comparison!");
+  Expression E;
+  E.Ty = CmpInst::makeCmpResultType(LHS->getType());
+  E.VarArgs.push_back(lookupOrAdd(LHS));
+  E.VarArgs.push_back(lookupOrAdd(RHS));
+
+  // Sort the operand value numbers so x<y and y>x get the same value number.
+  if (E.VarArgs[0] > E.VarArgs[1]) {
+    std::swap(E.VarArgs[0], E.VarArgs[1]);
+    Predicate = CmpInst::getSwappedPredicate(Predicate);
+  }
+  E.Opcode = (Opcode << 8) | Predicate;
+  E.Commutative = true;
+  return E;
+}
+
+GVNValueTable::Expression
+GVNValueTable::createExtractvalueExpr(ExtractValueInst *EI) {
+  assert(EI && "Not an ExtractValueInst?");
+  Expression E;
+  E.Ty = EI->getType();
+  E.Opcode = 0;
+
+  WithOverflowInst *WO = dyn_cast<WithOverflowInst>(EI->getAggregateOperand());
+  if (WO != nullptr && EI->getNumIndices() == 1 && *EI->idx_begin() == 0) {
+    // EI is an extract from one of our with.overflow intrinsics. Synthesize
+    // a semantically equivalent expression instead of an extract value
+    // expression.
+    E.Opcode = WO->getBinaryOp();
+    E.VarArgs.push_back(lookupOrAdd(WO->getLHS()));
+    E.VarArgs.push_back(lookupOrAdd(WO->getRHS()));
+    return E;
+  }
+
+  // Not a recognised intrinsic. Fall back to producing an extract value
+  // expression.
+  E.Opcode = EI->getOpcode();
+  for (Use &Op : EI->operands())
+    E.VarArgs.push_back(lookupOrAdd(Op));
+
+  append_range(E.VarArgs, EI->indices());
+
+  return E;
+}
+
+GVNValueTable::Expression GVNValueTable::createGEPExpr(GetElementPtrInst *GEP) {
+  Expression E;
+  Type *PtrTy = GEP->getType()->getScalarType();
+  const DataLayout &DL = GEP->getDataLayout();
+  unsigned BitWidth = DL.getIndexTypeSizeInBits(PtrTy);
+  SmallMapVector<Value *, APInt, 4> VariableOffsets;
+  APInt ConstantOffset(BitWidth, 0);
+  if (GEP->collectOffset(DL, BitWidth, VariableOffsets, ConstantOffset)) {
+    // Convert into offset representation, to recognize equivalent address
+    // calculations that use different type encoding.
+    LLVMContext &Context = GEP->getContext();
+    E.Opcode = GEP->getOpcode();
+    E.Ty = nullptr;
+    E.VarArgs.push_back(lookupOrAdd(GEP->getPointerOperand()));
+    for (const auto &[V, Scale] : VariableOffsets) {
+      E.VarArgs.push_back(lookupOrAdd(V));
+      E.VarArgs.push_back(lookupOrAdd(ConstantInt::get(Context, Scale)));
+    }
+    if (!ConstantOffset.isZero())
+      E.VarArgs.push_back(
+          lookupOrAdd(ConstantInt::get(Context, ConstantOffset)));
+  } else {
+    // If converting to offset representation fails (for scalable vectors),
+    // fall back to type-based implementation.
+    E.Opcode = GEP->getOpcode();
+    E.Ty = GEP->getSourceElementType();
+    for (Use &Op : GEP->operands())
+      E.VarArgs.push_back(lookupOrAdd(Op));
+  }
+  return E;
+}
+
+uint32_t GVNValueTable::lookupOrAddCall(CallInst *C) {
+  // FIXME: Currently the calls which may access the thread id may
+  // be considered as not accessing the memory. But this is
+  // problematic for coroutines, since coroutines may resume in a
+  // different thread. So we disable the optimization here for the
+  // correctness. However, it may block many other correct
+  // optimizations. Revert this one when we detect the memory
+  // accessing kind more precisely.
+  if (C->getFunction()->isPresplitCoroutine()) {
+    ValueNumbering[C] = NextValueNumber;
+    return NextValueNumber++;
+  }
+
+  // Do not combine convergent calls since they implicitly depend on the set of
+  // threads that is currently executing, and they might be in different basic
+  // blocks.
+  if (C->isConvergent()) {
+    ValueNumbering[C] = NextValueNumber;
+    return NextValueNumber++;
+  }
+
+  // Conservatively assign unique value numbers to calls with operand bundles.
+  // TODO: Bundle names could be included in the value numbering expression to
+  // allow combining calls with identical bundles.
+  if (C->hasOperandBundles()) {
+    ValueNumbering[C] = NextValueNumber;
+    return NextValueNumber++;
+  }
+
+  if (AA->doesNotAccessMemory(C)) {
+    Expression Exp = createExpr(C);
+    uint32_t E = assignExpNewValueNum(Exp).first;
+    ValueNumbering[C] = E;
+    return E;
+  }
+
+  if (MD && AA->onlyReadsMemory(C)) {
+    Expression Exp = createExpr(C);
+    auto [E, IsValNumNew] = assignExpNewValueNum(Exp);
+    if (IsValNumNew) {
+      ValueNumbering[C] = E;
+      return E;
+    }
+
+    MemDepResult LocalDep = MD->getDependency(C);
+
+    if (!LocalDep.isDef() && !LocalDep.isNonLocal()) {
+      ValueNumbering[C] = NextValueNumber;
+      return NextValueNumber++;
+    }
+
+    if (LocalDep.isDef()) {
+      // For masked load/store intrinsics, the local_dep may actually be
+      // a normal load or store instruction.
+      CallInst *LocalDepCall = dyn_cast<CallInst>(LocalDep.getInst());
+
+      if (!LocalDepCall || LocalDepCall->arg_size() != C->arg_size()) {
+        ValueNumbering[C] = NextValueNumber;
+        return NextValueNumber++;
+      }
+
+      for (unsigned I = 0, E = C->arg_size(); I < E; ++I) {
+        uint32_t CVN = lookupOrAdd(C->getArgOperand(I));
+        uint32_t LocalDepCallVN = lookupOrAdd(LocalDepCall->getArgOperand(I));
+        if (CVN != LocalDepCallVN) {
+          ValueNumbering[C] = NextValueNumber;
+          return NextValueNumber++;
+        }
+      }
+
+      uint32_t V = lookupOrAdd(LocalDepCall);
+      ValueNumbering[C] = V;
+      return V;
+    }
+
+    // Non-local case.
+    const MemoryDependenceResults::NonLocalDepInfo &Deps =
+        MD->getNonLocalCallDependency(C);
+    // FIXME: Move the checking logic to MemDep!
+    CallInst *CDep = nullptr;
+
+    // Check to see if we have a single dominating call instruction that is
+    // identical to C.
+    for (const NonLocalDepEntry &I : Deps) {
+      if (I.getResult().isNonLocal())
+        continue;
+
+      // We don't handle non-definitions.  If we already have a call, reject
+      // instruction dependencies.
+      if (!I.getResult().isDef() || CDep != nullptr) {
+        CDep = nullptr;
+        break;
+      }
+
+      CallInst *NonLocalDepCall = dyn_cast<CallInst>(I.getResult().getInst());
+      // FIXME: All duplicated with non-local case.
+      if (NonLocalDepCall && DT->properlyDominates(I.getBB(), C->getParent())) {
+        CDep = NonLocalDepCall;
+        continue;
+      }
+
+      CDep = nullptr;
+      break;
+    }
+
+    if (!CDep) {
+      ValueNumbering[C] = NextValueNumber;
+      return NextValueNumber++;
+    }
+
+    if (CDep->arg_size() != C->arg_size()) {
+      ValueNumbering[C] = NextValueNumber;
+      return NextValueNumber++;
+    }
+    for (unsigned I = 0, E = C->arg_size(); I < E; ++I) {
+      uint32_t CVN = lookupOrAdd(C->getArgOperand(I));
+      uint32_t CDepVN = lookupOrAdd(CDep->getArgOperand(I));
+      if (CVN != CDepVN) {
+        ValueNumbering[C] = NextValueNumber;
+        return NextValueNumber++;
+      }
+    }
+
+    uint32_t V = lookupOrAdd(CDep);
+    ValueNumbering[C] = V;
+    return V;
+  }
+
+  if (MSSA && IsMSSAEnabled && AA->onlyReadsMemory(C)) {
+    Expression Exp = createExpr(C);
+    addMemoryStateToExp(C, Exp);
+    auto [V, _] = assignExpNewValueNum(Exp);
+    ValueNumbering[C] = V;
+    return V;
+  }
+
+  ValueNumbering[C] = NextValueNumber;
+  return NextValueNumber++;
+}
+
+/// Returns the value number for the specified load or store instruction.
+uint32_t GVNValueTable::computeLoadStoreVN(Instruction *I) {
+  if (!MSSA || !IsMSSAEnabled) {
+    ValueNumbering[I] = NextValueNumber;
+    return NextValueNumber++;
+  }
+
+  Expression Exp;
+  Exp.Ty = I->getType();
+  Exp.Opcode = I->getOpcode();
+  for (Use &Op : I->operands())
+    Exp.VarArgs.push_back(lookupOrAdd(Op));
+  addMemoryStateToExp(I, Exp);
+
+  auto [V, _] = assignExpNewValueNum(Exp);
+  ValueNumbering[I] = V;
+  return V;
+}
+
+/// Translate value number \p Num using phis, so that it has the values of
+/// the phis in BB.
+uint32_t GVNValueTable::phiTranslateImpl(const BasicBlock *Pred,
+                                         const BasicBlock *PhiBlock,
+                                         uint32_t Num,
+                                         GVNLeaderMap &LeaderTable) {
+  // See if we can refine the value number by looking at the PN incoming value
+  // for the given predecessor.
+  if (PHINode *PN = NumberingPhi[Num]) {
+    if (PN->getParent() != PhiBlock)
+      return Num;
+    for (unsigned I = 0; I != PN->getNumIncomingValues(); ++I) {
+      if (PN->getIncomingBlock(I) != Pred)
+        continue;
+      if (uint32_t TransVal = lookup(PN->getIncomingValue(I), false))
+        return TransVal;
+    }
+    return Num;
+  }
+
+  if (BasicBlock *BB = NumberingBB[Num]) {
+    assert(MSSA && "NumberingBB is non-empty only when using MemorySSA");
+    // Value numbers of basic blocks are used to represent memory state in
+    // load/store instructions and read-only function calls when said state is
+    // set by a MemoryPhi.
+    if (BB != PhiBlock)
+      return Num;
+    MemoryPhi *MPhi = MSSA->getMemoryAccess(BB);
+    for (unsigned i = 0, N = MPhi->getNumIncomingValues(); i != N; ++i) {
+      if (MPhi->getIncomingBlock(i) != Pred)
+        continue;
+      MemoryAccess *MA = MPhi->getIncomingValue(i);
+      if (auto *PredPhi = dyn_cast<MemoryPhi>(MA))
+        return lookupOrAdd(PredPhi->getBlock());
+      if (MSSA->isLiveOnEntryDef(MA))
+        return lookupOrAdd(&BB->getParent()->getEntryBlock());
+      return lookupOrAdd(cast<MemoryUseOrDef>(MA)->getMemoryInst());
+    }
+    llvm_unreachable(
+        "CFG/MemorySSA mismatch: predecessor not found among incoming blocks");
+  }
+
+  // If there is any value related with Num is defined in a BB other than
+  // PhiBlock, it cannot depend on a phi in PhiBlock without going through
+  // a backedge. We can do an early exit in that case to save compile time.
+  if (!areAllValsInBB(Num, PhiBlock, LeaderTable))
+    return Num;
+
+  if (Num >= ExprIdx.size() || ExprIdx[Num] == 0)
+    return Num;
+  Expression Exp = Expressions[ExprIdx[Num]];
+
+  for (unsigned I = 0; I < Exp.VarArgs.size(); I++) {
+    // For InsertValue and ExtractValue, some varargs are index numbers
+    // instead of value numbers. Those index numbers should not be
+    // translated.
+    if ((I > 1 && Exp.Opcode == Instruction::InsertValue) ||
+        (I > 0 && Exp.Opcode == Instruction::ExtractValue) ||
+        (I > 1 && Exp.Opcode == Instruction::ShuffleVector))
+      continue;
+    Exp.VarArgs[I] = phiTranslate(Pred, PhiBlock, Exp.VarArgs[I], LeaderTable);
+  }
+
+  if (Exp.Commutative) {
+    assert(Exp.VarArgs.size() >= 2 && "Unsupported commutative instruction!");
+    if (Exp.VarArgs[0] > Exp.VarArgs[1]) {
+      std::swap(Exp.VarArgs[0], Exp.VarArgs[1]);
+      uint32_t Opcode = Exp.Opcode >> 8;
+      if (Opcode == Instruction::ICmp || Opcode == Instruction::FCmp)
+        Exp.Opcode = (Opcode << 8) |
+                     CmpInst::getSwappedPredicate(
+                         static_cast<CmpInst::Predicate>(Exp.Opcode & 255));
+    }
+  }
+
+  if (uint32_t NewNum = ExpressionNumbering[Exp]) {
+    if (Exp.Opcode == Instruction::Call && NewNum != Num)
+      return areCallValsEqual(Num, NewNum, Pred, PhiBlock, LeaderTable) ? NewNum
+                                                                        : Num;
+    return NewNum;
+  }
+  return Num;
+}
+
+// Return true if the value number \p Num and NewNum have equal value.
+// Return false if the result is unknown.
+bool GVNValueTable::areCallValsEqual(uint32_t Num, uint32_t NewNum,
+                                     const BasicBlock *Pred,
+                                     const BasicBlock *PhiBlock,
+                                     GVNLeaderMap &LeaderTable) {
+  CallInst *Call = nullptr;
+  auto Leaders = LeaderTable.getLeaders(Num);
+  for (const auto &Entry : Leaders) {
+    Call = dyn_cast<CallInst>(&*Entry.Val);
+    if (Call && Call->getParent() == PhiBlock)
+      break;
+  }
+
+  if (AA->doesNotAccessMemory(Call))
+    return true;
+
+  if (!MD || !AA->onlyReadsMemory(Call))
+    return false;
+
+  MemDepResult LocalDep = MD->getDependency(Call);
+  if (!LocalDep.isNonLocal())
+    return false;
+
+  const MemoryDependenceResults::NonLocalDepInfo &Deps =
+      MD->getNonLocalCallDependency(Call);
+
+  // Check to see if the Call has no function local clobber.
+  for (const NonLocalDepEntry &D : Deps) {
+    if (D.getResult().isNonFuncLocal())
+      return true;
+  }
+  return false;
+}
+
+/// Return a pair the first field showing the value number of \p Exp and the
+/// second field showing whether it is a value number newly created.
+std::pair<uint32_t, bool> GVNValueTable::assignExpNewValueNum(Expression &Exp) {
+  uint32_t &E = ExpressionNumbering[Exp];
+  bool CreateNewValNum = !E;
+  if (CreateNewValNum) {
+    Expressions.push_back(Exp);
+    if (ExprIdx.size() < NextValueNumber + 1)
+      ExprIdx.resize(NextValueNumber * 2);
+    E = NextValueNumber;
+    ExprIdx[NextValueNumber++] = NextExprNumber++;
+  }
+  return {E, CreateNewValNum};
+}
+
+/// Return whether all the values related with the same \p num are
+/// defined in \p BB.
+bool GVNValueTable::areAllValsInBB(uint32_t Num, const BasicBlock *BB,
+                                   GVNLeaderMap &LeaderTable) {
+  return all_of(
+      LeaderTable.getLeaders(Num),
+      [=](const GVNLeaderMap::LeaderTableEntry &L) { return L.BB == BB; });
+}
+
+/// Include the incoming memory state into the hash of the expression for the
+/// given instruction. If the incoming memory state is:
+/// * LiveOnEntry, add the value number of the entry block,
+/// * a MemoryPhi, add the value number of the basic block corresponding to that
+/// MemoryPhi,
+/// * a MemoryDef, add the value number of the memory setting instruction.
+void GVNValueTable::addMemoryStateToExp(Instruction *I, Expression &Exp) {
+  assert(MSSA && "addMemoryStateToExp should not be called without MemorySSA");
+  assert(MSSA->getMemoryAccess(I) && "Instruction does not access memory");
+  MemoryAccess *MA = MSSA->getSkipSelfWalker()->getClobberingMemoryAccess(I);
+  Exp.VarArgs.push_back(lookupOrAdd(MA));
+}
+
+//===----------------------------------------------------------------------===//
+//                     ValueTable External Functions
+//===----------------------------------------------------------------------===//
+
+GVNValueTable::GVNValueTable() = default;
+GVNValueTable::GVNValueTable(const GVNValueTable &) = default;
+GVNValueTable::GVNValueTable(GVNValueTable &&) = default;
+GVNValueTable::~GVNValueTable() = default;
+GVNValueTable &GVNValueTable::operator=(const GVNValueTable &Arg) = default;
+
+/// add - Insert a value into the table with a specified value number.
+void GVNValueTable::add(Value *V, uint32_t Num) {
+  ValueNumbering.insert(std::make_pair(V, Num));
+  if (PHINode *PN = dyn_cast<PHINode>(V))
+    NumberingPhi[Num] = PN;
+}
+
+uint32_t GVNValueTable::lookupOrAdd(MemoryAccess *MA) {
+  return MSSA->isLiveOnEntryDef(MA) || isa<MemoryPhi>(MA)
+             ? lookupOrAdd(MA->getBlock())
+             : lookupOrAdd(cast<MemoryUseOrDef>(MA)->getMemoryInst());
+}
+
+/// lookupOrAdd - Returns the value number for the specified value, assigning
+/// it a new number if it did not have one before.
+uint32_t GVNValueTable::lookupOrAdd(Value *V) {
+  auto VI = ValueNumbering.find(V);
+  if (VI != ValueNumbering.end())
+    return VI->second;
+
+  auto *I = dyn_cast<Instruction>(V);
+  if (!I) {
+    ValueNumbering[V] = NextValueNumber;
+    if (isa<BasicBlock>(V))
+      NumberingBB[NextValueNumber] = cast<BasicBlock>(V);
+    return NextValueNumber++;
+  }
+
+  Expression Exp;
+  switch (I->getOpcode()) {
+  case Instruction::Call:
+    return lookupOrAddCall(cast<CallInst>(I));
+  case Instruction::FNeg:
+  case Instruction::Add:
+  case Instruction::FAdd:
+  case Instruction::Sub:
+  case Instruction::FSub:
+  case Instruction::Mul:
+  case Instruction::FMul:
+  case Instruction::UDiv:
+  case Instruction::SDiv:
+  case Instruction::FDiv:
+  case Instruction::URem:
+  case Instruction::SRem:
+  case Instruction::FRem:
+  case Instruction::Shl:
+  case Instruction::LShr:
+  case Instruction::AShr:
+  case Instruction::And:
+  case Instruction::Or:
+  case Instruction::Xor:
+  case Instruction::ICmp:
+  case Instruction::FCmp:
+  case Instruction::Trunc:
+  case Instruction::ZExt:
+  case Instruction::SExt:
+  case Instruction::FPToUI:
+  case Instruction::FPToSI:
+  case Instruction::UIToFP:
+  case Instruction::SIToFP:
+  case Instruction::FPTrunc:
+  case Instruction::FPExt:
+  case Instruction::PtrToInt:
+  case Instruction::PtrToAddr:
+  case Instruction::IntToPtr:
+  case Instruction::AddrSpaceCast:
+  case Instruction::BitCast:
+  case Instruction::Select:
+  case Instruction::Freeze:
+  case Instruction::ExtractElement:
+  case Instruction::InsertElement:
+  case Instruction::ShuffleVector:
+  case Instruction::InsertValue:
+    Exp = createExpr(I);
+    break;
+  case Instruction::GetElementPtr:
+    Exp = createGEPExpr(cast<GetElementPtrInst>(I));
+    break;
+  case Instruction::ExtractValue:
+    Exp = createExtractvalueExpr(cast<ExtractValueInst>(I));
+    break;
+  case Instruction::PHI:
+    ValueNumbering[V] = NextValueNumber;
+    NumberingPhi[NextValueNumber] = cast<PHINode>(V);
+    return NextValueNumber++;
+  case Instruction::Load:
+  case Instruction::Store:
+    return computeLoadStoreVN(I);
+  default:
+    ValueNumbering[V] = NextValueNumber;
+    return NextValueNumber++;
+  }
+
+  uint32_t E = assignExpNewValueNum(Exp).first;
+  ValueNumbering[V] = E;
+  return E;
+}
+
+/// Returns the value number of the specified value. Fails if
+/// the value has not yet been numbered.
+uint32_t GVNValueTable::lookup(Value *V, bool Verify) const {
+  auto VI = ValueNumbering.find(V);
+  if (Verify) {
+    assert(VI != ValueNumbering.end() && "Value not numbered?");
+    return VI->second;
+  }
+  return (VI != ValueNumbering.end()) ? VI->second : 0;
+}
+
+/// Returns the value number of the given comparison,
+/// assigning it a new number if it did not have one before.  Useful when
+/// we deduced the result of a comparison, but don't immediately have an
+/// instruction realizing that comparison to hand.
+uint32_t GVNValueTable::lookupOrAddCmp(unsigned Opcode,
+                                       CmpInst::Predicate Predicate, Value *LHS,
+                                       Value *RHS) {
+  Expression Exp = createCmpExpr(Opcode, Predicate, LHS, RHS);
+  return assignExpNewValueNum(Exp).first;
+}
+
+/// Returns the value number of ptrtoint \p Ptr to \Ty.
+uint32_t GVNValueTable::lookupPtrToInt(Value *Ptr, Type *Ty) {
+  Expression Exp(Instruction::PtrToInt);
+  Exp.Ty = Ty;
+  Exp.VarArgs.push_back(lookupOrAdd(Ptr));
+  return ExpressionNumbering.lookup(Exp);
+}
+
+/// Wrap phiTranslateImpl to provide caching functionality.
+uint32_t GVNValueTable::phiTranslate(const BasicBlock *Pred,
+                                     const BasicBlock *PhiBlock, uint32_t Num,
+                                     GVNLeaderMap &LeaderTable) {
+  auto FindRes = PhiTranslateTable.find({Num, Pred});
+  if (FindRes != PhiTranslateTable.end())
+    return FindRes->second;
+  uint32_t NewNum = phiTranslateImpl(Pred, PhiBlock, Num, LeaderTable);
+  PhiTranslateTable.insert({{Num, Pred}, NewNum});
+  return NewNum;
+}
+
+/// Erase stale entry from phiTranslate cache so phiTranslate can be computed
+/// again.
+void GVNValueTable::eraseTranslateCacheEntry(uint32_t Num,
+                                             const BasicBlock &CurrBlock) {
+  for (const BasicBlock *Pred : predecessors(&CurrBlock))
+    PhiTranslateTable.erase({Num, Pred});
+}
+
+/// Returns true if a value number exists for the specified value.
+bool GVNValueTable::exists(Value *V) const {
+  return ValueNumbering.contains(V);
+}
+
+/// Remove all entries from the ValueTable.
+void GVNValueTable::clear() {
+  ValueNumbering.clear();
+  ExpressionNumbering.clear();
+  NumberingPhi.clear();
+  NumberingBB.clear();
+  PhiTranslateTable.clear();
+  NextValueNumber = 1;
+  Expressions.clear();
+  ExprIdx.clear();
+  NextExprNumber = 0;
+}
+
+/// Remove a value from the value numbering.
+void GVNValueTable::erase(Value *V) {
+  uint32_t Num = ValueNumbering.lookup(V);
+  ValueNumbering.erase(V);
+  // If V is PHINode, V <--> value number is an one-to-one mapping.
+  if (isa<PHINode>(V))
+    NumberingPhi.erase(Num);
+  else if (isa<BasicBlock>(V))
+    NumberingBB.erase(Num);
+}
+
+/// verifyRemoved - Verify that the value is removed from all internal data
+/// structures.
+void GVNValueTable::verifyRemoved(const Value *V) const {
+  assert(!ValueNumbering.contains(V) &&
+         "Inst still occurs in value numbering map!");
+}
+
+//===----------------------------------------------------------------------===//
+//                     LeaderMap External Functions
+//===----------------------------------------------------------------------===//
+
+/// Push a new Value to the LeaderTable onto the list for its value number.
+void GVNLeaderMap::insert(uint32_t N, Value *V, const BasicBlock *BB) {
+  const auto &[It, Inserted] = NumToLeaders.try_emplace(N, V, BB, nullptr);
+  if (!Inserted) {
+    // Key already exists: insert new node after the head.
+    auto *NewSlot = TableAllocator.Allocate<LeaderListNode>();
+    new (NewSlot) LeaderListNode(V, BB, It->second.Next);
+    It->second.Next = NewSlot;
+  }
+}
+
+/// Scan the list of values corresponding to a given
+/// value number, and remove the given instruction if encountered.
+void GVNLeaderMap::erase(uint32_t N, Instruction *I, const BasicBlock *BB) {
+  auto It = NumToLeaders.find(N);
+  if (It == NumToLeaders.end())
+    return;
+
+  LeaderListNode *Prev = nullptr;
+  LeaderListNode *Curr = &It->second;
+
+  while (Curr && (Curr->Entry.Val != I || Curr->Entry.BB != BB)) {
+    Prev = Curr;
+    Curr = Curr->Next;
+  }
+
+  if (!Curr)
+    return;
+
+  if (Prev) {
+    // Non-head node: unlink and destroy.
+    Prev->Next = Curr->Next;
+    Curr->~LeaderListNode();
+    TableAllocator.Deallocate<LeaderListNode>(Curr);
+  } else {
+    // Head node (stored by value in DenseMap).
+    if (!Curr->Next) {
+      // Only node; erase from map (DenseMap calls the destructor).
+      NumToLeaders.erase(It);
+    } else {
+      // Move second node's data into head, then destroy second node.
+      LeaderListNode *Next = Curr->Next;
+      Curr->Entry.Val = std::move(Next->Entry.Val);
+      Curr->Entry.BB = Next->Entry.BB;
+      Curr->Next = Next->Next;
+      Next->~LeaderListNode();
+      TableAllocator.Deallocate<LeaderListNode>(Next);
+    }
+  }
+}
+
+namespace {
+//===----------------------------------------------------------------------===//
+//                     Helper Dependency Information Classes
+//===----------------------------------------------------------------------===//
+
+enum class DepKind {
+  Other = 0, // Unknown value.
+  Def,       // Exactly overlapping locations.
+  Clobber,   // Reaching value superset of needed bits.
+  Select,    // Reaching value is a select of two reaching addresses.
+};
+
+// Describe a memory location value, such that there exists a path to a point
+// in the program, along which that memory location is not modified.
+struct ReachingMemVal {
+  DepKind Kind;
+  BasicBlock *Block;
+  const Value *Addr;
+  Instruction *Inst;
+  int32_t Offset;
+  // For DepKind::Select only: the condition and the two addresses referenced
+  // by the "true" and "false" side of the select-dependent load.
+  const Value *SelCond = nullptr;
+  const Value *SelTrueAddr = nullptr;
+  const Value *SelFalseAddr = nullptr;
+
+  static ReachingMemVal getUnknown(BasicBlock *BB, const Value *Addr,
+                                   Instruction *Inst = nullptr) {
+    return {DepKind::Other, BB, Addr, Inst, -1};
+  }
+
+  static ReachingMemVal getDef(const Value *Addr, Instruction *Inst) {
+    return {DepKind::Def, Inst->getParent(), Addr, Inst, -1};
+  }
+
+  static ReachingMemVal getClobber(const Value *Addr, Instruction *Inst,
+                                   int32_t Offset = -1) {
+    return {DepKind::Clobber, Inst->getParent(), Addr, Inst, Offset};
+  }
+
+  static ReachingMemVal getSelect(BasicBlock *BB, const Value *Cond,
+                                  const Value *TrueAddr,
+                                  const Value *FalseAddr) {
+    return {DepKind::Select, BB,       nullptr, nullptr, -1, Cond,
+            TrueAddr,        FalseAddr};
+  }
+};
+
+struct DependencyBlockInfo {
+  DependencyBlockInfo() = delete;
+  DependencyBlockInfo(const PHITransAddr &Addr, MemoryAccess *ClobberMA)
+      : Addr(Addr), InitialClobberMA(ClobberMA), ClobberMA(ClobberMA),
+        ForceUnknown(false), Visited(false) {}
+  PHITransAddr Addr;
+  MemoryAccess *InitialClobberMA;
+  MemoryAccess *ClobberMA;
+  std::optional<ReachingMemVal> MemVal;
+  bool ForceUnknown : 1;
+  bool Visited : 1;
+};
+
+enum class AvailabilityState : char {
+  /// We know the block *is not* fully available. This is a fixpoint.
+  Unavailable = 0,
+  /// We know the block *is* fully available. This is a fixpoint.
+  Available = 1,
+  /// We do not know whether the block is fully available or not,
+  /// but we are currently speculating that it will be.
+  /// If it would have turned out that the block was, in fact, not fully
+  /// available, this would have been cleaned up into an Unavailable.
+  SpeculativelyAvailable = 2,
 };
 
 /// Represents a particular available value that we know how to materialize.
 /// Materialization of an AvailableValue never fails.  An AvailableValue is
 /// implicitly associated with a rematerialization point which is the
 /// location of the instruction from which it was formed.
-struct llvm::GVNPass::AvailableValue {
+struct AvailableValue {
   enum class ValType {
     SimpleVal, // A simple offsetted value that is accessed.
     LoadVal,   // A value produced by a load.
@@ -357,7 +1123,7 @@ Value *AvailableValue::MaterializeAdjustedValue(LoadInst *Load,
 
 /// Represents an AvailableValue which can be rematerialized at the end of
 /// the associated BasicBlock.
-struct llvm::GVNPass::AvailableValueInBlock {
+struct AvailableValueInBlock {
   /// BB - The basic block in question.
   BasicBlock *BB = nullptr;
 
@@ -387,786 +1153,233 @@ struct llvm::GVNPass::AvailableValueInBlock {
   }
 };
 
-//===----------------------------------------------------------------------===//
-//                     ValueTable Internal Functions
-//===----------------------------------------------------------------------===//
-
-GVNPass::Expression GVNPass::ValueTable::createExpr(Instruction *I) {
-  Expression E;
-  E.Ty = I->getType();
-  E.Opcode = I->getOpcode();
-  if (const GCRelocateInst *GCR = dyn_cast<GCRelocateInst>(I)) {
-    // gc.relocate is 'special' call: its second and third operands are
-    // not real values, but indices into statepoint's argument list.
-    // Use the refered to values for purposes of identity.
-    E.VarArgs.push_back(lookupOrAdd(GCR->getOperand(0)));
-    E.VarArgs.push_back(lookupOrAdd(GCR->getBasePtr()));
-    E.VarArgs.push_back(lookupOrAdd(GCR->getDerivedPtr()));
-  } else {
-    for (Use &Op : I->operands())
-      E.VarArgs.push_back(lookupOrAdd(Op));
-  }
-  if (I->isCommutative()) {
-    // Ensure that commutative instructions that only differ by a permutation
-    // of their operands get the same value number by sorting the operand value
-    // numbers.  Since commutative operands are the 1st two operands it is more
-    // efficient to sort by hand rather than using, say, std::sort.
-    assert(I->getNumOperands() >= 2 && "Unsupported commutative instruction!");
-    if (E.VarArgs[0] > E.VarArgs[1])
-      std::swap(E.VarArgs[0], E.VarArgs[1]);
-    E.Commutative = true;
-  }
-
-  if (auto *C = dyn_cast<CmpInst>(I)) {
-    // Sort the operand value numbers so x<y and y>x get the same value number.
-    CmpInst::Predicate Predicate = C->getPredicate();
-    if (E.VarArgs[0] > E.VarArgs[1]) {
-      std::swap(E.VarArgs[0], E.VarArgs[1]);
-      Predicate = CmpInst::getSwappedPredicate(Predicate);
-    }
-    E.Opcode = (C->getOpcode() << 8) | Predicate;
-    E.Commutative = true;
-  } else if (auto *IVI = dyn_cast<InsertValueInst>(I)) {
-    E.VarArgs.append(IVI->idx_begin(), IVI->idx_end());
-  } else if (auto *SVI = dyn_cast<ShuffleVectorInst>(I)) {
-    ArrayRef<int> ShuffleMask = SVI->getShuffleMask();
-    E.VarArgs.append(ShuffleMask.begin(), ShuffleMask.end());
-  } else if (auto *CB = dyn_cast<CallBase>(I)) {
-    E.Attrs = CB->getAttributes();
-  }
-
-  return E;
-}
-
-GVNPass::Expression GVNPass::ValueTable::createCmpExpr(
-    unsigned Opcode, CmpInst::Predicate Predicate, Value *LHS, Value *RHS) {
-  assert((Opcode == Instruction::ICmp || Opcode == Instruction::FCmp) &&
-         "Not a comparison!");
-  Expression E;
-  E.Ty = CmpInst::makeCmpResultType(LHS->getType());
-  E.VarArgs.push_back(lookupOrAdd(LHS));
-  E.VarArgs.push_back(lookupOrAdd(RHS));
-
-  // Sort the operand value numbers so x<y and y>x get the same value number.
-  if (E.VarArgs[0] > E.VarArgs[1]) {
-    std::swap(E.VarArgs[0], E.VarArgs[1]);
-    Predicate = CmpInst::getSwappedPredicate(Predicate);
-  }
-  E.Opcode = (Opcode << 8) | Predicate;
-  E.Commutative = true;
-  return E;
-}
-
-GVNPass::Expression
-GVNPass::ValueTable::createExtractvalueExpr(ExtractValueInst *EI) {
-  assert(EI && "Not an ExtractValueInst?");
-  Expression E;
-  E.Ty = EI->getType();
-  E.Opcode = 0;
-
-  WithOverflowInst *WO = dyn_cast<WithOverflowInst>(EI->getAggregateOperand());
-  if (WO != nullptr && EI->getNumIndices() == 1 && *EI->idx_begin() == 0) {
-    // EI is an extract from one of our with.overflow intrinsics. Synthesize
-    // a semantically equivalent expression instead of an extract value
-    // expression.
-    E.Opcode = WO->getBinaryOp();
-    E.VarArgs.push_back(lookupOrAdd(WO->getLHS()));
-    E.VarArgs.push_back(lookupOrAdd(WO->getRHS()));
-    return E;
-  }
-
-  // Not a recognised intrinsic. Fall back to producing an extract value
-  // expression.
-  E.Opcode = EI->getOpcode();
-  for (Use &Op : EI->operands())
-    E.VarArgs.push_back(lookupOrAdd(Op));
-
-  append_range(E.VarArgs, EI->indices());
-
-  return E;
-}
-
-GVNPass::Expression GVNPass::ValueTable::createGEPExpr(GetElementPtrInst *GEP) {
-  Expression E;
-  Type *PtrTy = GEP->getType()->getScalarType();
-  const DataLayout &DL = GEP->getDataLayout();
-  unsigned BitWidth = DL.getIndexTypeSizeInBits(PtrTy);
-  SmallMapVector<Value *, APInt, 4> VariableOffsets;
-  APInt ConstantOffset(BitWidth, 0);
-  if (GEP->collectOffset(DL, BitWidth, VariableOffsets, ConstantOffset)) {
-    // Convert into offset representation, to recognize equivalent address
-    // calculations that use different type encoding.
-    LLVMContext &Context = GEP->getContext();
-    E.Opcode = GEP->getOpcode();
-    E.Ty = nullptr;
-    E.VarArgs.push_back(lookupOrAdd(GEP->getPointerOperand()));
-    for (const auto &[V, Scale] : VariableOffsets) {
-      E.VarArgs.push_back(lookupOrAdd(V));
-      E.VarArgs.push_back(lookupOrAdd(ConstantInt::get(Context, Scale)));
-    }
-    if (!ConstantOffset.isZero())
-      E.VarArgs.push_back(
-          lookupOrAdd(ConstantInt::get(Context, ConstantOffset)));
-  } else {
-    // If converting to offset representation fails (for scalable vectors),
-    // fall back to type-based implementation.
-    E.Opcode = GEP->getOpcode();
-    E.Ty = GEP->getSourceElementType();
-    for (Use &Op : GEP->operands())
-      E.VarArgs.push_back(lookupOrAdd(Op));
-  }
-  return E;
-}
-
-uint32_t GVNPass::ValueTable::lookupOrAddCall(CallInst *C) {
-  // FIXME: Currently the calls which may access the thread id may
-  // be considered as not accessing the memory. But this is
-  // problematic for coroutines, since coroutines may resume in a
-  // different thread. So we disable the optimization here for the
-  // correctness. However, it may block many other correct
-  // optimizations. Revert this one when we detect the memory
-  // accessing kind more precisely.
-  if (C->getFunction()->isPresplitCoroutine()) {
-    ValueNumbering[C] = NextValueNumber;
-    return NextValueNumber++;
-  }
-
-  // Do not combine convergent calls since they implicitly depend on the set of
-  // threads that is currently executing, and they might be in different basic
-  // blocks.
-  if (C->isConvergent()) {
-    ValueNumbering[C] = NextValueNumber;
-    return NextValueNumber++;
-  }
-
-  if (AA->doesNotAccessMemory(C)) {
-    Expression Exp = createExpr(C);
-    uint32_t E = assignExpNewValueNum(Exp).first;
-    ValueNumbering[C] = E;
-    return E;
-  }
-
-  if (MD && AA->onlyReadsMemory(C)) {
-    Expression Exp = createExpr(C);
-    auto [E, IsValNumNew] = assignExpNewValueNum(Exp);
-    if (IsValNumNew) {
-      ValueNumbering[C] = E;
-      return E;
-    }
-
-    MemDepResult LocalDep = MD->getDependency(C);
-
-    if (!LocalDep.isDef() && !LocalDep.isNonLocal()) {
-      ValueNumbering[C] = NextValueNumber;
-      return NextValueNumber++;
-    }
-
-    if (LocalDep.isDef()) {
-      // For masked load/store intrinsics, the local_dep may actually be
-      // a normal load or store instruction.
-      CallInst *LocalDepCall = dyn_cast<CallInst>(LocalDep.getInst());
-
-      if (!LocalDepCall || LocalDepCall->arg_size() != C->arg_size()) {
-        ValueNumbering[C] = NextValueNumber;
-        return NextValueNumber++;
-      }
-
-      for (unsigned I = 0, E = C->arg_size(); I < E; ++I) {
-        uint32_t CVN = lookupOrAdd(C->getArgOperand(I));
-        uint32_t LocalDepCallVN = lookupOrAdd(LocalDepCall->getArgOperand(I));
-        if (CVN != LocalDepCallVN) {
-          ValueNumbering[C] = NextValueNumber;
-          return NextValueNumber++;
-        }
-      }
-
-      uint32_t V = lookupOrAdd(LocalDepCall);
-      ValueNumbering[C] = V;
-      return V;
-    }
-
-    // Non-local case.
-    const MemoryDependenceResults::NonLocalDepInfo &Deps =
-        MD->getNonLocalCallDependency(C);
-    // FIXME: Move the checking logic to MemDep!
-    CallInst *CDep = nullptr;
-
-    // Check to see if we have a single dominating call instruction that is
-    // identical to C.
-    for (const NonLocalDepEntry &I : Deps) {
-      if (I.getResult().isNonLocal())
-        continue;
-
-      // We don't handle non-definitions.  If we already have a call, reject
-      // instruction dependencies.
-      if (!I.getResult().isDef() || CDep != nullptr) {
-        CDep = nullptr;
-        break;
-      }
-
-      CallInst *NonLocalDepCall = dyn_cast<CallInst>(I.getResult().getInst());
-      // FIXME: All duplicated with non-local case.
-      if (NonLocalDepCall && DT->properlyDominates(I.getBB(), C->getParent())) {
-        CDep = NonLocalDepCall;
-        continue;
-      }
-
-      CDep = nullptr;
-      break;
-    }
-
-    if (!CDep) {
-      ValueNumbering[C] = NextValueNumber;
-      return NextValueNumber++;
-    }
-
-    if (CDep->arg_size() != C->arg_size()) {
-      ValueNumbering[C] = NextValueNumber;
-      return NextValueNumber++;
-    }
-    for (unsigned I = 0, E = C->arg_size(); I < E; ++I) {
-      uint32_t CVN = lookupOrAdd(C->getArgOperand(I));
-      uint32_t CDepVN = lookupOrAdd(CDep->getArgOperand(I));
-      if (CVN != CDepVN) {
-        ValueNumbering[C] = NextValueNumber;
-        return NextValueNumber++;
-      }
-    }
-
-    uint32_t V = lookupOrAdd(CDep);
-    ValueNumbering[C] = V;
-    return V;
-  }
-
-  if (MSSA && IsMSSAEnabled && AA->onlyReadsMemory(C)) {
-    Expression Exp = createExpr(C);
-    addMemoryStateToExp(C, Exp);
-    auto [V, _] = assignExpNewValueNum(Exp);
-    ValueNumbering[C] = V;
-    return V;
-  }
-
-  ValueNumbering[C] = NextValueNumber;
-  return NextValueNumber++;
-}
-
-/// Returns the value number for the specified load or store instruction.
-uint32_t GVNPass::ValueTable::computeLoadStoreVN(Instruction *I) {
-  if (!MSSA || !IsMSSAEnabled) {
-    ValueNumbering[I] = NextValueNumber;
-    return NextValueNumber++;
-  }
-
-  Expression Exp;
-  Exp.Ty = I->getType();
-  Exp.Opcode = I->getOpcode();
-  for (Use &Op : I->operands())
-    Exp.VarArgs.push_back(lookupOrAdd(Op));
-  addMemoryStateToExp(I, Exp);
-
-  auto [V, _] = assignExpNewValueNum(Exp);
-  ValueNumbering[I] = V;
-  return V;
-}
-
-/// Translate value number \p Num using phis, so that it has the values of
-/// the phis in BB.
-uint32_t GVNPass::ValueTable::phiTranslateImpl(const BasicBlock *Pred,
-                                               const BasicBlock *PhiBlock,
-                                               uint32_t Num, GVNPass &GVN) {
-  // See if we can refine the value number by looking at the PN incoming value
-  // for the given predecessor.
-  if (PHINode *PN = NumberingPhi[Num]) {
-    if (PN->getParent() != PhiBlock)
-      return Num;
-    for (unsigned I = 0; I != PN->getNumIncomingValues(); ++I) {
-      if (PN->getIncomingBlock(I) != Pred)
-        continue;
-      if (uint32_t TransVal = lookup(PN->getIncomingValue(I), false))
-        return TransVal;
-    }
-    return Num;
-  }
-
-  if (BasicBlock *BB = NumberingBB[Num]) {
-    assert(MSSA && "NumberingBB is non-empty only when using MemorySSA");
-    // Value numbers of basic blocks are used to represent memory state in
-    // load/store instructions and read-only function calls when said state is
-    // set by a MemoryPhi.
-    if (BB != PhiBlock)
-      return Num;
-    MemoryPhi *MPhi = MSSA->getMemoryAccess(BB);
-    for (unsigned i = 0, N = MPhi->getNumIncomingValues(); i != N; ++i) {
-      if (MPhi->getIncomingBlock(i) != Pred)
-        continue;
-      MemoryAccess *MA = MPhi->getIncomingValue(i);
-      if (auto *PredPhi = dyn_cast<MemoryPhi>(MA))
-        return lookupOrAdd(PredPhi->getBlock());
-      if (MSSA->isLiveOnEntryDef(MA))
-        return lookupOrAdd(&BB->getParent()->getEntryBlock());
-      return lookupOrAdd(cast<MemoryUseOrDef>(MA)->getMemoryInst());
-    }
-    llvm_unreachable(
-        "CFG/MemorySSA mismatch: predecessor not found among incoming blocks");
-  }
-
-  // If there is any value related with Num is defined in a BB other than
-  // PhiBlock, it cannot depend on a phi in PhiBlock without going through
-  // a backedge. We can do an early exit in that case to save compile time.
-  if (!areAllValsInBB(Num, PhiBlock, GVN))
-    return Num;
-
-  if (Num >= ExprIdx.size() || ExprIdx[Num] == 0)
-    return Num;
-  Expression Exp = Expressions[ExprIdx[Num]];
-
-  for (unsigned I = 0; I < Exp.VarArgs.size(); I++) {
-    // For InsertValue and ExtractValue, some varargs are index numbers
-    // instead of value numbers. Those index numbers should not be
-    // translated.
-    if ((I > 1 && Exp.Opcode == Instruction::InsertValue) ||
-        (I > 0 && Exp.Opcode == Instruction::ExtractValue) ||
-        (I > 1 && Exp.Opcode == Instruction::ShuffleVector))
-      continue;
-    Exp.VarArgs[I] = phiTranslate(Pred, PhiBlock, Exp.VarArgs[I], GVN);
-  }
-
-  if (Exp.Commutative) {
-    assert(Exp.VarArgs.size() >= 2 && "Unsupported commutative instruction!");
-    if (Exp.VarArgs[0] > Exp.VarArgs[1]) {
-      std::swap(Exp.VarArgs[0], Exp.VarArgs[1]);
-      uint32_t Opcode = Exp.Opcode >> 8;
-      if (Opcode == Instruction::ICmp || Opcode == Instruction::FCmp)
-        Exp.Opcode = (Opcode << 8) |
-                     CmpInst::getSwappedPredicate(
-                         static_cast<CmpInst::Predicate>(Exp.Opcode & 255));
-    }
-  }
-
-  if (uint32_t NewNum = ExpressionNumbering[Exp]) {
-    if (Exp.Opcode == Instruction::Call && NewNum != Num)
-      return areCallValsEqual(Num, NewNum, Pred, PhiBlock, GVN) ? NewNum : Num;
-    return NewNum;
-  }
-  return Num;
-}
-
-// Return true if the value number \p Num and NewNum have equal value.
-// Return false if the result is unknown.
-bool GVNPass::ValueTable::areCallValsEqual(uint32_t Num, uint32_t NewNum,
-                                           const BasicBlock *Pred,
-                                           const BasicBlock *PhiBlock,
-                                           GVNPass &GVN) {
-  CallInst *Call = nullptr;
-  auto Leaders = GVN.LeaderTable.getLeaders(Num);
-  for (const auto &Entry : Leaders) {
-    Call = dyn_cast<CallInst>(&*Entry.Val);
-    if (Call && Call->getParent() == PhiBlock)
-      break;
-  }
-
-  if (AA->doesNotAccessMemory(Call))
-    return true;
-
-  if (!MD || !AA->onlyReadsMemory(Call))
-    return false;
-
-  MemDepResult LocalDep = MD->getDependency(Call);
-  if (!LocalDep.isNonLocal())
-    return false;
-
-  const MemoryDependenceResults::NonLocalDepInfo &Deps =
-      MD->getNonLocalCallDependency(Call);
-
-  // Check to see if the Call has no function local clobber.
-  for (const NonLocalDepEntry &D : Deps) {
-    if (D.getResult().isNonFuncLocal())
-      return true;
-  }
-  return false;
-}
-
-/// Return a pair the first field showing the value number of \p Exp and the
-/// second field showing whether it is a value number newly created.
-std::pair<uint32_t, bool>
-GVNPass::ValueTable::assignExpNewValueNum(Expression &Exp) {
-  uint32_t &E = ExpressionNumbering[Exp];
-  bool CreateNewValNum = !E;
-  if (CreateNewValNum) {
-    Expressions.push_back(Exp);
-    if (ExprIdx.size() < NextValueNumber + 1)
-      ExprIdx.resize(NextValueNumber * 2);
-    E = NextValueNumber;
-    ExprIdx[NextValueNumber++] = NextExprNumber++;
-  }
-  return {E, CreateNewValNum};
-}
-
-/// Return whether all the values related with the same \p num are
-/// defined in \p BB.
-bool GVNPass::ValueTable::areAllValsInBB(uint32_t Num, const BasicBlock *BB,
-                                         GVNPass &GVN) {
-  return all_of(
-      GVN.LeaderTable.getLeaders(Num),
-      [=](const LeaderMap::LeaderTableEntry &L) { return L.BB == BB; });
-}
-
-/// Include the incoming memory state into the hash of the expression for the
-/// given instruction. If the incoming memory state is:
-/// * LiveOnEntry, add the value number of the entry block,
-/// * a MemoryPhi, add the value number of the basic block corresponding to that
-/// MemoryPhi,
-/// * a MemoryDef, add the value number of the memory setting instruction.
-void GVNPass::ValueTable::addMemoryStateToExp(Instruction *I, Expression &Exp) {
-  assert(MSSA && "addMemoryStateToExp should not be called without MemorySSA");
-  assert(MSSA->getMemoryAccess(I) && "Instruction does not access memory");
-  MemoryAccess *MA = MSSA->getSkipSelfWalker()->getClobberingMemoryAccess(I);
-  Exp.VarArgs.push_back(lookupOrAdd(MA));
-}
-
-//===----------------------------------------------------------------------===//
-//                     ValueTable External Functions
-//===----------------------------------------------------------------------===//
-
-GVNPass::ValueTable::ValueTable() = default;
-GVNPass::ValueTable::ValueTable(const ValueTable &) = default;
-GVNPass::ValueTable::ValueTable(ValueTable &&) = default;
-GVNPass::ValueTable::~ValueTable() = default;
-GVNPass::ValueTable &
-GVNPass::ValueTable::operator=(const GVNPass::ValueTable &Arg) = default;
-
-/// add - Insert a value into the table with a specified value number.
-void GVNPass::ValueTable::add(Value *V, uint32_t Num) {
-  ValueNumbering.insert(std::make_pair(V, Num));
-  if (PHINode *PN = dyn_cast<PHINode>(V))
-    NumberingPhi[Num] = PN;
-}
-
-uint32_t GVNPass::ValueTable::lookupOrAdd(MemoryAccess *MA) {
-  return MSSA->isLiveOnEntryDef(MA) || isa<MemoryPhi>(MA)
-             ? lookupOrAdd(MA->getBlock())
-             : lookupOrAdd(cast<MemoryUseOrDef>(MA)->getMemoryInst());
-}
-
-/// lookupOrAdd - Returns the value number for the specified value, assigning
-/// it a new number if it did not have one before.
-uint32_t GVNPass::ValueTable::lookupOrAdd(Value *V) {
-  auto VI = ValueNumbering.find(V);
-  if (VI != ValueNumbering.end())
-    return VI->second;
-
-  auto *I = dyn_cast<Instruction>(V);
-  if (!I) {
-    ValueNumbering[V] = NextValueNumber;
-    if (isa<BasicBlock>(V))
-      NumberingBB[NextValueNumber] = cast<BasicBlock>(V);
-    return NextValueNumber++;
-  }
-
-  Expression Exp;
-  switch (I->getOpcode()) {
-  case Instruction::Call:
-    return lookupOrAddCall(cast<CallInst>(I));
-  case Instruction::FNeg:
-  case Instruction::Add:
-  case Instruction::FAdd:
-  case Instruction::Sub:
-  case Instruction::FSub:
-  case Instruction::Mul:
-  case Instruction::FMul:
-  case Instruction::UDiv:
-  case Instruction::SDiv:
-  case Instruction::FDiv:
-  case Instruction::URem:
-  case Instruction::SRem:
-  case Instruction::FRem:
-  case Instruction::Shl:
-  case Instruction::LShr:
-  case Instruction::AShr:
-  case Instruction::And:
-  case Instruction::Or:
-  case Instruction::Xor:
-  case Instruction::ICmp:
-  case Instruction::FCmp:
-  case Instruction::Trunc:
-  case Instruction::ZExt:
-  case Instruction::SExt:
-  case Instruction::FPToUI:
-  case Instruction::FPToSI:
-  case Instruction::UIToFP:
-  case Instruction::SIToFP:
-  case Instruction::FPTrunc:
-  case Instruction::FPExt:
-  case Instruction::PtrToInt:
-  case Instruction::PtrToAddr:
-  case Instruction::IntToPtr:
-  case Instruction::AddrSpaceCast:
-  case Instruction::BitCast:
-  case Instruction::Select:
-  case Instruction::Freeze:
-  case Instruction::ExtractElement:
-  case Instruction::InsertElement:
-  case Instruction::ShuffleVector:
-  case Instruction::InsertValue:
-    Exp = createExpr(I);
-    break;
-  case Instruction::GetElementPtr:
-    Exp = createGEPExpr(cast<GetElementPtrInst>(I));
-    break;
-  case Instruction::ExtractValue:
-    Exp = createExtractvalueExpr(cast<ExtractValueInst>(I));
-    break;
-  case Instruction::PHI:
-    ValueNumbering[V] = NextValueNumber;
-    NumberingPhi[NextValueNumber] = cast<PHINode>(V);
-    return NextValueNumber++;
-  case Instruction::Load:
-  case Instruction::Store:
-    return computeLoadStoreVN(I);
-  default:
-    ValueNumbering[V] = NextValueNumber;
-    return NextValueNumber++;
-  }
-
-  uint32_t E = assignExpNewValueNum(Exp).first;
-  ValueNumbering[V] = E;
-  return E;
-}
-
-/// Returns the value number of the specified value. Fails if
-/// the value has not yet been numbered.
-uint32_t GVNPass::ValueTable::lookup(Value *V, bool Verify) const {
-  auto VI = ValueNumbering.find(V);
-  if (Verify) {
-    assert(VI != ValueNumbering.end() && "Value not numbered?");
-    return VI->second;
-  }
-  return (VI != ValueNumbering.end()) ? VI->second : 0;
-}
-
-/// Returns the value number of the given comparison,
-/// assigning it a new number if it did not have one before.  Useful when
-/// we deduced the result of a comparison, but don't immediately have an
-/// instruction realizing that comparison to hand.
-uint32_t GVNPass::ValueTable::lookupOrAddCmp(unsigned Opcode,
-                                             CmpInst::Predicate Predicate,
-                                             Value *LHS, Value *RHS) {
-  Expression Exp = createCmpExpr(Opcode, Predicate, LHS, RHS);
-  return assignExpNewValueNum(Exp).first;
-}
-
-/// Returns the value number of ptrtoint \p Ptr to \Ty.
-uint32_t GVNPass::ValueTable::lookupPtrToInt(Value *Ptr, Type *Ty) {
-  Expression Exp(Instruction::PtrToInt);
-  Exp.Ty = Ty;
-  Exp.VarArgs.push_back(lookupOrAdd(Ptr));
-  return ExpressionNumbering.lookup(Exp);
-}
-
-/// Wrap phiTranslateImpl to provide caching functionality.
-uint32_t GVNPass::ValueTable::phiTranslate(const BasicBlock *Pred,
-                                           const BasicBlock *PhiBlock,
-                                           uint32_t Num, GVNPass &GVN) {
-  auto FindRes = PhiTranslateTable.find({Num, Pred});
-  if (FindRes != PhiTranslateTable.end())
-    return FindRes->second;
-  uint32_t NewNum = phiTranslateImpl(Pred, PhiBlock, Num, GVN);
-  PhiTranslateTable.insert({{Num, Pred}, NewNum});
-  return NewNum;
-}
-
-/// Erase stale entry from phiTranslate cache so phiTranslate can be computed
-/// again.
-void GVNPass::ValueTable::eraseTranslateCacheEntry(
-    uint32_t Num, const BasicBlock &CurrBlock) {
-  for (const BasicBlock *Pred : predecessors(&CurrBlock))
-    PhiTranslateTable.erase({Num, Pred});
-}
-
-/// Returns true if a value number exists for the specified value.
-bool GVNPass::ValueTable::exists(Value *V) const {
-  return ValueNumbering.contains(V);
-}
-
-/// Remove all entries from the ValueTable.
-void GVNPass::ValueTable::clear() {
-  ValueNumbering.clear();
-  ExpressionNumbering.clear();
-  NumberingPhi.clear();
-  NumberingBB.clear();
-  PhiTranslateTable.clear();
-  NextValueNumber = 1;
-  Expressions.clear();
-  ExprIdx.clear();
-  NextExprNumber = 0;
-}
-
-/// Remove a value from the value numbering.
-void GVNPass::ValueTable::erase(Value *V) {
-  uint32_t Num = ValueNumbering.lookup(V);
-  ValueNumbering.erase(V);
-  // If V is PHINode, V <--> value number is an one-to-one mapping.
-  if (isa<PHINode>(V))
-    NumberingPhi.erase(Num);
-  else if (isa<BasicBlock>(V))
-    NumberingBB.erase(Num);
-}
-
-/// verifyRemoved - Verify that the value is removed from all internal data
-/// structures.
-void GVNPass::ValueTable::verifyRemoved(const Value *V) const {
-  assert(!ValueNumbering.contains(V) &&
-         "Inst still occurs in value numbering map!");
-}
-
-//===----------------------------------------------------------------------===//
-//                     LeaderMap External Functions
-//===----------------------------------------------------------------------===//
-
-/// Push a new Value to the LeaderTable onto the list for its value number.
-void GVNPass::LeaderMap::insert(uint32_t N, Value *V, const BasicBlock *BB) {
-  const auto &[It, Inserted] = NumToLeaders.try_emplace(N, V, BB, nullptr);
-  if (!Inserted) {
-    // Key already exists: insert new node after the head.
-    auto *NewSlot = TableAllocator.Allocate<LeaderListNode>();
-    new (NewSlot) LeaderListNode(V, BB, It->second.Next);
-    It->second.Next = NewSlot;
-  }
-}
-
-/// Scan the list of values corresponding to a given
-/// value number, and remove the given instruction if encountered.
-void GVNPass::LeaderMap::erase(uint32_t N, Instruction *I,
-                               const BasicBlock *BB) {
-  auto It = NumToLeaders.find(N);
-  if (It == NumToLeaders.end())
-    return;
-
-  LeaderListNode *Prev = nullptr;
-  LeaderListNode *Curr = &It->second;
-
-  while (Curr && (Curr->Entry.Val != I || Curr->Entry.BB != BB)) {
-    Prev = Curr;
-    Curr = Curr->Next;
-  }
-
-  if (!Curr)
-    return;
-
-  if (Prev) {
-    // Non-head node: unlink and destroy.
-    Prev->Next = Curr->Next;
-    Curr->~LeaderListNode();
-    TableAllocator.Deallocate<LeaderListNode>(Curr);
-  } else {
-    // Head node (stored by value in DenseMap).
-    if (!Curr->Next) {
-      // Only node; erase from map (DenseMap calls the destructor).
-      NumToLeaders.erase(It);
-    } else {
-      // Move second node's data into head, then destroy second node.
-      LeaderListNode *Next = Curr->Next;
-      Curr->Entry.Val = std::move(Next->Entry.Val);
-      Curr->Entry.BB = Next->Entry.BB;
-      Curr->Next = Next->Next;
-      Next->~LeaderListNode();
-      TableAllocator.Deallocate<LeaderListNode>(Next);
-    }
-  }
-}
+} // namespace
 
 //===----------------------------------------------------------------------===//
 //                                GVN Pass
 //===----------------------------------------------------------------------===//
 
-PreservedAnalyses GVNPass::run(Function &F, FunctionAnalysisManager &AM) {
-  // FIXME: The order of evaluation of these 'getResult' calls is very
-  // significant! Re-ordering these variables will cause GVN when run alone to
-  // be less effective! We should fix memdep and basic-aa to not exhibit this
-  // behavior, but until then don't change the order here.
-  auto &AC = AM.getResult<AssumptionAnalysis>(F);
-  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
-  auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
-  auto &AA = AM.getResult<AAManager>(F);
-  auto *MemDep =
-      isMemDepEnabled() ? &AM.getResult<MemoryDependenceAnalysis>(F) : nullptr;
-  auto &LI = AM.getResult<LoopAnalysis>(F);
-  auto *MSSA = AM.getCachedResult<MemorySSAAnalysis>(F);
-  if (isMemorySSAEnabled() && !MSSA) {
-    assert(!MemDep &&
-           "On-demand computation of MemSSA implies that MemDep is disabled!");
-    MSSA = &AM.getResult<MemorySSAAnalysis>(F);
+/// The core GVN pass object.
+///
+/// FIXME: We should have a good summary of the GVN algorithm implemented by
+/// this particular pass here.
+class llvm::GVNPassImpl {
+public:
+  friend class GVNValueTable;
+  friend class GVNLegacyPass;
+
+private:
+  GVNOptions Options;
+  MemoryDependenceResults *MD = nullptr;
+  DominatorTree *DT = nullptr;
+  const TargetLibraryInfo *TLI = nullptr;
+  AssumptionCache *AC = nullptr;
+  SetVector<BasicBlock *> DeadBlocks;
+  OptimizationRemarkEmitter *ORE = nullptr;
+  ImplicitControlFlowTracking *ICF = nullptr;
+  LoopInfo *LI = nullptr;
+  AAResults *AA = nullptr;
+  MemorySSAUpdater *MSSAU = nullptr;
+  GVNValueTable VN;
+  GVNLeaderMap LeaderTable;
+
+  // Map the block to reversed postorder traversal number. It is used to
+  // find back edge easily.
+  DenseMap<AssertingVH<BasicBlock>, uint32_t> BlockRPONumber;
+
+  // This is set 'true' initially and also when new blocks have been added to
+  // the function being analyzed. This boolean is used to control the updating
+  // of BlockRPONumber prior to accessing the contents of BlockRPONumber.
+  bool InvalidBlockRPONumbers = true;
+
+  // List of critical edges to be split between iterations.
+  SmallVector<std::pair<Instruction *, unsigned>, 4> ToSplit;
+
+public:
+  GVNPassImpl(GVNOptions Options = {}) : Options(Options) {}
+
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
+
+  bool isScalarPREEnabled() const;
+  bool isLoadPREEnabled() const;
+  bool isLoadInLoopPREEnabled() const;
+  bool isLoadPRESplitBackedgeEnabled() const;
+  bool isMemDepEnabled() const;
+  bool isMemorySSAEnabled() const;
+
+  /// Main entry point for the GVN pass. Also used by the GVNLegacyPass.
+  bool run(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
+           const TargetLibraryInfo &RunTLI, AAResults &RunAA,
+           MemoryDependenceResults *RunMD, LoopInfo &LI,
+           OptimizationRemarkEmitter *ORE, MemorySSA *MSSA = nullptr);
+
+private:
+  DominatorTree &getDominatorTree() const { return *DT; }
+  AAResults *getAliasAnalysis() const { return VN.getAliasAnalysis(); }
+  MemoryDependenceResults &getMemDep() const { return *MD; }
+
+  using LoadDepVect = SmallVector<NonLocalDepResult, 64>;
+  using AvailValInBlkVect = SmallVector<AvailableValueInBlock, 64>;
+  using UnavailBlkVect = SmallVector<BasicBlock *, 64>;
+
+  using DependencyBlockSet = DenseMap<BasicBlock *, DependencyBlockInfo>;
+
+  /// Given a select-dependency for the load (the load address is a select of
+  /// \p TrueAddr and \p FalseAddr guarded by \p Cond), determine whether a
+  /// value is available by finding dominating values for both addresses.  If
+  /// so, the load can be rematerialized as a select of those two values.
+  std::optional<AvailableValue>
+  analyzeSelectAvailability(LoadInst *Load, Value *Cond, Value *TrueAddr,
+                            Value *FalseAddr, Instruction *From);
+
+  /// Given a local dependency (Def or Clobber) determine if a value is
+  /// available for the load.
+  std::optional<AvailableValue>
+  analyzeLoadAvailability(LoadInst *Load, const ReachingMemVal &Dep,
+                          Value *Address);
+
+  /// Given a list of non-local dependencies, determine if a value is
+  /// available for the load in each specified block.  If it is, add it to
+  /// ValuesPerBlock.  If not, add it to UnavailableBlocks.
+  void analyzeLoadAvailability(LoadInst *Load,
+                               SmallVectorImpl<ReachingMemVal> &Deps,
+                               AvailValInBlkVect &ValuesPerBlock,
+                               UnavailBlkVect &UnavailableBlocks);
+
+  /// Given a critical edge from Pred to LoadBB, find a load instruction
+  /// which is identical to Load from another successor of Pred.
+  LoadInst *findLoadToHoistIntoPred(BasicBlock *Pred, BasicBlock *LoadBB,
+                                    LoadInst *Load);
+
+  /// Eliminates partially redundant \p Load, replacing it with \p
+  /// AvailableLoads (connected by Phis if needed).
+  void eliminatePartiallyRedundantLoad(
+      LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
+      MapVector<BasicBlock *, Value *> &AvailableLoads,
+      MapVector<BasicBlock *, LoadInst *> *CriticalEdgePredAndLoad);
+
+  // Helper functions for d etermining load dependencies.
+  std::optional<ReachingMemVal> scanMemoryAccessesUsers(
+      const MemoryLocation &Loc, bool IsInvariantLoad, BasicBlock *BB,
+      const SmallVectorImpl<MemoryAccess *> &ClobbersList, MemorySSA &MSSA,
+      BatchAAResults &AA, LoadInst *L = nullptr);
+
+  std::optional<ReachingMemVal>
+  accessMayModifyLocation(MemoryAccess *ClobberMA, const MemoryLocation &Loc,
+                          bool IsInvariantLoad, BasicBlock *BB, MemorySSA &MSSA,
+                          BatchAAResults &AA);
+
+  bool collectPredecessors(BasicBlock *BB, const PHITransAddr &Addr,
+                           MemoryAccess *ClobberMA, DependencyBlockSet &Blocks,
+                           SmallVectorImpl<BasicBlock *> &Worklist);
+
+  void collectClobberList(SmallVectorImpl<MemoryAccess *> &Clobbers,
+                          BasicBlock *BB, const DependencyBlockInfo &StartInfo,
+                          const DependencyBlockSet &Blocks, MemorySSA &MSSA);
+
+  bool findReachingValuesForLoad(LoadInst *Inst,
+                                 SmallVectorImpl<ReachingMemVal> &Values,
+                                 MemorySSA &MSSA, AAResults &AA);
+
+  bool performLoadPRE(LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
+                      UnavailBlkVect &UnavailableBlocks);
+
+  /// Try to replace a load which executes on each loop iteraiton with Phi
+  /// translation of load in preheader and load(s) in conditionally executed
+  /// paths.
+  bool performLoopLoadPRE(LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
+                          UnavailBlkVect &UnavailableBlocks);
+
+  // Try to eliminate redundent loades with non-local dependencies.
+  bool processNonLocalLoad(LoadInst *L);
+  bool processNonLocalLoad(LoadInst *L, SmallVectorImpl<ReachingMemVal> &Deps);
+
+  /// Add any blocks determined to be unreachable by a conditional branch with a
+  /// constant condition to the dead blocks.
+  bool processFoldableCondBr(CondBrInst *BI);
+
+  /// Propagate equalities derived from llvm.assume intrinsics.
+  bool processAssumeIntrinsic(AssumeInst *II);
+
+  /// Try to eliminate redundant loads.
+  bool processLoad(LoadInst *L);
+
+  /// Try to eliminate masked loads which have loaded from
+  /// masked stores with the same mask.
+  bool processMaskedLoad(IntrinsicInst *I);
+
+  /// Propagate value of a condition to blocks dominated by "then" and "else"
+  /// edges, as well as certains derived equalities.
+  bool
+  propagateEquality(Value *LHS, Value *RHS,
+                    const std::variant<BasicBlockEdge, Instruction *> &Root);
+
+  // Pass iteration helper functions.
+  bool processInstruction(Instruction *I);
+  bool processBlock(BasicBlock *BB);
+  bool iterateOnFunction(Function &F);
+
+  // Scalar PRE helper functions
+  bool performScalarPREInsertion(Instruction *Instr, BasicBlock *Pred,
+                                 BasicBlock *Curr, unsigned int ValNo);
+  bool performScalarPRE(Instruction *I);
+  bool performPRE(Function &F);
+
+  // Other helper routines.
+
+  Value *findLeader(const BasicBlock *BB, uint32_t Num);
+
+  /// Return whether all the values related with the same \p num are
+  /// defined in \p BB.
+  bool areAllValsInBB(uint32_t Num, const BasicBlock *BB) {
+    return all_of(
+        LeaderTable.getLeaders(Num),
+        [=](const GVNLeaderMap::LeaderTableEntry &L) { return L.BB == BB; });
   }
-  auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
-  bool Changed = runImpl(F, AC, DT, TLI, AA, MemDep, LI, &ORE,
-                         MSSA ? &MSSA->getMSSA() : nullptr);
-  if (!Changed)
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA;
-  PA.preserve<DominatorTreeAnalysis>();
-  PA.preserve<TargetLibraryAnalysis>();
-  if (MSSA)
-    PA.preserve<MemorySSAAnalysis>();
-  PA.preserve<LoopAnalysis>();
-  return PA;
-}
 
-void GVNPass::printPipeline(
-    raw_ostream &OS, function_ref<StringRef(StringRef)> MapClassName2PassName) {
-  static_cast<PassInfoMixin<GVNPass> *>(this)->printPipeline(
-      OS, MapClassName2PassName);
+  void cleanupGlobalSets();
 
-  OS << '<';
-  if (Options.AllowScalarPRE != std::nullopt)
-    OS << (*Options.AllowScalarPRE ? "" : "no-") << "scalar-pre;";
-  if (Options.AllowLoadPRE != std::nullopt)
-    OS << (*Options.AllowLoadPRE ? "" : "no-") << "load-pre;";
-  if (Options.AllowLoadPRESplitBackedge != std::nullopt)
-    OS << (*Options.AllowLoadPRESplitBackedge ? "" : "no-")
-       << "split-backedge-load-pre;";
-  if (Options.AllowMemDep != std::nullopt)
-    OS << (*Options.AllowMemDep ? "" : "no-") << "memdep;";
-  if (Options.AllowMemorySSA != std::nullopt)
-    OS << (*Options.AllowMemorySSA ? "" : "no-") << "memoryssa";
-  OS << '>';
-}
+  void removeInstruction(Instruction *I);
 
-bool GVNPass::isScalarPREEnabled() const {
+  /// This removes the specified instruction from
+  /// our various maps and marks it for deletion.
+  void salvageAndRemoveInstruction(Instruction *I);
+
+  void verifyRemoved(const Instruction *I) const;
+
+  bool splitCriticalEdges();
+  BasicBlock *splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ);
+
+  void addDeadBlock(BasicBlock *BB);
+  void assignValNumForDeadCode();
+  void assignBlockRPONumber(Function &F);
+};
+
+bool GVNPassImpl::isScalarPREEnabled() const {
   return Options.AllowScalarPRE.value_or(GVNEnableScalarPRE);
 }
 
-bool GVNPass::isLoadPREEnabled() const {
+bool GVNPassImpl::isLoadPREEnabled() const {
   return Options.AllowLoadPRE.value_or(GVNEnableLoadPRE);
 }
 
-bool GVNPass::isLoadInLoopPREEnabled() const {
+bool GVNPassImpl::isLoadInLoopPREEnabled() const {
   return Options.AllowLoadInLoopPRE.value_or(GVNEnableLoadInLoopPRE);
 }
 
-bool GVNPass::isLoadPRESplitBackedgeEnabled() const {
+bool GVNPassImpl::isLoadPRESplitBackedgeEnabled() const {
   return Options.AllowLoadPRESplitBackedge.value_or(
       GVNEnableSplitBackedgeInLoadPRE);
 }
 
-bool GVNPass::isMemDepEnabled() const {
+bool GVNPassImpl::isMemDepEnabled() const {
   return Options.AllowMemDep.value_or(GVNEnableMemDep);
 }
 
-bool GVNPass::isMemorySSAEnabled() const {
+bool GVNPassImpl::isMemorySSAEnabled() const {
   return Options.AllowMemorySSA.value_or(GVNEnableMemorySSA);
 }
-
-enum class AvailabilityState : char {
-  /// We know the block *is not* fully available. This is a fixpoint.
-  Unavailable = 0,
-  /// We know the block *is* fully available. This is a fixpoint.
-  Available = 1,
-  /// We do not know whether the block is fully available or not,
-  /// but we are currently speculating that it will be.
-  /// If it would have turned out that the block was, in fact, not fully
-  /// available, this would have been cleaned up into an Unavailable.
-  SpeculativelyAvailable = 2,
-};
 
 /// Return true if we can prove that the value
 /// we're analyzing is fully available in the specified block.  As we go, keep
@@ -1474,8 +1687,9 @@ static Value *findDominatingValue(const MemoryLocation &Loc, Type *LoadTy,
 }
 
 std::optional<AvailableValue>
-GVNPass::analyzeSelectAvailability(LoadInst *Load, Value *Cond, Value *TrueAddr,
-                                   Value *FalseAddr, Instruction *From) {
+GVNPassImpl::analyzeSelectAvailability(LoadInst *Load, Value *Cond,
+                                       Value *TrueAddr, Value *FalseAddr,
+                                       Instruction *From) {
   assert(TrueAddr->getType() == Load->getPointerOperandType() &&
          "Invalid address type of true side of select dependency");
   assert(FalseAddr->getType() == Load->getPointerOperandType() &&
@@ -1496,8 +1710,8 @@ GVNPass::analyzeSelectAvailability(LoadInst *Load, Value *Cond, Value *TrueAddr,
 }
 
 std::optional<AvailableValue>
-GVNPass::analyzeLoadAvailability(LoadInst *Load, const ReachingMemVal &Dep,
-                                 Value *Address) {
+GVNPassImpl::analyzeLoadAvailability(LoadInst *Load, const ReachingMemVal &Dep,
+                                     Value *Address) {
   assert(Load->isUnordered() && "rules below are incorrect for ordered access");
   assert((Dep.Kind == DepKind::Def || Dep.Kind == DepKind::Clobber) &&
          "expected a local dependence");
@@ -1638,10 +1852,10 @@ GVNPass::analyzeLoadAvailability(LoadInst *Load, const ReachingMemVal &Dep,
   return std::nullopt;
 }
 
-void GVNPass::analyzeLoadAvailability(LoadInst *Load,
-                                      SmallVectorImpl<ReachingMemVal> &Deps,
-                                      AvailValInBlkVect &ValuesPerBlock,
-                                      UnavailBlkVect &UnavailableBlocks) {
+void GVNPassImpl::analyzeLoadAvailability(LoadInst *Load,
+                                          SmallVectorImpl<ReachingMemVal> &Deps,
+                                          AvailValInBlkVect &ValuesPerBlock,
+                                          UnavailBlkVect &UnavailableBlocks) {
   // Filter out useless results (non-locals, etc).  Keep track of the blocks
   // where we have a value available in repl, also keep track of whether we see
   // dependencies that produce an unknown value for the load (such as a call
@@ -1715,8 +1929,9 @@ void GVNPass::analyzeLoadAvailability(LoadInst *Load,
 ///      v2 = load %addr
 ///      ...
 ///
-LoadInst *GVNPass::findLoadToHoistIntoPred(BasicBlock *Pred, BasicBlock *LoadBB,
-                                           LoadInst *Load) {
+LoadInst *GVNPassImpl::findLoadToHoistIntoPred(BasicBlock *Pred,
+                                               BasicBlock *LoadBB,
+                                               LoadInst *Load) {
   // For simplicity we handle a Pred has 2 successors only.
   auto *Term = Pred->getTerminator();
   if (Term->getNumSuccessors() != 2 || Term->isSpecialTerminator())
@@ -1765,7 +1980,7 @@ LoadInst *GVNPass::findLoadToHoistIntoPred(BasicBlock *Pred, BasicBlock *LoadBB,
   return nullptr;
 }
 
-void GVNPass::eliminatePartiallyRedundantLoad(
+void GVNPassImpl::eliminatePartiallyRedundantLoad(
     LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
     MapVector<BasicBlock *, Value *> &AvailableLoads,
     MapVector<BasicBlock *, LoadInst *> *CriticalEdgePredAndLoad) {
@@ -1950,7 +2165,7 @@ maybeLoadStoreLocation(Instruction *I, bool AllowStores,
 /// Scan the users of each MemoryAccess in `ClobbersList` that belong to `BB`,
 /// looking for memory reads whose location aliases `Loc` and dominates our
 /// load.
-std::optional<GVNPass::ReachingMemVal> GVNPass::scanMemoryAccessesUsers(
+std::optional<ReachingMemVal> GVNPassImpl::scanMemoryAccessesUsers(
     const MemoryLocation &Loc, bool IsInvariantLoad, BasicBlock *BB,
     const SmallVectorImpl<MemoryAccess *> &ClobbersList, MemorySSA &MSSA,
     BatchAAResults &AA, LoadInst *L) {
@@ -2024,7 +2239,7 @@ std::optional<GVNPass::ReachingMemVal> GVNPass::scanMemoryAccessesUsers(
 
 /// Check if a given MemoryAccess (usually a MemoryDef) actually modifies a
 /// given location. Returns a ReachingMemVal describing the dependency.
-std::optional<GVNPass::ReachingMemVal> GVNPass::accessMayModifyLocation(
+std::optional<ReachingMemVal> GVNPassImpl::accessMayModifyLocation(
     MemoryAccess *ClobberMA, const MemoryLocation &Loc, bool IsInvariantLoad,
     BasicBlock *BB, MemorySSA &MSSA, BatchAAResults &AA) {
   assert(ClobberMA->getBlock() == BB);
@@ -2125,10 +2340,10 @@ std::optional<GVNPass::ReachingMemVal> GVNPass::accessMayModifyLocation(
 /// Collect the predecessors of block, while doing phi-translation of the memory
 /// address and the memory clobber. Return false if the block should be marked
 /// as clobbering the memory location in an unknown way.
-bool GVNPass::collectPredecessors(BasicBlock *BB, const PHITransAddr &Addr,
-                                  MemoryAccess *ClobberMA,
-                                  DependencyBlockSet &Blocks,
-                                  SmallVectorImpl<BasicBlock *> &Worklist) {
+bool GVNPassImpl::collectPredecessors(BasicBlock *BB, const PHITransAddr &Addr,
+                                      MemoryAccess *ClobberMA,
+                                      DependencyBlockSet &Blocks,
+                                      SmallVectorImpl<BasicBlock *> &Worklist) {
   if (Addr.needsPHITranslationFromBlock(BB) &&
       !Addr.isPotentiallyPHITranslatable())
     return false;
@@ -2183,11 +2398,11 @@ bool GVNPass::collectPredecessors(BasicBlock *BB, const PHITransAddr &Addr,
 /// walk the use-def chain to the final clobber. If the chain extends beyond
 /// `BB`, continue into that block but only if it is in the previously collected
 /// set.
-void GVNPass::collectClobberList(SmallVectorImpl<MemoryAccess *> &Clobbers,
-                                 BasicBlock *BB,
-                                 const DependencyBlockInfo &StartInfo,
-                                 const DependencyBlockSet &Blocks,
-                                 MemorySSA &MSSA) {
+void GVNPassImpl::collectClobberList(SmallVectorImpl<MemoryAccess *> &Clobbers,
+                                     BasicBlock *BB,
+                                     const DependencyBlockInfo &StartInfo,
+                                     const DependencyBlockSet &Blocks,
+                                     MemorySSA &MSSA) {
   MemoryAccess *MA = StartInfo.InitialClobberMA;
   MemoryAccess *LastMA = StartInfo.ClobberMA;
 
@@ -2233,9 +2448,9 @@ void GVNPass::collectClobberList(SmallVectorImpl<MemoryAccess *> &Clobbers,
 /// * Other: we know which block defines the memory location in some way, but
 /// could not identify a precise instruction (e.g., memory already live at
 /// function entry).
-bool GVNPass::findReachingValuesForLoad(LoadInst *L,
-                                        SmallVectorImpl<ReachingMemVal> &Values,
-                                        MemorySSA &MSSA, AAResults &AAR) {
+bool GVNPassImpl::findReachingValuesForLoad(
+    LoadInst *L, SmallVectorImpl<ReachingMemVal> &Values, MemorySSA &MSSA,
+    AAResults &AAR) {
   EarliestEscapeAnalysis EA(*DT, LI);
   BatchAAResults AA(AAR, &EA);
   BasicBlock *StartBlock = L->getParent();
@@ -2410,8 +2625,9 @@ bool GVNPass::findReachingValuesForLoad(LoadInst *L,
   return true;
 }
 
-bool GVNPass::performLoadPRE(LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
-                             UnavailBlkVect &UnavailableBlocks) {
+bool GVNPassImpl::performLoadPRE(LoadInst *Load,
+                                 AvailValInBlkVect &ValuesPerBlock,
+                                 UnavailBlkVect &UnavailableBlocks) {
   // Okay, we have *some* definitions of the value.  This means that the value
   // is available in some of our (transitive) predecessors.  Lets think about
   // doing PRE of this load.  This will involve inserting a new load into the
@@ -2663,9 +2879,9 @@ bool GVNPass::performLoadPRE(LoadInst *Load, AvailValInBlkVect &ValuesPerBlock,
   return true;
 }
 
-bool GVNPass::performLoopLoadPRE(LoadInst *Load,
-                                 AvailValInBlkVect &ValuesPerBlock,
-                                 UnavailBlkVect &UnavailableBlocks) {
+bool GVNPassImpl::performLoopLoadPRE(LoadInst *Load,
+                                     AvailValInBlkVect &ValuesPerBlock,
+                                     UnavailBlkVect &UnavailableBlocks) {
   const Loop *L = LI->getLoopFor(Load->getParent());
   // TODO: Generalize to other loop blocks that dominate the latch.
   if (!L || L->getHeader() != Load->getParent())
@@ -2742,7 +2958,7 @@ bool GVNPass::performLoopLoadPRE(LoadInst *Load,
 
 /// Attempt to eliminate a load whose dependencies are
 /// non-local by performing PHI construction.
-bool GVNPass::processNonLocalLoad(LoadInst *Load) {
+bool GVNPassImpl::processNonLocalLoad(LoadInst *Load) {
   // Non-local speculations are not allowed under asan.
   if (Load->getFunction()->hasFnAttribute(Attribute::SanitizeAddress) ||
       Load->getFunction()->hasFnAttribute(Attribute::SanitizeHWAddress))
@@ -2785,8 +3001,8 @@ bool GVNPass::processNonLocalLoad(LoadInst *Load) {
   return processNonLocalLoad(Load, MemVals);
 }
 
-bool GVNPass::processNonLocalLoad(LoadInst *Load,
-                                  SmallVectorImpl<ReachingMemVal> &Deps) {
+bool GVNPassImpl::processNonLocalLoad(LoadInst *Load,
+                                      SmallVectorImpl<ReachingMemVal> &Deps) {
   // If we had a phi translation failure, we'll have a single entry which is a
   // clobber in the current block.  Reject this early.
   if (Deps.size() == 1 && Deps[0].Kind == DepKind::Other) {
@@ -2862,7 +3078,7 @@ bool GVNPass::processNonLocalLoad(LoadInst *Load,
 
 /// Attempt to eliminate a load, first by eliminating it
 /// locally, and then attempting non-local elimination if that fails.
-bool GVNPass::processLoad(LoadInst *L) {
+bool GVNPassImpl::processLoad(LoadInst *L) {
   if (!MD && !isMemorySSAEnabled())
     return false;
 
@@ -2936,7 +3152,7 @@ bool GVNPass::processLoad(LoadInst *L) {
 
 // Attempt to process masked loads which have loaded from
 // masked stores with the same mask
-bool GVNPass::processMaskedLoad(IntrinsicInst *I) {
+bool GVNPassImpl::processMaskedLoad(IntrinsicInst *I) {
   if (!MD)
     return false;
   MemDepResult Dep = MD->getDependency(I);
@@ -2976,7 +3192,7 @@ bool GVNPass::processMaskedLoad(IntrinsicInst *I) {
 //     dead blocks with "UndefVal" in an hope these PHIs will optimized away.
 //
 // Return true iff *NEW* dead code are found.
-bool GVNPass::processFoldableCondBr(CondBrInst *BI) {
+bool GVNPassImpl::processFoldableCondBr(CondBrInst *BI) {
   // If a branch has two identical successors, we cannot declare either dead.
   if (BI->getSuccessor(0) == BI->getSuccessor(1))
     return false;
@@ -2997,7 +3213,7 @@ bool GVNPass::processFoldableCondBr(CondBrInst *BI) {
   return true;
 }
 
-bool GVNPass::processAssumeIntrinsic(AssumeInst *IntrinsicI) {
+bool GVNPassImpl::processAssumeIntrinsic(AssumeInst *IntrinsicI) {
   Value *V = IntrinsicI->getArgOperand(0);
 
   if (ConstantInt *Cond = dyn_cast<ConstantInt>(V)) {
@@ -3079,7 +3295,7 @@ static bool isOnlyReachableViaThisEdge(const BasicBlockEdge &E,
 /// 'RHS' everywhere in the scope.  Returns whether a change was made.
 /// The Root may either be a basic block edge (for conditions) or an
 /// instruction (for assumes).
-bool GVNPass::propagateEquality(
+bool GVNPassImpl::propagateEquality(
     Value *LHS, Value *RHS,
     const std::variant<BasicBlockEdge, Instruction *> &Root) {
   SmallVector<std::pair<Value*, Value*>, 4> Worklist;
@@ -3288,7 +3504,7 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
 
 /// When calculating availability, handle an instruction
 /// by inserting it into the appropriate sets.
-bool GVNPass::processInstruction(Instruction *I) {
+bool GVNPassImpl::processInstruction(Instruction *I) {
   // If the instruction can be easily simplified then do so now in preference
   // to value numbering it.  Value numbering often exposes redundancies, for
   // example if it determines that %y is equal to %x then the instruction
@@ -3443,7 +3659,7 @@ bool GVNPass::processInstruction(Instruction *I) {
   return true;
 }
 
-bool GVNPass::processBlock(BasicBlock *BB) {
+bool GVNPassImpl::processBlock(BasicBlock *BB) {
   if (DeadBlocks.count(BB))
     return false;
 
@@ -3464,7 +3680,7 @@ bool GVNPass::processBlock(BasicBlock *BB) {
 }
 
 /// Executes one iteration of GVN.
-bool GVNPass::iterateOnFunction(Function &F) {
+bool GVNPassImpl::iterateOnFunction(Function &F) {
   cleanupGlobalSets();
 
   // Top-down walk of the dominator tree.
@@ -3481,8 +3697,9 @@ bool GVNPass::iterateOnFunction(Function &F) {
 }
 
 // Instantiate an expression in a predecessor that lacked it.
-bool GVNPass::performScalarPREInsertion(Instruction *Instr, BasicBlock *Pred,
-                                        BasicBlock *Curr, unsigned int ValNo) {
+bool GVNPassImpl::performScalarPREInsertion(Instruction *Instr,
+                                            BasicBlock *Pred, BasicBlock *Curr,
+                                            unsigned int ValNo) {
   // Because we are going top-down through the block, all value numbers
   // will be available in the predecessor by the time we need them.  Any
   // that weren't originally present will have been instantiated earlier
@@ -3500,8 +3717,7 @@ bool GVNPass::performScalarPREInsertion(Instruction *Instr, BasicBlock *Pred,
       Success = false;
       break;
     }
-    uint32_t TValNo =
-        VN.phiTranslate(Pred, Curr, VN.lookup(Op), *this);
+    uint32_t TValNo = VN.phiTranslate(Pred, Curr, VN.lookup(Op), LeaderTable);
     if (Value *V = findLeader(Pred, TValNo)) {
       Instr->setOperand(I, V);
     } else {
@@ -3530,7 +3746,7 @@ bool GVNPass::performScalarPREInsertion(Instruction *Instr, BasicBlock *Pred,
   return true;
 }
 
-bool GVNPass::performScalarPRE(Instruction *CurInst) {
+bool GVNPassImpl::performScalarPRE(Instruction *CurInst) {
   if (isa<AllocaInst>(CurInst) || CurInst->isTerminator() ||
       isa<PHINode>(CurInst) || CurInst->getType()->isVoidTy() ||
       CurInst->mayReadFromMemory() || CurInst->mayHaveSideEffects() ||
@@ -3593,7 +3809,7 @@ bool GVNPass::performScalarPRE(Instruction *CurInst) {
       break;
     }
 
-    uint32_t TValNo = VN.phiTranslate(P, CurrentBlock, ValNo, *this);
+    uint32_t TValNo = VN.phiTranslate(P, CurrentBlock, ValNo, LeaderTable);
     Value *PredV = findLeader(P, TValNo);
     if (!PredV) {
       PredMap.push_back(std::make_pair(static_cast<Value *>(nullptr), P));
@@ -3692,7 +3908,7 @@ bool GVNPass::performScalarPRE(Instruction *CurInst) {
 
 /// Perform a purely local form of PRE that looks for diamond
 /// control flow patterns and attempts to perform simple PRE at the join point.
-bool GVNPass::performPRE(Function &F) {
+bool GVNPassImpl::performPRE(Function &F) {
   bool Changed = false;
   for (BasicBlock *CurrentBlock : depth_first(&F.getEntryBlock())) {
     // Nothing to PRE in the entry block.
@@ -3717,8 +3933,26 @@ bool GVNPass::performPRE(Function &F) {
   return Changed;
 }
 
+void GVNPassImpl::printPipeline(
+    raw_ostream &OS, function_ref<StringRef(StringRef)> MapClassName2PassName) {
+
+  OS << '<';
+  if (Options.AllowScalarPRE != std::nullopt)
+    OS << (*Options.AllowScalarPRE ? "" : "no-") << "scalar-pre;";
+  if (Options.AllowLoadPRE != std::nullopt)
+    OS << (*Options.AllowLoadPRE ? "" : "no-") << "load-pre;";
+  if (Options.AllowLoadPRESplitBackedge != std::nullopt)
+    OS << (*Options.AllowLoadPRESplitBackedge ? "" : "no-")
+       << "split-backedge-load-pre;";
+  if (Options.AllowMemDep != std::nullopt)
+    OS << (*Options.AllowMemDep ? "" : "no-") << "memdep;";
+  if (Options.AllowMemorySSA != std::nullopt)
+    OS << (*Options.AllowMemorySSA ? "" : "no-") << "memoryssa";
+  OS << '>';
+}
+
 /// runOnFunction - This is the main transformation entry point for a function.
-bool GVNPass::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
+bool GVNPassImpl::run(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
                       const TargetLibraryInfo &RunTLI, AAResults &RunAA,
                       MemoryDependenceResults *RunMD, LoopInfo &LI,
                       OptimizationRemarkEmitter *RunORE, MemorySSA *MSSA) {
@@ -3798,7 +4032,7 @@ bool GVNPass::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
 // and then scan the list to find one whose block dominates the block in
 // question.  This is fast because dominator tree queries consist of only
 // a few comparisons of DFS numbers.
-Value *GVNPass::findLeader(const BasicBlock *BB, uint32_t Num) {
+Value *GVNPassImpl::findLeader(const BasicBlock *BB, uint32_t Num) {
   auto Leaders = LeaderTable.getLeaders(Num);
   if (Leaders.empty())
     return nullptr;
@@ -3815,7 +4049,7 @@ Value *GVNPass::findLeader(const BasicBlock *BB, uint32_t Num) {
   return Val;
 }
 
-void GVNPass::cleanupGlobalSets() {
+void GVNPassImpl::cleanupGlobalSets() {
   VN.clear();
   LeaderTable.clear();
   BlockRPONumber.clear();
@@ -3823,7 +4057,7 @@ void GVNPass::cleanupGlobalSets() {
   InvalidBlockRPONumbers = true;
 }
 
-void GVNPass::removeInstruction(Instruction *I) {
+void GVNPassImpl::removeInstruction(Instruction *I) {
   VN.erase(I);
   if (MD) MD->removeInstruction(I);
   if (MSSAU)
@@ -3836,7 +4070,7 @@ void GVNPass::removeInstruction(Instruction *I) {
   ++NumGVNInstr;
 }
 
-void GVNPass::salvageAndRemoveInstruction(Instruction *I) {
+void GVNPassImpl::salvageAndRemoveInstruction(Instruction *I) {
   salvageKnowledge(I, AC);
   salvageDebugInfo(*I);
   removeInstruction(I);
@@ -3844,13 +4078,13 @@ void GVNPass::salvageAndRemoveInstruction(Instruction *I) {
 
 /// Verify that the specified instruction does not occur in our
 /// internal data structures.
-void GVNPass::verifyRemoved(const Instruction *Inst) const {
+void GVNPassImpl::verifyRemoved(const Instruction *Inst) const {
   VN.verifyRemoved(Inst);
 }
 
 /// Split critical edges found during the previous
 /// iteration that may enable further optimization.
-bool GVNPass::splitCriticalEdges() {
+bool GVNPassImpl::splitCriticalEdges() {
   if (ToSplit.empty())
     return false;
 
@@ -3871,7 +4105,8 @@ bool GVNPass::splitCriticalEdges() {
 
 /// Split the critical edge connecting the given two blocks, and return
 /// the block inserted to the critical edge.
-BasicBlock *GVNPass::splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ) {
+BasicBlock *GVNPassImpl::splitCriticalEdges(BasicBlock *Pred,
+                                            BasicBlock *Succ) {
   // GVN does not require loop-simplify, do not try to preserve it if it is not
   // possible.
   BasicBlock *BB = SplitCriticalEdge(
@@ -3889,7 +4124,7 @@ BasicBlock *GVNPass::splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ) {
 /// function is to add all these blocks to "DeadBlocks". For the dead blocks'
 /// live successors, update their phi nodes by replacing the operands
 /// corresponding to dead blocks with UndefVal.
-void GVNPass::addDeadBlock(BasicBlock *BB) {
+void GVNPassImpl::addDeadBlock(BasicBlock *BB) {
   SmallVector<BasicBlock *, 4> NewDead;
   SmallSetVector<BasicBlock *, 4> DF;
 
@@ -3968,7 +4203,7 @@ void GVNPass::addDeadBlock(BasicBlock *BB) {
 // associated val-num. As it normally has far more live instructions than dead
 // instructions, it makes more sense just to "fabricate" a val-number for the
 // dead code than checking if instruction involved is dead or not.
-void GVNPass::assignValNumForDeadCode() {
+void GVNPassImpl::assignValNumForDeadCode() {
   for (BasicBlock *BB : DeadBlocks) {
     for (Instruction &Inst : *BB) {
       unsigned ValNum = VN.lookupOrAdd(&Inst);
@@ -3977,13 +4212,63 @@ void GVNPass::assignValNumForDeadCode() {
   }
 }
 
-void GVNPass::assignBlockRPONumber(Function &F) {
+void GVNPassImpl::assignBlockRPONumber(Function &F) {
   BlockRPONumber.clear();
   uint32_t NextBlockNumber = 1;
   ReversePostOrderTraversal<Function *> RPOT(&F);
   for (BasicBlock *BB : RPOT)
     BlockRPONumber[BB] = NextBlockNumber++;
   InvalidBlockRPONumbers = false;
+}
+
+GVNPass::GVNPass(GVNOptions Options)
+    : Impl(std::make_unique<GVNPassImpl>(Options)) {}
+
+GVNPass::~GVNPass() = default;
+
+GVNPass::GVNPass(GVNPass &&) = default;
+
+GVNPass &GVNPass::operator=(GVNPass &&) = default;
+
+PreservedAnalyses GVNPass::run(Function &F, FunctionAnalysisManager &AM) {
+  // FIXME: The order of evaluation of these 'getResult' calls is very
+  // significant! Re-ordering these variables will cause GVN when run alone to
+  // be less effective! We should fix memdep and basic-aa to not exhibit this
+  // behavior, but until then don't change the order here.
+  auto &AC = AM.getResult<AssumptionAnalysis>(F);
+  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
+  auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
+  auto &AA = AM.getResult<AAManager>(F);
+  auto *MemDep = Impl->isMemDepEnabled()
+                     ? &AM.getResult<MemoryDependenceAnalysis>(F)
+                     : nullptr;
+  auto &LI = AM.getResult<LoopAnalysis>(F);
+  auto *MSSA = AM.getCachedResult<MemorySSAAnalysis>(F);
+  if (Impl->isMemorySSAEnabled() && !MSSA) {
+    assert(!MemDep &&
+           "On-demand computation of MemSSA implies that MemDep is disabled!");
+    MSSA = &AM.getResult<MemorySSAAnalysis>(F);
+  }
+  auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
+  bool Changed = Impl->run(F, AC, DT, TLI, AA, MemDep, LI, &ORE,
+                           MSSA ? &MSSA->getMSSA() : nullptr);
+  if (!Changed)
+    return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserve<DominatorTreeAnalysis>();
+  PA.preserve<TargetLibraryAnalysis>();
+  if (MSSA)
+    PA.preserve<MemorySSAAnalysis>();
+  PA.preserve<LoopAnalysis>();
+  return PA;
+}
+
+void GVNPass::printPipeline(
+    raw_ostream &OS, function_ref<StringRef(StringRef)> MapClassName2PassName) {
+  static_cast<PassInfoMixin<GVNPass> *>(this)->printPipeline(
+      OS, MapClassName2PassName);
+
+  Impl->printPipeline(OS, MapClassName2PassName);
 }
 
 class llvm::GVNLegacyPass : public FunctionPass {
@@ -4008,7 +4293,7 @@ public:
     if (Impl.isMemorySSAEnabled() && !MSSAWP)
       MSSAWP = &getAnalysis<MemorySSAWrapperPass>();
 
-    return Impl.runImpl(
+    return Impl.run(
         F, getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F),
         getAnalysis<DominatorTreeWrapperPass>().getDomTree(),
         getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F),
@@ -4040,7 +4325,7 @@ public:
   }
 
 private:
-  GVNPass Impl;
+  GVNPassImpl Impl;
 };
 
 char GVNLegacyPass::ID = 0;
