@@ -115,6 +115,11 @@ declare ptr addrspace(3) @llvm.nvvm.mapa.shared.cluster(ptr addrspace(3), i32)
 declare void @llvm.nvvm.cp.async.bulk.global.to.shared.cluster(ptr addrspace(3), ptr addrspace(3), ptr addrspace(1), i32, i16, i64, i1, i1)
 declare void @llvm.nvvm.cp.async.bulk.shared.cta.to.cluster(ptr addrspace(3), ptr addrspace(3), ptr addrspace(3), i32)
 
+declare void @llvm.nvvm.tcgen05.commit.mc.cg1(ptr, i16)
+declare void @llvm.nvvm.tcgen05.commit.mc.cg2(ptr, i16)
+declare void @llvm.nvvm.tcgen05.commit.mc.shared.cg1(ptr addrspace(3), i16)
+declare void @llvm.nvvm.tcgen05.commit.mc.shared.cg2(ptr addrspace(3), i16)
+
 declare void @llvm.nvvm.cp.async.bulk.tensor.g2s.tile.1d(ptr addrspace(3) %d, ptr addrspace(3) %bar, ptr %tm, i32 %d0, i16 %mc, i64 %ch, i1 %f1, i1 %f2);
 declare void @llvm.nvvm.cp.async.bulk.tensor.g2s.tile.2d(ptr addrspace(3) %d, ptr addrspace(3) %bar, ptr %tm, i32 %d0, i32 %d1, i16 %mc, i64 %ch, i1 %f1, i1 %f2);
 declare void @llvm.nvvm.cp.async.bulk.tensor.g2s.tile.3d(ptr addrspace(3) %d, ptr addrspace(3) %bar, ptr %tm, i32 %d0, i32 %d1, i32 %d2, i16 %mc, i64 %ch, i1 %f1, i1 %f2);
@@ -453,6 +458,19 @@ define void @nvvm_cp_async_bulk_intrinsics(ptr addrspace(3) %dst, ptr addrspace(
 ; CHECK: call void @llvm.nvvm.cp.async.bulk.shared.cta.to.cluster(ptr addrspace(7) %2, ptr addrspace(3) %bar, ptr addrspace(3) %src_shared, i32 %size)
   call void @llvm.nvvm.cp.async.bulk.global.to.shared.cluster(ptr addrspace(3) %dst, ptr addrspace(3) %bar, ptr addrspace(1) %src, i32 %size, i16 0, i64 0, i1 false, i1 false)
   call void @llvm.nvvm.cp.async.bulk.shared.cta.to.cluster(ptr addrspace(3) %dst, ptr addrspace(3) %bar, ptr addrspace(3) %src_shared, i32 %size)
+  ret void
+}
+
+; CHECK-LABEL: @nvvm_tcgen05_commit_mc_intrinsics
+define void @nvvm_tcgen05_commit_mc_intrinsics(ptr %bar, ptr addrspace(3) %bar_shared, i16 %cta_mask) {
+; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.cg1.i16(ptr %bar, i16 %cta_mask)
+; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.cg2.i16(ptr %bar, i16 %cta_mask)
+; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.shared.cg1.i16(ptr addrspace(3) %bar_shared, i16 %cta_mask)
+; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.shared.cg2.i16(ptr addrspace(3) %bar_shared, i16 %cta_mask)
+  call void @llvm.nvvm.tcgen05.commit.mc.cg1(ptr %bar, i16 %cta_mask)
+  call void @llvm.nvvm.tcgen05.commit.mc.cg2(ptr %bar, i16 %cta_mask)
+  call void @llvm.nvvm.tcgen05.commit.mc.shared.cg1(ptr addrspace(3) %bar_shared, i16 %cta_mask)
+  call void @llvm.nvvm.tcgen05.commit.mc.shared.cg2(ptr addrspace(3) %bar_shared, i16 %cta_mask)
   ret void
 }
 

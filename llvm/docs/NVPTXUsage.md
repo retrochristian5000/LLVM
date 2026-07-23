@@ -2630,8 +2630,17 @@ For more information, refer to the [PTX ISA](https://docs.nvidia.com/cuda/parall
 ```llvm
 declare void @llvm.nvvm.tcgen05.commit.{cg1,cg2}(ptr %mbar)
 declare void @llvm.nvvm.tcgen05.commit.shared.{cg1,cg2}(ptr addrspace(3) %mbar)
-declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}(ptr %mbar, i16 %mc)
-declare void @llvm.nvvm.tcgen05.commit.mc.shared.{cg1,cg2}(ptr addrspace(3) %mbar, i16 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.i16(ptr %mbar, i16 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.shared.{cg1,cg2}.i16(ptr addrspace(3) %mbar, i16 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.i32(ptr %mbar, i32 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.shared.{cg1,cg2}.i32(ptr addrspace(3) %mbar, i32 %mc)
+
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.{cg1,cg2}(ptr %bar_addr)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.shared.{cg1,cg2}(ptr addrspace(3) %bar_addr)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.i16(ptr %bar_addr, i16 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.shared.{cg1,cg2}.i16(ptr addrspace(3) %bar_addr, i16 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.i32(ptr %bar_addr, i32 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.shared.{cg1,cg2}.i32(ptr addrspace(3) %bar_addr, i32 %cta_mask)
 ```
 
 ##### Overview:
@@ -2643,7 +2652,8 @@ object (`%mbar`) track the completion of all prior asynchronous tcgen05
 operations. The `.mc` variants allow signaling on the mbarrier objects of
 multiple CTAs (specified by `%mc`) in the cluster. The `.cg1` and `.cg2`
 variants generate `cta_group::1` and `cta_group::2` flavors of the
-instruction respectively.
+instruction, respectively. The `smem.a.read` variants allow tracking the completion
+of reads of Matrix A from shared memory for all prior `tcgen05.mma` operations.
 
 For more information, refer to the [PTX ISA](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen-async-sync-operations-commit).
 
