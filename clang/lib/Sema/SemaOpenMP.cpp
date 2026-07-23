@@ -2218,6 +2218,8 @@ bool SemaOpenMP::isOpenMPCapturedByRef(const ValueDecl *D, unsigned Level,
   // Find the directive that is associated with the provided scope.
   D = cast<ValueDecl>(D->getCanonicalDecl());
   QualType Ty = D->getType();
+  if (const auto *BD = dyn_cast<BindingDecl>(D))
+    Ty = BD->getDecomposedDecl()->getType();
 
   bool IsVariableUsedInMapClause = false;
   if (DSAStack->hasExplicitDirective(isOpenMPTargetExecutionDirective, Level)) {
@@ -4281,14 +4283,21 @@ public:
         E->isInstantiationDependent() ||
         E->isNonOdrUse() == clang::NOUR_Unevaluated)
       return;
-    if (auto *VD = dyn_cast<VarDecl>(E->getDecl())) {
+    ValueDecl *D = const_cast<ValueDecl *>(E->getDecl());
+    BindingDecl *BD = dyn_cast<BindingDecl>(D);
+    if (BD)
+      D = BD->getDecomposedDecl();
+    if (auto *VD = dyn_cast<VarDecl>(D)) {
+      // For BindingDecls, use the original binding for DSA lookups;
+      // fall back to DecompositionDecl if lookup fails.
+      ValueDecl *LookupDecl = BD ? static_cast<ValueDecl *>(BD) : VD;
       // Check the datasharing rules for the expressions in the clauses.
       if (!CS || (isa<OMPCapturedExprDecl>(VD) && !CS->capturesVariable(VD) &&
-                  !Stack->getTopDSA(VD, /*FromParent=*/false).RefExpr &&
+                  !Stack->getTopDSA(LookupDecl, /*FromParent=*/false).RefExpr &&
                   !Stack->isImplicitDefaultFirstprivateFD(VD))) {
         if (auto *CED = dyn_cast<OMPCapturedExprDecl>(VD))
           if (!CED->hasAttr<OMPCaptureNoInitAttr>()) {
-            Visit(CED->getInit());
+            Visit(const_cast<Expr *>(CED->getInit()));
             return;
           }
       } else if (VD->isImplicit() || isa<OMPCapturedExprDecl>(VD))
@@ -4312,7 +4321,11 @@ public:
       if (Stack->isUsesAllocatorsDecl(VD))
         return;
 
-      DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD, /*FromParent=*/false);
+      DSAStackTy::DSAVarData DVar =
+          Stack->getTopDSA(LookupDecl, /*FromParent=*/false);
+      // If lookup on BindingDecl failed, try on DecompositionDecl.
+      if (BD && !DVar.RefExpr)
+        DVar = Stack->getTopDSA(VD, /*FromParent=*/false);
       // Check if the variable has explicit DSA set and stop analysis if it so.
       if (DVar.RefExpr || !ImplicitDeclarations.insert(VD).second)
         return;
@@ -4342,7 +4355,9 @@ public:
         if (!InheritedDSA && (Stack->getDefaultDSA() == DSA_firstprivate ||
                               Stack->getDefaultDSA() == DSA_private)) {
           DSAStackTy::DSAVarData DVar =
-              Stack->getImplicitDSA(VD, /*FromParent=*/false);
+              Stack->getImplicitDSA(LookupDecl, /*FromParent=*/false);
+          if (BD && DVar.CKind == OMPC_unknown)
+            DVar = Stack->getImplicitDSA(VD, /*FromParent=*/false);
           InheritedDSA = DVar.CKind == OMPC_unknown;
         }
         if (InheritedDSA)
@@ -4501,7 +4516,9 @@ public:
       }
 
       // Define implicit data-sharing attributes for task.
-      DVar = Stack->getImplicitDSA(VD, /*FromParent=*/false);
+      DVar = Stack->getImplicitDSA(LookupDecl, /*FromParent=*/false);
+      if (BD && DVar.CKind == OMPC_unknown)
+        DVar = Stack->getImplicitDSA(VD, /*FromParent=*/false);
       if (((isOpenMPTaskingDirective(DKind) && DVar.CKind != OMPC_shared) ||
            (((Stack->getDefaultDSA() == DSA_firstprivate &&
               DVar.CKind == OMPC_firstprivate) ||
