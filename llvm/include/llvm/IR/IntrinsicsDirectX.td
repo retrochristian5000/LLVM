@@ -320,12 +320,16 @@ def int_dx_group_memory_barrier
 def int_dx_group_memory_barrier_with_group_sync
     : DefaultAttrsIntrinsic<[], [], [IntrConvergent]>;
 
+// int_dx_load_input(sigpointId, sigElementId, rowIndex, colIndex,
+//                   gsVertexOrPrimIndex)
 def int_dx_load_input
     : DefaultAttrsIntrinsic<[llvm_any_ty],
                             [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty,
                              llvm_i32_ty],
                             [IntrConvergent]>;
 
+// int_dx_store_output(sigpointId, sigElementId, rowIndex, colIndex,
+//                     gsVertexOrPrimIndex, value)
 def int_dx_store_output
     : DefaultAttrsIntrinsic<[],
                             [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty,

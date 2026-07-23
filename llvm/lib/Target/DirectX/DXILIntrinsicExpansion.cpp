@@ -252,6 +252,10 @@ static bool isIntrinsicExpansion(Function &F) {
   case Intrinsic::dx_resource_store_typedbuffer:
     return resourceAccessNeeds64BitExpansion(
         F.getParent(), F.getFunctionType()->getParamType(2), /*IsRaw*/ false);
+  case Intrinsic::dx_load_input:
+    return isa<VectorType>(F.getReturnType());
+  case Intrinsic::dx_store_output:
+    return isa<VectorType>(F.getFunctionType()->getParamType(5));
   }
   return false;
 }
@@ -1263,6 +1267,89 @@ static Value *expandMatrixTranspose(CallInst *Orig) {
   return Builder.CreateShuffleVector(Mat, Mask);
 }
 
+// Scalarize a vector int_dx_store_output call into per-component scalar calls.
+// The DXIL StoreOutput op is per-component; vector intrinsics are split here
+// so that DXILOpLowering sees only scalar variants.
+static bool expandStoreOutput(CallInst *Orig) {
+  auto *VT = dyn_cast<FixedVectorType>(Orig->getArgOperand(5)->getType());
+  if (!VT)
+    return false; // already scalar, nothing to expand
+
+  IRBuilder<> Builder(Orig);
+  Module *M = Orig->getModule();
+  Type *Int8Ty = Builder.getInt8Ty();
+  Type *Int32Ty = Builder.getInt32Ty();
+  Type *ScalarTy = VT->getElementType();
+  unsigned NumElems = VT->getNumElements();
+
+  // Intrinsic args: (sigpointId, sigElementId, rowIndex, colIndex:i8,
+  //                  gsVertexOrPrimIndex, value)
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
+  Value *StartCol = Orig->getArgOperand(3); // i8
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
+  Value *Data = Orig->getArgOperand(5);
+  Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
+
+  Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
+      M, Intrinsic::dx_store_output, {ScalarTy});
+
+  for (unsigned I = 0; I < NumElems; ++I) {
+    Value *Scalar =
+        Builder.CreateExtractElement(Data, ConstantInt::get(Int32Ty, I));
+    Value *ColIdx =
+        Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
+    Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
+    Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
+                                  GsVertexOrPrimIndex, Scalar});
+  }
+
+  Orig->eraseFromParent();
+  return true;
+}
+
+// Scalarize a vector int_dx_load_input call into per-component scalar calls
+// and reassemble the vector. The DXIL LoadInput op is per-component.
+static Value *expandLoadInput(CallInst *Orig) {
+  auto *VT = dyn_cast<FixedVectorType>(Orig->getType());
+  if (!VT)
+    return nullptr; // already scalar, nothing to expand
+
+  IRBuilder<> Builder(Orig);
+  Module *M = Orig->getModule();
+  Type *Int8Ty = Builder.getInt8Ty();
+  Type *Int32Ty = Builder.getInt32Ty();
+  Type *ScalarTy = VT->getElementType();
+  unsigned NumElems = VT->getNumElements();
+
+  // Intrinsic args: (sigpointId, sigElementId, rowIndex, colIndex:i8,
+  //                  gsVertexOrPrimIndex)
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
+  Value *StartCol = Orig->getArgOperand(3); // i8
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
+  Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
+
+  Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
+      M, Intrinsic::dx_load_input, {ScalarTy});
+
+  Value *Vec = PoisonValue::get(VT);
+  for (unsigned I = 0; I < NumElems; ++I) {
+    Value *ColIdx =
+        Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
+    Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
+    Value *Scalar =
+        Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
+                                      GsVertexOrPrimIndex});
+    Vec =
+        Builder.CreateInsertElement(Vec, Scalar, ConstantInt::get(Int32Ty, I));
+  }
+
+  return Vec;
+}
+
 static bool expandIntrinsic(Function &F, CallInst *Orig) {
   Value *Result = nullptr;
   Intrinsic::ID IntrinsicId = F.getIntrinsicID();
@@ -1341,6 +1428,12 @@ static bool expandIntrinsic(Function &F, CallInst *Orig) {
   case Intrinsic::dx_radians:
     Result = expandRadiansIntrinsic(Orig);
     break;
+  case Intrinsic::dx_load_input:
+    Result = expandLoadInput(Orig);
+    break;
+  case Intrinsic::dx_store_output:
+    expandStoreOutput(Orig);
+    return true;
   case Intrinsic::dx_interlocked_add:
     Result = expandInterlockedIntrinsic(Orig, AtomicRMWInst::Add);
     break;
