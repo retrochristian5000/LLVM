@@ -5466,6 +5466,9 @@ recurse:
       MangleAlignofSizeofArg();
       break;
 
+    case UETT_AddrSpaceOf:
+      MangleExtensionBuiltin(SAE);
+      break;
     case UETT_CountOf:
     case UETT_VectorElements:
     case UETT_OpenMPRequiredSimdAlign:
