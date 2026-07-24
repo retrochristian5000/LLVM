@@ -3,6 +3,8 @@
 ; RUN:   | FileCheck %s --check-prefix=ISEL
 ; RUN: llc -mtriple=hexagon -verify-machineinstrs -stop-after=kcfi < %s \
 ; RUN:   | FileCheck %s --check-prefix=KCFI
+; RUN: llc -mtriple=hexagon -verify-machineinstrs -filetype=obj < %s \
+; RUN:   | llvm-objdump -d - | FileCheck %s --check-prefix=OBJ
 
 ; Verify KCFI type hash is emitted before the function.
 ; ASM:       .word 12345678
@@ -29,6 +31,12 @@ define void @f1(ptr noundef %x) !kcfi_type !1 {
 ; KCFI-NEXT:    KCFI_CHECK $r0, 12345678
 ; KCFI-NEXT:    J2_callr killed $r0
 ; KCFI-NEXT:  }
+
+; In the object, the id must be constant-extended:
+; OBJ-LABEL: <f1>:
+; OBJ:        r{{[0-9]+}} = memw(r0+#-0x4)
+; OBJ-NEXT:   immext(#0xbc6140)
+; OBJ-NEXT:   r{{[0-9]+}} = ##0xbc614e
 
   call void %x() [ "kcfi"(i32 12345678) ]
   ret void
