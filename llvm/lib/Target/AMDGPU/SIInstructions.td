@@ -2974,7 +2974,7 @@ def : AMDGPUPat <
 
 def : AMDGPUPat <
   (DivergentBinFrag<and> (i32 (bitconvert (extractelt (v2f32 (bitconvert (fneg f64:$src1))), (i32 1)))),
-       (i32 -2147483648)),
+       (i32 0x80000000)),
   (V_BFI_B32_e64 (i32 (EXTRACT_SUBREG VReg_64:$src1, sub1)),
                  (i32 0), (S_MOV_B32 (i32 0x80000000)))
 >;
