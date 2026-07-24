@@ -1,0 +1,36 @@
+{
+  "members": [
+    {
+      "members": [],
+      "namespace": {
+        "kind": "StaticLibrary",
+        "name": "libfat"
+      },
+      "target_triple": "arm64-apple-ios",
+      "type": "StaticLibrary"
+    },
+    {
+      "members": [],
+      "namespace": {
+        "kind": "StaticLibrary",
+        "name": "libfat"
+      },
+      "target_triple": "arm64-apple-macosx",
+      "type": "StaticLibrary"
+    },
+    {
+      "members": [],
+      "namespace": {
+        "kind": "StaticLibrary",
+        "name": "libfat"
+      },
+      "target_triple": "x86_64-apple-macosx",
+      "type": "StaticLibrary"
+    }
+  ],
+  "namespace": {
+    "kind": "MultiArchStaticLibrary",
+    "name": "libfat"
+  },
+  "type": "MultiArchStaticLibrary"
+}
