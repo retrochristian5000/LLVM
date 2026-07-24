@@ -3548,6 +3548,10 @@ public:
       return (is(Opcodes) || ...);
     }
 
+    /// Return true if CodeGen handles this operand without adding bytes to the
+    /// DWARF expression.
+    LLVM_ABI bool isNonEmitting() const;
+
     /// Get an argument to the operand.
     ///
     /// Never returns the operand itself.

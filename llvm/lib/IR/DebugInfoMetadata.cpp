@@ -1761,6 +1761,10 @@ unsigned DIExpression::ExprOperand::getSize() const {
   }
 }
 
+bool DIExpression::ExprOperand::isNonEmitting() const {
+  return isOneOf(dwarf::DW_OP_LLVM_tag_offset, dwarf::DW_OP_LLVM_label);
+}
+
 bool DIExpression::isValid() const {
   auto IsEntryValueValid = [this](const ExprOperand &EntryValue) {
     auto FirstOp = expr_op_begin();

@@ -29,6 +29,18 @@ using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
 
+/// Labels and tag offsets don't add operations to the DWARF expression. Look
+/// past them so an expression that otherwise contains only a fragment still
+/// uses the simple register path.
+static bool hasComplexExpression(const DIExpressionCursor &ExprCursor) {
+  for (DIExpression::ExprOperand Op : ExprCursor) {
+    if (Op.isNonEmitting())
+      continue;
+    return !Op.is(dwarf::DW_OP_LLVM_fragment);
+  }
+  return false;
+}
+
 void DwarfExpression::emitConstu(uint64_t Value) {
   if (Value < 32)
     emitOp(dwarf::DW_OP_lit0 + Value);
@@ -298,10 +310,8 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     return false;
   }
 
-  bool HasComplexExpression = false;
   auto Op = ExprCursor.peek();
-  if (Op && Op->getOp() != dwarf::DW_OP_LLVM_fragment)
-    HasComplexExpression = true;
+  bool HasComplexExpression = hasComplexExpression(ExprCursor);
 
   // If the register can only be described by a complex expression (i.e.,
   // multiple subregisters) it doesn't safely compose with another complex
@@ -351,9 +361,7 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     DwarfRegs.clear();
     // If we need to mask out a subregister, do it now, unless the next
     // operation would emit an OpPiece anyway.
-    auto NextOp = ExprCursor.peek();
-    if (SubRegisterSizeInBits && NextOp &&
-        (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+    if (SubRegisterSizeInBits && hasComplexExpression(ExprCursor))
       maskSubRegister();
     return true;
   }
@@ -418,9 +426,7 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
 
   // If we need to mask out a subregister, do it now, unless the next
   // operation would emit an OpPiece anyway.
-  auto NextOp = ExprCursor.peek();
-  if (SubRegisterSizeInBits && NextOp &&
-      (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+  if (SubRegisterSizeInBits && hasComplexExpression(ExprCursor))
     maskSubRegister();
 
   return true;
