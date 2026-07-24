@@ -513,7 +513,7 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
 }
 
 static bool shouldIncludePTX(const ArgList &Args, StringRef InputArch) {
-  bool includePTX = true;
+  bool includePTX = false;
   for (Arg *A : Args.filtered(options::OPT_cuda_include_ptx_EQ,
                               options::OPT_no_cuda_include_ptx_EQ)) {
     A->claim();
