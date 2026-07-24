@@ -60,7 +60,7 @@ Error_t Memcpy(void *Dst, const void *Src, size_t Size, MemcpyKind Kind) {
   switch (Kind) {
   case MemcpyHostToHost: {
     ol_device_handle_t Host = language_runtime::getHostDevice();
-    Result = olMemcpy(Queue, Dst, Host, const_cast<void *>(Src), Host, Size);
+    Result = olMemcpy(nullptr, Dst, Host, const_cast<void *>(Src), Host, Size);
     break;
   }
   case MemcpyHostToDevice: {
@@ -101,26 +101,6 @@ Error_t DeviceSynchronize() {
   return convertResult(Result);
 }
 
-Error_t GetLastError() {
-  // TODO:
-  return Success;
-}
-
-Error_t PeekAtLastError() {
-  // TODO:
-  return Success;
-}
-
-const char *GetErrorName(Error_t Error) {
-  // TODO:
-  return "";
-}
-
-const char *GetErrorString(Error_t Error) {
-  // TODO:
-  return "";
-}
-
 Error_t GetDevice(int *DeviceNo) {
   ol_device_handle_t Device = language_runtime::getDevice(DeviceNo);
   if (!Device)
@@ -135,15 +115,17 @@ Error_t GetDeviceCount(int *Count) {
 
 Error_t SetDevice(int DeviceNo) {
   ol_device_handle_t Device = language_runtime::setDefaultDevice(DeviceNo);
+  if (!Device)
+    return ErrorInvalidValue;
   assert(Device == language_runtime::getDefaultDevice() &&
          "Set Device is not Default Device");
-  return Device ? Success : ErrorInvalidValue;
+  return Success;
 }
 
 Error_t HostAlloc(void **Ptr, size_t Size, unsigned int Flags) {
   // TODO:
   ol_device_handle_t Device = language_runtime::getDefaultDevice();
-  ol_result_t Result = olMemAlloc(Device, OL_ALLOC_TYPE_HOST, Size, Ptr);
+  ol_result_t Result = olMemAllocHost(Device, Size, Ptr);
   return convertResult(Result);
 }
 
@@ -156,14 +138,7 @@ Error_t FreeHost(void *Ptr) {
   return convertResult(Result);
 }
 
-Error_t DriverGetVersion(int *Version) {
-  // TODO:
-  *Version = 42;
-  return Success;
-}
-
 Error_t GetDeviceProperties(DeviceProp_t *DeviceProp, int DeviceNo) {
-  // TODO: [h15] add remaining pci/mem fields
   ol_device_handle_t Device = language_runtime::getDefaultDevice();
   size_t nameSize = 0;
   olGetDeviceInfoSize(Device, OL_DEVICE_INFO_NAME, &nameSize);
@@ -189,16 +164,6 @@ Error_t StreamCreate(Stream_t *Stream) {
   olCreateQueue(language_runtime::getDefaultDevice(), &Queue);
   *Stream = reinterpret_cast<Stream_t>(Queue);
   return Success;
-}
-
-Error_t StreamCreateWithFlags(Stream_t *Stream, unsigned int Flags) {
-  if (Flags == StreamCreateWithFlagsFlags::StreamDefault)
-    // FIXME: [h15] offload streams are non-blocking by default
-    return StreamCreate(Stream);
-  if (Flags == StreamCreateWithFlagsFlags::StreamNonBlocking) {
-    return StreamCreate(Stream);
-  }
-  return ErrorInvalidValue;
 }
 
 Error_t StreamDestroy(Stream_t Stream) {

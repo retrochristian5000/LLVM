@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "LanguageRegistration.cpp"
 #include "LanguageLaunch.cpp"
+#include "LanguageRegistration.cpp"
 
 #define LANGUAGE cuda
 #include "LanguageAliases.h"
