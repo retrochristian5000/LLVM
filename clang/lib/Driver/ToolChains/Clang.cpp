@@ -5195,10 +5195,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   bool IsHostOffloadingAction =
       JA.isHostOffloading(Action::OFK_OpenMP) ||
       JA.isHostOffloading(Action::OFK_SYCL) ||
-      (JA.isHostOffloading(C.getActiveOffloadKinds()) &&
-       Args.hasFlag(options::OPT_offload_new_driver,
-                    options::OPT_no_offload_new_driver,
-                    C.getActiveOffloadKinds() != Action::OFK_None));
+      (JA.isHostOffloading(C.getActiveOffloadKinds()));
 
   bool IsRDCMode =
       Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc, false);
@@ -5561,9 +5558,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       const Arg *LTOArg = Args.getLastArg(options::OPT_foffload_lto,
                                           options::OPT_foffload_lto_EQ);
       if (IsDeviceOffloadAction && !JA.isDeviceOffloading(Action::OFK_OpenMP) &&
-          !Args.hasFlag(options::OPT_offload_new_driver,
-                        options::OPT_no_offload_new_driver,
-                        C.getActiveOffloadKinds() != Action::OFK_None) &&
           !Triple.isAMDGPU() && !Triple.isSPIRV()) {
         D.Diag(diag::err_drv_unsupported_opt_for_target)
             << (LTOArg ? LTOArg->getAsString(Args) : "-foffload-lto")
@@ -7184,13 +7178,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // new driver. Otherwise, check if we should forward the new driver to change
   // offloading code generation.
   if (Args.hasFlag(options::OPT_foffload_via_llvm,
-                   options::OPT_fno_offload_via_llvm, false)) {
-    CmdArgs.append({"--offload-new-driver", "-foffload-via-llvm"});
-  } else if (Args.hasFlag(options::OPT_offload_new_driver,
-                          options::OPT_no_offload_new_driver,
-                          C.getActiveOffloadKinds() != Action::OFK_None)) {
-    CmdArgs.push_back("--offload-new-driver");
-  }
+                   options::OPT_fno_offload_via_llvm, false))
+    CmdArgs.push_back("-foffload-via-llvm");
 
   const XRayArgs &XRay = TC.getXRayArgs(Args);
   XRay.addArgs(TC, Args, CmdArgs, InputType);
