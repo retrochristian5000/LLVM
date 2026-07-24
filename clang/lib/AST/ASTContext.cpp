@@ -2374,17 +2374,6 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
         Width = Target->getLongDoubleWidth();
         Align = Target->getLongDoubleAlign();
       }
-      // On Windows MSVC targets, x86_fp80 requires 16-byte alignment for ABI
-      // correctness (movaps instructions will fault on misaligned addresses).
-      // Mark this as an ABI requirement that must not be reduced by #pragma
-      // pack. This is MSVC-specific; MinGW has different layout rules. GCC
-      // preserves such alignment on other targets, but Clang historically has
-      // not; changing this would break existing Clang ABI on non-Windows
-      // platforms.
-      if (Target->getTriple().isOSWindows() &&
-          Target->getTriple().isWindowsMSVCEnvironment() &&
-          &Target->getLongDoubleFormat() == &llvm::APFloat::x87DoubleExtended())
-        AlignRequirement = AlignRequirementKind::RequiredByABI;
       break;
     case BuiltinType::Float128:
       if (Target->hasFloat128Type() || !getLangOpts().OpenMP ||
