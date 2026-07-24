@@ -405,6 +405,13 @@ bool GlobalValue::isNoipaFnDef() const {
   return F->hasFnAttribute(Attribute::NoIPA);
 }
 
+bool GlobalValue::isOptNoneFnDef() const {
+  const Function *F = dyn_cast<Function>(this);
+  if (!F || F->isDeclaration())
+    return false;
+  return F->hasFnAttribute(Attribute::OptimizeNone);
+}
+
 bool GlobalValue::isDeclaration() const {
   // Globals are definitions if they have an initializer.
   if (const GlobalVariable *GV = dyn_cast<GlobalVariable>(this))
