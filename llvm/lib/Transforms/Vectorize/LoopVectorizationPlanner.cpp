@@ -706,6 +706,21 @@ bool LoopVectorizationPlanner::isMoreProfitable(const VectorizationFactor &A,
         !B.Width.isScalar())
       return true;
 
+  // Prefer fixed VFs for epilogue loops (unless the fixed cost is much more
+  // expensive -- >= 2x). There are some extra costs for using scalable vectors
+  // in epilogues (e.g., reduced post-vectorization unrolling) that are not
+  // represented in the cost. TODO: Reconsider this restriction for predicated
+  // epilogues (once supported).
+  if (IsEpilogue && A.Width.isScalable() != B.Width.isScalable() &&
+      A.Cost.isValid()) {
+    auto [FixedCost, ScalableCost] = std::make_pair(CostA, CostB);
+    if (B.Width.isFixed())
+      std::swap(FixedCost, ScalableCost);
+
+    if (FixedCost / ScalableCost <= 1)
+      return A.Width.isFixed();
+  }
+
   // Improve estimate for the vector width if it is scalable.
   unsigned EstimatedWidthA = A.Width.getKnownMinValue();
   unsigned EstimatedWidthB = B.Width.getKnownMinValue();
