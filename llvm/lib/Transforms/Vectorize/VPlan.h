@@ -1720,14 +1720,14 @@ protected:
 /// A recipe to wrap on original IR instruction not to be modified during
 /// execution, except for PHIs. PHIs are modeled via the VPIRPhi subclass.
 /// Expect PHIs, VPIRInstructions cannot have any operands.
-class VPIRInstruction : public VPSingleDefRecipe {
+class VPIRInstruction : public VPRecipeBase {
+  Instruction &I;
+
 protected:
   /// VPIRInstruction::create() should be used to create VPIRInstructions, as
   /// subclasses may need to be created, e.g. VPIRPhi.
   VPIRInstruction(Instruction &I)
-      : VPSingleDefRecipe(VPRecipeBase::VPIRInstructionSC, {}, I.getType()) {
-    setUnderlyingValue(&I);
-  }
+      : VPRecipeBase(VPRecipeBase::VPIRInstructionSC, {}), I(I) {}
 
 public:
   ~VPIRInstruction() override = default;
@@ -1739,7 +1739,7 @@ public:
   VP_CLASSOF_IMPL(VPRecipeBase::VPIRInstructionSC)
 
   VPIRInstruction *clone() override {
-    auto *R = create(*getUnderlyingInstr());
+    auto *R = create(I);
     for (auto *Op : operands())
       R->addOperand(Op);
     return R;
@@ -1750,6 +1750,8 @@ public:
   /// Return the cost of this VPIRInstruction.
   LLVM_ABI_FOR_TEST InstructionCost
   computeCost(ElementCount VF, VPCostContext &Ctx) const override;
+
+  Instruction &getInstruction() const { return I; }
 
   bool usesScalars(const VPValue *Op) const override {
     assert(is_contained(operands(), Op) &&
@@ -1787,7 +1789,7 @@ struct LLVM_ABI_FOR_TEST VPIRPhi : public VPIRInstruction,
 
   static inline bool classof(const VPRecipeBase *U) {
     auto *R = dyn_cast<VPIRInstruction>(U);
-    return R && isa<PHINode>(R->getUnderlyingInstr());
+    return R && isa<PHINode>(R->getInstruction());
   }
 
   static inline bool classof(const VPUser *U) {
@@ -1795,7 +1797,7 @@ struct LLVM_ABI_FOR_TEST VPIRPhi : public VPIRInstruction,
     return R && classof(R);
   }
 
-  PHINode &getIRPhi() { return cast<PHINode>(*getUnderlyingInstr()); }
+  PHINode &getIRPhi() { return cast<PHINode>(getInstruction()); }
 
   void execute(VPTransformState &State) override;
 

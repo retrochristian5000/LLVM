@@ -2012,7 +2012,6 @@ void VPIRInstruction::execute(VPTransformState &State) {
          "PHINodes must be handled by VPIRPhi");
   // Advance the insert point after the wrapped IR instruction. This allows
   // interleaving VPIRInstructions and other recipes.
-  Instruction &I = *getUnderlyingInstr();
   State.Builder.SetInsertPoint(I.getParent(), std::next(I.getIterator()));
 }
 
@@ -2026,7 +2025,7 @@ InstructionCost VPIRInstruction::computeCost(ElementCount VF,
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 void VPIRInstruction::printRecipe(raw_ostream &O, const Twine &Indent,
                                   VPSlotTracker &SlotTracker) const {
-  O << Indent << "IR " << *getUnderlyingInstr();
+  O << Indent << "IR " << I;
 }
 #endif
 

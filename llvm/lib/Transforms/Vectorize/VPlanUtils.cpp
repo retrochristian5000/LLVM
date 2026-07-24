@@ -997,23 +997,14 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
     // We cannot create a phi in the Plan's entry, which would be required in
     // the absence of a canonical IV to re-use or if AddRec is non-affine,
     // because its predecessors are not modeled: fall back to the IR expander.
-    PHINode *ARCanIV = AR->getLoop()->getCanonicalInductionVariable();
-    if (!AR->isAffine() || !ARCanIV)
-      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
-
     // If a canonical IV to re-use is present, it would be in the Plan's entry.
-    VPBasicBlock *Header = Plan.getEntry();
-    auto FoundCanIV = find_if(*Header, [ARCanIV](VPRecipeBase &R) {
-      auto *IRPhi = dyn_cast<VPIRPhi>(&R);
-      return IRPhi && &IRPhi->getIRPhi() == ARCanIV;
-    });
-
-    // The AR's loop refers to a loop that doesn't exist in the Plan: fall back
-    // to the IR expander.
-    if (FoundCanIV == Header->end())
+    PHINode *ARCanIV = AR->getLoop()->getCanonicalInductionVariable();
+    if (!AR->isAffine() || !ARCanIV ||
+        ARCanIV->getParent() !=
+            cast<VPIRBasicBlock>(Plan.getEntry())->getIRBasicBlock())
       return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
 
-    VPValue *CanonicalIV = FoundCanIV->getVPSingleValue();
+    VPValue *CanonicalIV = Plan.getOrAddLiveIn(ARCanIV);
     VPValue *Start;
     Start = tryToExpand(AR->getStart());
     if (!Start)
