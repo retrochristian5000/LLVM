@@ -1,0 +1,23 @@
+// Test the --verbose flag on the `multi-arch create` subcommand.
+
+// RUN: rm -rf %t
+// RUN: mkdir -p %t
+
+// RUN: clang-ssaf-linker multi-arch create --verbose \
+// RUN:     %S/Inputs/lib-arm64.json %S/Inputs/lib-x86_64.json -o %t/libv.json --namespace libfat 2>&1 \
+// RUN:   | FileCheck %s --match-full-lines
+
+// CHECK:      note: - Creating multi-arch bundle started.
+// CHECK-NEXT: note:   - Validating input.
+// CHECK-NEXT: note:     - Validated output path '{{.*}}libv.json'.
+// CHECK-NEXT: note:     - Validated 2 input artifact paths.
+// CHECK-NEXT: note:   - Bundling members.
+// CHECK-NEXT: note:     - Classifying inputs.
+// CHECK-NEXT: note:       - [1/2] Reading '{{.*}}lib-arm64.json'.
+// CHECK-NEXT: note:       - [1/2] Classifying '{{.*}}lib-arm64.json'.
+// CHECK-NEXT: note:       - [2/2] Reading '{{.*}}lib-x86_64.json'.
+// CHECK-NEXT: note:       - [2/2] Classifying '{{.*}}lib-x86_64.json'.
+// CHECK-NEXT: note:     - Target namespace: 'BuildNamespace(MultiArchStaticLibrary, libfat)'.
+// CHECK-NEXT: note:     - Bundled 2 architecture slice(s).
+// CHECK-NEXT: note:     - Writing multi-arch bundle to '{{.*}}libv.json'.
+// CHECK-NEXT: note: - Creating multi-arch bundle finished.

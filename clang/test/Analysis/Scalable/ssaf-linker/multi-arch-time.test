@@ -1,0 +1,19 @@
+// Test the --time flag on the `multi-arch create` subcommand.
+
+// RUN: rm -rf %t
+// RUN: mkdir -p %t
+
+// RUN: clang-ssaf-linker multi-arch create --time \
+// RUN:     %S/Inputs/lib-arm64.json %S/Inputs/lib-x86_64.json -o %t/libt.json --namespace libfat 2>&1 \
+// RUN:   | FileCheck %s --match-full-lines
+
+// CHECK:      ===-------------------------------------------------------------------------===
+// CHECK-NEXT: {{[ ]+}}SSAF Linker
+// CHECK-NEXT: ===-------------------------------------------------------------------------===
+// CHECK-NEXT:   Total Execution Time: {{[0-9.]+}} seconds ({{[0-9.]+}} wall clock)
+// CHECK:      {{.*}}---Wall Time---{{.*}}
+// CHECK-DAG:  {{.*}}Validate Input
+// CHECK-DAG:  {{.*}}Read Artifacts
+// CHECK-DAG:  {{.*}}Flatten/Assemble Multi-Arch Bundle
+// CHECK-DAG:  {{.*}}Write Multi-Arch Bundle
+// CHECK:      {{.*}}Total
