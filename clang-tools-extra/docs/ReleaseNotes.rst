@@ -116,6 +116,12 @@ Changes in existing checks
   exclusively for overload resolution. Added the :option:`IgnoredTypes`
   option to allow customizing the set of ignored types.
 
+- Improved :doc:`bugprone-narrowing-conversions
+  <clang-tidy/checks/bugprone/narrowing-conversions>` check by adding the
+  :option:`WarnOnTimeTNarrowingConversion` option to diagnose conversions from
+  ``time_t`` values to integer types that may not preserve the full range of
+  ``time_t``. This option is disabled by default.
+
 Removed checks
 ^^^^^^^^^^^^^^
 
