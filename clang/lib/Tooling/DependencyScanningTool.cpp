@@ -16,6 +16,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Options/Options.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/iterator.h"
@@ -160,6 +161,8 @@ static bool computeDependenciesForDriverCommandLine(
   if (!Compilation)
     return false;
 
+  Worker.getService().getLogger().enable(
+      Compilation->getArgs().getLastArgValue(options::OPT_fdepscan_log_path));
   SmallVector<SmallVector<std::string, 0>> FrontendCommandLines;
   for (const auto &Cmd : Compilation->getJobs())
     FrontendCommandLines.push_back(buildCC1CommandLine(Cmd));
