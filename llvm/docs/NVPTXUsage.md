@@ -2652,8 +2652,8 @@ object (`%mbar`) track the completion of all prior asynchronous tcgen05
 operations. The `.mc` variants allow signaling on the mbarrier objects of
 multiple CTAs (specified by `%mc`) in the cluster. The `.cg1` and `.cg2`
 variants generate `cta_group::1` and `cta_group::2` flavors of the
-instruction, respectively. The `smem.a.read` variants allow tracking the completion
-of reads of Matrix A from shared memory for all prior `tcgen05.mma` operations.
+instruction, respectively. The `smem.a.read` variants track the completion
+of reads of A-matrix from shared memory for all prior `tcgen05.mma` operations.
 
 For more information, refer to the [PTX ISA](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen-async-sync-operations-commit).
 

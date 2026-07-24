@@ -461,8 +461,8 @@ define void @nvvm_cp_async_bulk_intrinsics(ptr addrspace(3) %dst, ptr addrspace(
   ret void
 }
 
-; CHECK-LABEL: @nvvm_tcgen05_commit_mc_intrinsics
-define void @nvvm_tcgen05_commit_mc_intrinsics(ptr %bar, ptr addrspace(3) %bar_shared, i16 %cta_mask) {
+; CHECK-LABEL: @nvvm_tcgen05_commit_mc_16b_intrinsics
+define void @nvvm_tcgen05_commit_mc_16b_intrinsics(ptr %bar, ptr addrspace(3) %bar_shared, i16 %cta_mask) {
 ; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.cg1.i16(ptr %bar, i16 %cta_mask)
 ; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.cg2.i16(ptr %bar, i16 %cta_mask)
 ; CHECK: call void @llvm.nvvm.tcgen05.commit.mc.shared.cg1.i16(ptr addrspace(3) %bar_shared, i16 %cta_mask)

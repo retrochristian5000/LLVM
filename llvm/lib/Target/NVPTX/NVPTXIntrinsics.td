@@ -5734,13 +5734,13 @@ multiclass TCGEN05_COMMIT_INTR<string AS, string num> {
     def _MC_32B : BasicNVPTXInst<(outs), (ins ADDR:$mbar, B32:$mc),
                     prefix # ".multicast::cluster::32b.b64",
                     [(IntrMC addr:$mbar, i32:$mc)]>;
-    def _SMRA : BasicNVPTXInst<(outs), (ins ADDR:$mbar),
+    def _SMEM_A_READ : BasicNVPTXInst<(outs), (ins ADDR:$mbar),
                   prefix_smem_a_read # ".b64",
                   [(IntrSmemARead addr:$mbar)]>;
-    def _SMRA_MC : BasicNVPTXInst<(outs), (ins ADDR:$mbar, B16:$mc),
+    def _SMEM_A_READ_MC : BasicNVPTXInst<(outs), (ins ADDR:$mbar, B16:$mc),
                     prefix_smem_a_read # ".multicast::cluster.b64",
                     [(IntrSmemAReadMC addr:$mbar, i16:$mc)]>;
-    def _SMRA_MC_32B : BasicNVPTXInst<(outs), (ins ADDR:$mbar, B32:$mc),
+    def _SMEM_A_READ_MC_32B : BasicNVPTXInst<(outs), (ins ADDR:$mbar, B32:$mc),
                         prefix_smem_a_read # ".multicast::cluster::32b.b64",
                         [(IntrSmemAReadMC addr:$mbar, i32:$mc)]>;
   }
