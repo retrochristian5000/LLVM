@@ -10361,7 +10361,7 @@ void SIInstrInfo::fixImplicitOperands(MachineInstr &MI) const {
   if (MI.isInlineAsm())
     return;
 
-  if (MI.getNumOperands() < MI.getNumExplicitOperands())
+  if (MI.getNumOperands() < MI.getDesc().getNumOperands())
     return;
 
   for (auto &Op : MI.implicit_operands()) {
