@@ -4107,7 +4107,25 @@ InputSection *ThunkSection::getTargetInputSection() const {
   return t->getTargetInputSection();
 }
 
-bool ThunkSection::assignOffsets() {
+bool ThunkSection::assignOffsets(bool sort) {
+  if (sort) {
+    // Sorting rearranges thunk sequence from:
+    // destA, destB, ..., [backwards A, B], [forward C, D], ..., destC, destD
+    // to
+    // destA, destB, ..., [backwards B, A], [forwards D, C], ..., destC, destD
+    //
+    // Since we iterate on thunks from first to last in a thunk section while
+    // doing upgradation, any thunk that is found to be out of range is
+    // guarranted to not invalidate thunks that we have already iterated on.
+    // This allows quicker convergence.
+    uint64_t sectionVA = getVA();
+    llvm::stable_sort(thunks, [sectionVA](const Thunk *a, const Thunk *b) {
+      bool aFwd = a->getDestVA() > sectionVA;
+      bool bFwd = b->getDestVA() > sectionVA;
+      return aFwd != bFwd ? bFwd : a->getDestVA() > b->getDestVA();
+    });
+  }
+
   uint64_t off = 0;
   bool changed = false;
   for (Thunk *t : thunks) {
