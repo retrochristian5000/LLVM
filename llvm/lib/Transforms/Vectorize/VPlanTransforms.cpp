@@ -35,6 +35,7 @@
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/TypeSize.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
@@ -412,6 +413,15 @@ static bool sinkScalarOperands(VPlan &Plan) {
   return Changed;
 }
 
+/// Returns the reciprocal entry probability encoded in \p BW, or 1 if \p BW is
+/// null.
+static uint64_t getReciprocalFromBranchWeights(MDNode *BW) {
+  uint64_t Total;
+  if (BW && extractProfTotalWeight(BW, Total))
+    return Total;
+  return 1;
+}
+
 /// If \p R is a region with a VPBranchOnMaskRecipe in the entry block, return
 /// the mask.
 static VPValue *getPredicatedMask(VPRegionBlock *R) {
@@ -496,6 +506,12 @@ static bool mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
     for (VPRecipeBase &ToMove : make_early_inc_range(reverse(*Then1)))
       ToMove.moveBefore(*Then2, Then2->getFirstNonPhi());
 
+    // Both then blocks have identical masks. If weights differ, pick lower
+    // (more conservative) one.
+    if (getReciprocalFromBranchWeights(Then1->getBranchWeights()) <
+        getReciprocalFromBranchWeights(Then2->getBranchWeights()))
+      Then2->setBranchWeights(Then1->getBranchWeights());
+
     auto *Merge1 = cast<VPBasicBlock>(Then1->getSingleSuccessor());
     auto *Merge2 = cast<VPBasicBlock>(Then2->getSingleSuccessor());
 
@@ -556,7 +572,8 @@ static VPRegionBlock *createReplicateRegion(VPReplicateRecipe *PredRecipe,
       PredRecipe->isSingleScalar(), nullptr /*Mask*/, *PredRecipe, *PredRecipe,
       PredRecipe->getDebugLoc());
   auto *Pred =
-      Plan.createVPBasicBlock(Twine(RegionName) + ".if", RecipeWithoutMask);
+      Plan.createVPBasicBlock(Twine(RegionName) + ".if", RecipeWithoutMask,
+                              PredRecipe->getParent()->getBranchWeights());
   auto *Exiting = Plan.createVPBasicBlock(Twine(RegionName) + ".continue");
   VPRegionBlock *Region =
       Plan.createReplicateRegion(Entry, Exiting, RegionName);

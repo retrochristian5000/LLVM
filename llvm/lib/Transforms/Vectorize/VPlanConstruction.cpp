@@ -53,6 +53,10 @@ class PlainCFGBuilder {
   // Loop versioning for alias metadata.
   LoopVersioning *LVer;
 
+  // Maps an original IR block to the estimated branch_weights recorded on its
+  // VPBasicBlock at creation, or null if not provided.
+  function_ref<MDNode *(const BasicBlock *)> GetBranchWeights;
+
   // Vectorization plan that we are working on.
   std::unique_ptr<VPlan> Plan;
 
@@ -81,8 +85,9 @@ class PlainCFGBuilder {
   void createVPInstructionsForVPBB(VPBasicBlock *VPBB, BasicBlock *BB);
 
 public:
-  PlainCFGBuilder(Loop *Lp, LoopInfo *LI, LoopVersioning *LVer, Type *IdxTy)
-      : TheLoop(Lp), LI(LI), LVer(LVer),
+  PlainCFGBuilder(Loop *Lp, LoopInfo *LI, LoopVersioning *LVer, Type *IdxTy,
+                  function_ref<MDNode *(const BasicBlock *)> GetBranchWeights)
+      : TheLoop(Lp), LI(LI), LVer(LVer), GetBranchWeights(GetBranchWeights),
         Plan(std::make_unique<VPlan>(Lp, IdxTy)) {}
 
   /// Build plain CFG for TheLoop and connect it to Plan's entry.
@@ -133,7 +138,9 @@ VPBasicBlock *PlainCFGBuilder::getOrCreateVPBB(BasicBlock *BB) {
   // Create new VPBB.
   StringRef Name = BB->getName();
   LLVM_DEBUG(dbgs() << "Creating VPBasicBlock for " << Name << "\n");
-  VPBasicBlock *VPBB = Plan->createVPBasicBlock(Name);
+  VPBasicBlock *VPBB = Plan->createVPBasicBlock(
+      Name, /*Recipe=*/nullptr,
+      GetBranchWeights ? GetBranchWeights(BB) : nullptr);
   BB2VPBB[BB] = VPBB;
   return VPBB;
 }
@@ -615,11 +622,11 @@ static void simplifyLiveInsWithSCEV(VPlan &Plan,
 /// To make RUN_VPLAN_PASS print initial VPlan.
 static void printAfterInitialConstruction(VPlan &) {}
 
-std::unique_ptr<VPlan>
-VPlanTransforms::buildVPlan0(Loop *TheLoop, LoopInfo &LI, Type *InductionTy,
-                             PredicatedScalarEvolution &PSE,
-                             LoopVersioning *LVer) {
-  PlainCFGBuilder Builder(TheLoop, &LI, LVer, InductionTy);
+std::unique_ptr<VPlan> VPlanTransforms::buildVPlan0(
+    Loop *TheLoop, LoopInfo &LI, Type *InductionTy,
+    PredicatedScalarEvolution &PSE, LoopVersioning *LVer,
+    function_ref<MDNode *(const BasicBlock *)> GetBranchWeights) {
+  PlainCFGBuilder Builder(TheLoop, &LI, LVer, InductionTy, GetBranchWeights);
   std::unique_ptr<VPlan> VPlan0 = Builder.buildPlainCFG();
   addInitialSkeleton(*VPlan0, InductionTy, PSE, TheLoop);
   simplifyLiveInsWithSCEV(*VPlan0, PSE);
