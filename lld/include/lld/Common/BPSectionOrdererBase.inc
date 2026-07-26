@@ -68,7 +68,8 @@ template <class D> struct BPOrderer {
                     llvm::ArrayRef<Section *> sections,
                     const DenseMap<CachedHashStringRef, std::set<unsigned>>
                         &rootSymbolToSectionIdxs,
-                    llvm::ArrayRef<unsigned> initialStartupSectionIdxs)
+                    llvm::ArrayRef<unsigned> initialStartupSectionIdxs,
+                    llvm::ArrayRef<unsigned> prefixStartupSectionIdxs)
       -> llvm::DenseMap<const Section *, int>;
 
   std::optional<StringRef> static getResolvedLinkageName(StringRef name) {
@@ -165,7 +166,8 @@ auto BPOrderer<D>::computeOrder(
     ArrayRef<Section *> sections,
     const DenseMap<CachedHashStringRef, std::set<unsigned>>
         &rootSymbolToSectionIdxs,
-    ArrayRef<unsigned> initialStartupSectionIdxs)
+    ArrayRef<unsigned> initialStartupSectionIdxs,
+    ArrayRef<unsigned> prefixStartupSectionIdxs)
     -> DenseMap<const Section *, int> {
   TimeTraceScope timeScope("Setup Balanced Partitioning");
   DenseMap<const void *, uint64_t> sectionToIdx;
@@ -372,6 +374,13 @@ auto BPOrderer<D>::computeOrder(
   unsigned numCompressionSections = 0, compressionSize = 0;
   unsigned numDuplicateCompressionSections = 0, duplicateCompressionSize = 0;
   SetVector<const Section *> orderedSections;
+  for (unsigned sectionIdx : prefixStartupSectionIdxs) {
+    const auto *isec = sections[sectionIdx];
+    if (orderedSections.insert(isec)) {
+      startupSize += D::getSize(*isec);
+      ++numStartupSections;
+    }
+  }
   // Order startup functions,
   for (auto &node : nodesForStartup) {
     const auto *isec = sections[node.Id];
