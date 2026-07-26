@@ -4511,6 +4511,47 @@ static Instruction *foldSelectNegNot(SelectInst &SI,
   return nullptr;
 }
 
+/// Fold select (A & Shift == 0 | B & Shift == 0), 0, Shift -> Shift & A & B
+/// where Shift is known to be a power of two.
+static Instruction *foldSelectAndOrPowerOfTwo(SelectInst &SI,
+                                              InstCombiner::BuilderTy &Builder,
+                                              const SimplifyQuery &SQ) {
+  Value *Cond = SI.getCondition();
+  Value *TrueVal = SI.getTrueValue();
+  Value *FalseVal = SI.getFalseValue();
+
+  Value *A, *B, *Shift;
+  CmpPredicate Pred1, Pred2;
+
+  bool Case1 =
+      match(TrueVal, m_Zero()) && match(FalseVal, m_Value(Shift)) &&
+      match(Cond, m_c_Or(m_c_ICmp(Pred1, m_And(m_Specific(Shift), m_Value(A)),
+                                  m_Zero()),
+                         m_c_ICmp(Pred2, m_And(m_Specific(Shift), m_Value(B)),
+                                  m_Zero())));
+
+  bool Case2 =
+      match(FalseVal, m_Zero()) && match(TrueVal, m_Value(Shift)) &&
+      match(Cond, m_c_And(m_c_ICmp(Pred1, m_And(m_Specific(Shift), m_Value(A)),
+                                   m_Zero()),
+                          m_c_ICmp(Pred2, m_And(m_Specific(Shift), m_Value(B)),
+                                   m_Zero())));
+
+  bool IsValid =
+      (Case1 && Pred1 == ICmpInst::ICMP_EQ && Pred2 == ICmpInst::ICMP_EQ) ||
+      (Case2 && Pred1 == ICmpInst::ICMP_NE && Pred2 == ICmpInst::ICMP_NE);
+
+  if (IsValid) {
+    if (isKnownToBeAPowerOfTwo(Shift, /*OrZero=*/false,
+                               SQ.getWithInstruction(&SI))) {
+      Value *And1 = Builder.CreateAnd(Shift, A);
+      return BinaryOperator::CreateAnd(And1, B);
+    }
+  }
+
+  return nullptr;
+}
+
 Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
   Value *CondVal = SI.getCondition();
   Value *TrueVal = SI.getTrueValue();
@@ -4600,6 +4641,9 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
   }
 
   if (Instruction *I = foldSelectNegNot(SI, Builder))
+    return I;
+
+  if (Instruction *I = foldSelectAndOrPowerOfTwo(SI, Builder, SQ))
     return I;
 
   auto *SIFPOp = dyn_cast<FPMathOperator>(&SI);
