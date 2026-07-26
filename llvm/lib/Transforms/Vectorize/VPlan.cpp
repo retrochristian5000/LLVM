@@ -778,6 +778,12 @@ VPRegionBlock *VPRegionBlock::clone() {
   if (getHeaderMask())
     NewRegion->createHeaderMask();
 
+  // The cloned canonical IV increment instruction already carries over its
+  // original NUW flag via the deep clone above, but the new region's
+  // CanIVInfo defaults to NUW set. Keep the two in sync.
+  if (CanIV && !hasCanonicalIVNUW())
+    NewRegion->CanIVInfo->clearNUW();
+
   for (VPBlockBase *Block : vp_depth_first_shallow(NewEntry))
     Block->setParent(NewRegion);
   return NewRegion;
