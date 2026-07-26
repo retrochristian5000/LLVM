@@ -689,6 +689,21 @@ mlir::Type CIRGenTypes::convertTypeForMem(clang::QualType qualType,
 
   mlir::Type convertedType = convertType(qualType);
 
+  // Check for the boolean vector case.
+  if (qualType->isExtVectorBoolType()) {
+    auto vecTy = cast<cir::VectorType>(convertedType);
+
+    if (astContext.getLangOpts().HLSL) {
+      cgm.errorNYI("convertTypeForMem: ExtVectorBoolType HLSL");
+      return {};
+    }
+
+    // Pad to at least one byte.
+    uint64_t bytePadded = std::max<uint64_t>(vecTy.getSize(), 8);
+    return cir::IntType::get(builder.getContext(), bytePadded,
+                             /*is_signed=*/false);
+  }
+
   assert(!forBitField && "Bit fields NYI");
 
   // If this is a bit-precise integer type in a bitfield representation, map
@@ -697,6 +712,24 @@ mlir::Type CIRGenTypes::convertTypeForMem(clang::QualType qualType,
     assert(!qualType->isBitIntType() && "Bit field with type _BitInt NYI");
 
   return convertedType;
+}
+
+mlir::Type CIRGenTypes::convertTypeForLoadStore(clang::QualType t) {
+  if (t->isBitIntType()) {
+    cgm.errorNYI("convertTypeForLoadStore: BitIntType");
+    return {};
+  }
+
+  if (t->isConstantMatrixBoolType()) {
+    cgm.errorNYI("convertTypeForLoadStore: ConstantMatrixBoolType");
+    return {};
+  }
+
+  if (t->isExtVectorBoolType()) {
+    return convertTypeForMem(t);
+  }
+
+  return convertType(t);
 }
 
 /// Return record layout info for the given record decl.

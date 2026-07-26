@@ -105,6 +105,10 @@ mlir::Type CIRGenFunction::convertType(QualType t) {
   return cgm.getTypes().convertType(t);
 }
 
+mlir::Type CIRGenFunction::convertTypeForLoadStore(QualType astTy) {
+  return cgm.getTypes().convertTypeForLoadStore(astTy);
+}
+
 mlir::Location CIRGenFunction::getLoc(SourceLocation srcLoc) {
   // Some AST nodes might contain invalid source locations (e.g.
   // CXXDefaultArgExpr), workaround that to still get something out.
@@ -802,6 +806,17 @@ cir::FuncOp CIRGenFunction::generateCode(clang::GlobalDecl gd, cir::FuncOp fn,
 
   eraseEmptyAndUnusedBlocks(fn);
   return fn;
+}
+
+mlir::Value CIRGenFunction::emitBoolVecConversion(mlir::Value srcVec,
+                                                  unsigned numElementsDst) {
+  auto srcTy = cast<cir::VectorType>(srcVec.getType());
+  unsigned numElementsSrc = srcTy.getSize();
+  if (numElementsSrc == numElementsDst)
+    return srcVec;
+
+  llvm_unreachable("emitBoolVecConversion");
+  return {};
 }
 
 void CIRGenFunction::emitConstructorBody(FunctionArgList &args) {

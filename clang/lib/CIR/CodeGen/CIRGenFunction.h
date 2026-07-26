@@ -271,6 +271,7 @@ public:
   mlir::Type convertTypeForMem(QualType t);
 
   mlir::Type convertType(clang::QualType t);
+  mlir::Type convertTypeForLoadStore(QualType astTy);
   mlir::Type convertType(const TypeDecl *t) {
     return convertType(getContext().getTypeDeclType(t));
   }
@@ -1983,6 +1984,9 @@ public:
   };
 
   void emitBeginCatch(const CXXCatchStmt *catchStmt, mlir::Value ehToken);
+
+  // Truncate or extend a boolean vector to the requested number of elements.
+  mlir::Value emitBoolVecConversion(mlir::Value srcVec, unsigned numElementsDs);
 
   mlir::LogicalResult emitCXXTryStmt(const clang::CXXTryStmt &s,
                                      cxxTryBodyEmitter &bodyCallback);
