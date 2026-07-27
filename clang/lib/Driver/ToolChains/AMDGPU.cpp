@@ -515,6 +515,24 @@ void RocmInstallationDetector::AddHIPIncludeArgs(const ArgList &DriverArgs,
                             !DriverArgs.hasArg(options::OPT_nohipwrapperinc);
   bool HasHipStdPar = DriverArgs.hasArg(options::OPT_hipstdpar);
 
+  if (DriverArgs.hasFlag(options::OPT_foffload_via_llvm,
+                         options::OPT_fno_offload_via_llvm, false)) {
+    if (DriverArgs.hasFlag(options::OPT_offload_inc,
+                           options::OPT_no_offload_inc, true) &&
+        !DriverArgs.hasArg(options::OPT_nohipwrapperinc) &&
+        !DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+      CC1Args.append({"-include", "__clang_gpu_device_functions.h"});
+
+      SmallString<128> HIPIncludePath(D.ResourceDir);
+      llvm::sys::path::append(HIPIncludePath, "..", "..", "..");
+      llvm::sys::path::append(HIPIncludePath, "include", "offload");
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(HIPIncludePath));
+      CC1Args.append({"-include", "hip/hip_runtime.h"});
+    }
+    return;
+  }
+
   if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
     // HIP header includes standard library wrapper headers under clang
     // cuda_wrappers directory. Since these wrapper headers include_next
@@ -699,7 +717,11 @@ AMDGPUToolChain::AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
     : Generic_ELF(D, Triple, Args),
       OptionsDefault(
           {{options::OPT_O, "3"}, {options::OPT_cl_std_EQ, "CL1.2"}}),
-      HostTC(HostTC_), UseHIPLinker(Kind == Action::OFK_HIP),
+      HostTC(HostTC_),
+      UseHIPLinker(Kind == Action::OFK_HIP ||
+                   (Kind == Action::OFK_Cuda &&
+                    Args.hasFlag(options::OPT_foffload_via_llvm,
+                                 options::OPT_fno_offload_via_llvm, false))),
       ShouldLinkDeviceLibs(ShouldLinkDeviceLibs) {
   loadMultilibsFromYAML(Args, D);
 
@@ -709,8 +731,10 @@ AMDGPUToolChain::AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
   // each tool invocation.
   checkAMDGPUCodeObjectVersion(D, Args);
 
+  bool UsesLLVMOffloading = Args.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
   if (Triple.getOS() == llvm::Triple::AMDHSA &&
-      Triple.getEnvironment() != llvm::Triple::LLVM)
+      Triple.getEnvironment() != llvm::Triple::LLVM && !UsesLLVMOffloading)
     RocmInstallation->detectDeviceLibrary();
 
   if (HostTC)
@@ -889,7 +913,10 @@ bool AMDGPUToolChain::isWave64(const llvm::opt::ArgList &DriverArgs,
 void AMDGPUToolChain::addClangTargetOptions(
     const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
     BoundArch BA, Action::OffloadKind DeviceOffloadingKind) const {
-  if (DeviceOffloadingKind == Action::OFK_HIP) {
+  bool UsesLLVMOffloading = DriverArgs.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
+  if (DeviceOffloadingKind == Action::OFK_HIP ||
+      (DeviceOffloadingKind == Action::OFK_Cuda && UsesLLVMOffloading)) {
     CC1Args.append({"-fcuda-is-device", "-fno-threadsafe-statics"});
 
     if (!DriverArgs.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,

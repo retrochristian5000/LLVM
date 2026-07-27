@@ -301,6 +301,23 @@ CudaInstallationDetector::CudaInstallationDetector(
 
 void CudaInstallationDetector::AddCudaIncludeArgs(
     const ArgList &DriverArgs, ArgStringList &CC1Args) const {
+  if (DriverArgs.hasFlag(options::OPT_foffload_via_llvm,
+                         options::OPT_fno_offload_via_llvm, false)) {
+    if (DriverArgs.hasFlag(options::OPT_offload_inc,
+                           options::OPT_no_offload_inc, true) &&
+        !DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+      CC1Args.append({"-include", "__clang_gpu_device_functions.h"});
+
+      SmallString<128> CudaIncludePath(D.ResourceDir);
+      llvm::sys::path::append(CudaIncludePath, "..", "..", "..");
+      llvm::sys::path::append(CudaIncludePath, "include", "offload", "cuda");
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(CudaIncludePath));
+      CC1Args.append({"-include", "cuda_runtime.h"});
+    }
+    return;
+  }
+
   if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
     // Add cuda_wrappers/* to our system include path.  This lets us wrap
     // standard library headers.
@@ -395,7 +412,9 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                     const char *LinkingOutput) const {
   const auto &TC =
       static_cast<const toolchains::NVPTXToolChain &>(getToolChain());
-  assert(TC.getTriple().isNVPTX() && "Wrong platform");
+
+  bool UsesLLVMOffloading = Args.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
 
   BoundArch GPUArch;
   // If this is a CUDA action we need to extract the device architecture
@@ -418,7 +437,7 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
          "Device action expected to have an architecture.");
 
   // Check that our installation's ptxas supports gpu_arch.
-  if (!Args.hasArg(options::OPT_no_cuda_version_check)) {
+  if (!UsesLLVMOffloading && !Args.hasArg(options::OPT_no_cuda_version_check)) {
     TC.CudaInstallation.CheckCudaVersionSupportsArch(GPUArch.Arch);
   }
 
@@ -491,7 +510,8 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                /*Default=*/true);
   else if (JA.isOffloading(Action::OFK_Cuda))
     // In CUDA we generate relocatable code by default.
-    Relocatable = Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
+    Relocatable = UsesLLVMOffloading ||
+                  Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
                                /*Default=*/false);
   else
     // Otherwise, we are compiling directly and should create linkable output.
@@ -540,7 +560,9 @@ void NVPTX::FatBinary::ConstructJob(Compilation &C, const JobAction &JA,
                                     const char *LinkingOutput) const {
   const auto &TC =
       static_cast<const toolchains::CudaToolChain &>(getToolChain());
-  assert(TC.getTriple().isNVPTX() && "Wrong platform");
+  bool UsesLLVMOffloading = Args.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
+  assert((UsesLLVMOffloading || TC.getTriple().isNVPTX()) && "Wrong platform");
 
   ArgStringList CmdArgs;
   if (TC.CudaInstallation.version() <= CudaVersion::CUDA_100)
@@ -588,7 +610,9 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       static_cast<const toolchains::NVPTXToolChain &>(getToolChain());
   ArgStringList CmdArgs;
 
-  assert(TC.getTriple().isNVPTX() && "Wrong platform");
+  bool UsesLLVMOffloading = Args.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
+  assert((UsesLLVMOffloading || TC.getTriple().isNVPTX()) && "Wrong platform");
 
   assert((Output.isFilename() || Output.isNothing()) && "Invalid output.");
   if (Output.isFilename()) {
@@ -886,9 +910,12 @@ void CudaToolChain::addClangTargetOptions(
     BoundArch BA, Action::OffloadKind DeviceOffloadingKind) const {
   HostTC.addClangTargetOptions(DriverArgs, CC1Args, BA, DeviceOffloadingKind);
 
+  bool UsesLLVMOffloading = DriverArgs.hasFlag(
+      options::OPT_foffload_via_llvm, options::OPT_fno_offload_via_llvm, false);
+
   StringRef GpuArch = DriverArgs.getLastArgValue(options::OPT_march_EQ);
   assert((DeviceOffloadingKind == Action::OFK_OpenMP ||
-          DeviceOffloadingKind == Action::OFK_Cuda) &&
+          DeviceOffloadingKind == Action::OFK_Cuda || UsesLLVMOffloading) &&
          "Only OpenMP or CUDA offloading kinds are supported for NVIDIA GPUs.");
 
   CC1Args.append({"-fcuda-is-device", "-mllvm",
@@ -907,6 +934,9 @@ void CudaToolChain::addClangTargetOptions(
       DriverArgs.hasArg(options::OPT_S))
     return;
 
+  if (UsesLLVMOffloading)
+    return;
+
   std::string LibDeviceFile = CudaInstallation.getLibDeviceFile(GpuArch);
   if (LibDeviceFile.empty()) {
     getDriver().Diag(diag::err_drv_no_cuda_libdevice) << GpuArch;
@@ -915,13 +945,6 @@ void CudaToolChain::addClangTargetOptions(
 
   CC1Args.push_back("-mlink-builtin-bitcode");
   CC1Args.push_back(DriverArgs.MakeArgString(LibDeviceFile));
-
-  // For now, we don't use any Offload/OpenMP device runtime when we offload
-  // CUDA via LLVM/Offload. We should split the Offload/OpenMP device runtime
-  // and include the "generic" (or CUDA-specific) parts.
-  if (DriverArgs.hasFlag(options::OPT_foffload_via_llvm,
-                         options::OPT_fno_offload_via_llvm, false))
-    return;
 
   clang::CudaVersion CudaInstallationVersion = CudaInstallation.version();
 
@@ -963,6 +986,23 @@ llvm::DenormalMode CudaToolChain::getDefaultDenormalModeForType(
 
 void CudaToolChain::AddCudaIncludeArgs(const ArgList &DriverArgs,
                                        ArgStringList &CC1Args) const {
+  if (DriverArgs.hasFlag(options::OPT_foffload_via_llvm,
+                         options::OPT_fno_offload_via_llvm, false)) {
+    if (DriverArgs.hasFlag(options::OPT_offload_inc,
+                           options::OPT_no_offload_inc, true) &&
+        !DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+      CC1Args.append({"-include", "__clang_gpu_device_functions.h"});
+
+      SmallString<128> CudaIncludePath(getDriver().ResourceDir);
+      llvm::sys::path::append(CudaIncludePath, "..", "..", "..");
+      llvm::sys::path::append(CudaIncludePath, "include", "offload", "cuda");
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(CudaIncludePath));
+      CC1Args.append({"-include", "cuda_runtime.h"});
+    }
+    return;
+  }
+
   // Check our CUDA version if we're going to include the CUDA headers.
   if (DriverArgs.hasFlag(options::OPT_offload_inc, options::OPT_no_offload_inc,
                          true) &&
@@ -1035,6 +1075,10 @@ CudaToolChain::GetCXXStdlibType(const ArgList &Args) const {
 
 void CudaToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                               ArgStringList &CC1Args) const {
+  if (DriverArgs.hasFlag(options::OPT_foffload_via_llvm,
+                         options::OPT_fno_offload_via_llvm, false))
+    return;
+
   HostTC.AddClangSystemIncludeArgs(DriverArgs, CC1Args);
 
   if (DriverArgs.hasFlag(options::OPT_offload_inc, options::OPT_no_offload_inc,
