@@ -1000,8 +1000,9 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
     // If a canonical IV to re-use is present, it would be in the Plan's entry.
     PHINode *ARCanIV = AR->getLoop()->getCanonicalInductionVariable();
     if (!AR->isAffine() || !ARCanIV ||
-        ARCanIV->getParent() !=
-            cast<VPIRBasicBlock>(Plan.getEntry())->getIRBasicBlock())
+        none_of(Plan.getEntry()->phis(), [ARCanIV](const VPRecipeBase &R) {
+          return &cast<VPIRPhi>(R).getIRPhi() == ARCanIV;
+        }))
       return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
 
     VPValue *CanonicalIV = Plan.getOrAddLiveIn(ARCanIV);
