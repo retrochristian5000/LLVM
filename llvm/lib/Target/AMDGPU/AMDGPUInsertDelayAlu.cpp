@@ -353,15 +353,16 @@ public:
   }
 
   static bool isFastForwardProducer(const MachineInstr &MI,
-                                    const MachineOperand &MO,
-                                    Register VccReg, Register ExecReg) {
+                                    const MachineOperand &MO, Register VccReg,
+                                    Register ExecReg) {
     if (!MO.isReg() || !MO.isDef())
       return false;
 
     if (!SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/false))
       return false;
 
-    const TargetRegisterInfo *TRI = MI.getMF()->getSubtarget().getRegisterInfo();
+    const TargetRegisterInfo *TRI =
+        MI.getMF()->getSubtarget().getRegisterInfo();
     Register Reg = MO.getReg();
     if (TRI->isSubRegisterEq(Reg, VccReg)) {
       switch (MI.getOpcode()) {
@@ -382,8 +383,7 @@ public:
         return true;
       default:
         // V_CMP* produces condition masks (excluding V_CMPX)
-        if (MI.isCompare() &&
-            !AMDGPU::isVCMPX(MI.getOpcode())) {
+        if (MI.isCompare() && !AMDGPU::isVCMPX(MI.getOpcode())) {
           // VOPC: implicit VCC def
           return true;
         }
@@ -406,8 +406,7 @@ public:
         return true;
       default:
         // V_CMP* produces condition masks (excluding V_CMPX)
-        if (MI.isCompare() &&
-            !AMDGPU::isVCMPX(MI.getOpcode())) {
+        if (MI.isCompare() && !AMDGPU::isVCMPX(MI.getOpcode())) {
           // VOP3: explicit SGPR def (operand 0)
           return true;
         }
@@ -416,7 +415,8 @@ public:
     return false;
   }
 
-  static unsigned int getVOPDComponentOpCode(const MachineInstr &MI, unsigned OpNo,
+  static unsigned int getVOPDComponentOpCode(const MachineInstr &MI,
+                                             unsigned OpNo,
                                              const MachineOperand &MO) {
     Register Reg = MO.getReg();
     auto MIOpCode = MI.getOpcode();
