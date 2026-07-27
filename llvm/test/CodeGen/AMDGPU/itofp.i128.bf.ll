@@ -266,9 +266,9 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_lshlrev_b64 v[0:1], v2, v[0:1]
 ; GCN-NEXT:    v_cmp_gt_u32_e32 vcc, 64, v2
 ; GCN-NEXT:    v_cndmask_b32_e32 v7, 0, v0, vcc
-; GCN-NEXT:    ; implicit-def: $vgpr4
 ; GCN-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GCN-NEXT:    ; implicit-def: $vgpr2_vgpr3
+; GCN-NEXT:    ; implicit-def: $vgpr4
+; GCN-NEXT:    ; implicit-def: $vgpr2
 ; GCN-NEXT:    s_branch .LBB1_2
 ; GCN-NEXT:  .LBB1_14: ; %itofp-if-then20
 ; GCN-NEXT:    v_alignbit_b32 v7, v1, v0, 3
