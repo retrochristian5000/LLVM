@@ -245,6 +245,17 @@ ExprResult Sema::ActOnGCCAsmStmtString(Expr *Expr, bool ForAsmLabel) {
       Diag(Expr->getBeginLoc(), diag::err_asm_operand_empty_string)
           << SL->getSourceRange();
     }
+    if (Context.getTargetInfo().getDefaultOrdinaryLiteralEncoding() !=
+        "UTF-8") {
+      SmallString<16> ConvertedAsm;
+      Context.getTargetInfo().FromSystemEncodingConverter->convert(
+          SL->getString(), ConvertedAsm);
+      QualType StrTy = Context.getStringLiteralArrayType(Context.CharTy,
+                                                         ConvertedAsm.size());
+      return StringLiteral::Create(Context, ConvertedAsm,
+                                   StringLiteralKind::Ordinary,
+                                   /*Pascal*/ false, StrTy, SL->getBeginLoc());
+    }
     return SL;
   }
   if (DiagnoseUnexpandedParameterPack(Expr))
