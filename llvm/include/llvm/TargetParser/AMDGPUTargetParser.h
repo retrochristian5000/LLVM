@@ -86,7 +86,10 @@ enum ArchFeatureKind : uint32_t {
   FEATURE_XNACK_ON_OFF_MODES = 1 << 10,
 
   // VI SGPR initialization bug requiring a fixed SGPR allocation size.
-  FEATURE_SGPR_INIT_BUG = 1 << 11
+  FEATURE_SGPR_INIT_BUG = 1 << 11,
+
+  // AGPRs share a unified register file with VGPRs (gfx90a-insts).
+  FEATURE_AGPRS_UNIFIED_FILE = 1 << 12
 };
 
 enum FeatureError : uint32_t {
@@ -160,6 +163,12 @@ LLVM_ABI unsigned getAddressableNumSGPRs(Triple::SubArchType SubArch);
 
 LLVM_ABI unsigned getSGPRAllocGranule(GPUKind AK);
 LLVM_ABI unsigned getSGPRAllocGranule(Triple::SubArchType SubArch);
+
+LLVM_ABI unsigned getEUsPerCU(GPUKind AK, bool CuMode);
+LLVM_ABI unsigned getEUsPerCU(Triple::SubArchType SubArch, bool CuMode);
+
+LLVM_ABI unsigned getMaxWavesPerEU(GPUKind AK);
+LLVM_ABI unsigned getMaxWavesPerEU(Triple::SubArchType SubArch);
 
 /// Fills Features map with default values for given target GPU.
 /// \p Features contains overriding target features and this function returns
