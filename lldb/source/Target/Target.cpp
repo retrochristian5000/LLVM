@@ -5992,8 +5992,42 @@ Target::TargetEventData::GetModuleListFromEvent(const Event *event_ptr) {
   return module_list;
 }
 
+APIMutexHandle::APIMutexHandle() = default;
+
+APIMutexHandle::APIMutexHandle(lldb::TargetSP target_sp)
+    : m_target_sp(std::move(target_sp)) {}
+
+void APIMutexHandle::lock() {
+  if (m_target_sp)
+    m_target_sp->GetAPIMutex().lock();
+  else
+    m_standalone_mutex.lock();
+}
+
+void APIMutexHandle::unlock() {
+  if (m_target_sp)
+    m_target_sp->GetAPIMutex().unlock();
+  else
+    m_standalone_mutex.unlock();
+}
+
+bool APIMutexHandle::try_lock() {
+  if (m_target_sp)
+    return m_target_sp->GetAPIMutex().try_lock();
+  return m_standalone_mutex.try_lock();
+}
+
 std::recursive_mutex &Target::GetAPIMutex() {
   Policy policy = PolicyStack::Get().Current();
+
+  // Every caller still locks *something* here, rather than a no-op: since
+  // the mutex is thread-local, that lock never contends with whatever
+  // other thread holds the real one.
+  if (policy.capabilities.can_bypass_target_api_mutex) {
+    static thread_local std::recursive_mutex s_bypass_mutex;
+    return s_bypass_mutex;
+  }
+
   if (policy.view == Policy::View::Private)
     return m_private_mutex;
 

@@ -11,12 +11,11 @@
 #include "lldb/Utility/Instrumentation.h"
 #include "lldb/lldb-forward.h"
 #include <memory>
-#include <mutex>
 
 using namespace lldb;
 using namespace lldb_private;
 
-SBMutex::SBMutex() : m_opaque_sp(std::make_shared<std::recursive_mutex>()) {
+SBMutex::SBMutex() : m_opaque_sp(std::make_shared<APIMutexHandle>()) {
   LLDB_INSTRUMENT_VA(this);
 }
 
@@ -32,8 +31,7 @@ const SBMutex &SBMutex::operator=(const SBMutex &rhs) {
 }
 
 SBMutex::SBMutex(lldb::TargetSP target_sp)
-    : m_opaque_sp(std::shared_ptr<std::recursive_mutex>(
-          target_sp, &target_sp->GetAPIMutex())) {
+    : m_opaque_sp(std::make_shared<APIMutexHandle>(target_sp)) {
   LLDB_INSTRUMENT_VA(this, target_sp);
 }
 

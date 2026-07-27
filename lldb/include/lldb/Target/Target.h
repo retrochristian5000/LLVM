@@ -572,6 +572,30 @@ private:
   SymbolContextList m_preferred_lookup_contexts;
 };
 
+/// A lockable handle to a Target's API mutex. GetAPIMutex() returns a
+/// thread-local dummy mutex while the calling thread is inside a scripted
+/// extension callback (see Policy::Capabilities::can_bypass_target_api_mutex),
+/// since that thread is already protected some other way and doesn't need to
+/// contend for the real one. Each lock() re-resolves GetAPIMutex() rather
+/// than caching it at construction time, so a handle held across a call into
+/// a scripted callback still picks up the bypass instead of blocking on the
+/// real mutex it no longer needs.
+///
+/// If constructed without a target, it owns its own independent mutex.
+class APIMutexHandle {
+public:
+  APIMutexHandle();
+  explicit APIMutexHandle(lldb::TargetSP target_sp);
+
+  void lock();
+  void unlock();
+  bool try_lock();
+
+private:
+  lldb::TargetSP m_target_sp;
+  std::recursive_mutex m_standalone_mutex;
+};
+
 // Target
 class Target : public std::enable_shared_from_this<Target>,
                public TargetProperties,
@@ -761,6 +785,9 @@ public:
 
   static TargetProperties &GetGlobalProperties();
 
+  /// Returns the mutex to serialize on before touching the target through
+  /// the SB API. See APIMutexHandle above for how the bypass policy
+  /// affects what this returns.
   std::recursive_mutex &GetAPIMutex();
 
   void DeleteCurrentProcess();

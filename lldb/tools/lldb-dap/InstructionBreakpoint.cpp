@@ -12,6 +12,7 @@
 #include "lldb/API/SBBreakpoint.h"
 #include "lldb/API/SBTarget.h"
 #include "llvm/ADT/StringRef.h"
+#include <mutex>
 
 namespace lldb_dap {
 
