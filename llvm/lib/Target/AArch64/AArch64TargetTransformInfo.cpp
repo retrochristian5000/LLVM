@@ -6516,6 +6516,18 @@ InstructionCost AArch64TTIImpl::getPartialReductionCost(
       return Cost;
   }
 
+  // i8 -> i64 has no native dot product. LowerPARTIAL_REDUCE_MLA accumulates
+  // in two steps via i32.
+  //      partial_reduce_[us]mla  acc, lhs, rhs
+  // <=>  movi       tmp, #0
+  //      [us]dot    tmp, lhs, rhs
+  //      [us]addw   acc, acc, tmp
+  //      [us]addw2  acc, acc, tmp
+  if (AccumLT.second.getScalarType() == MVT::i64 &&
+      InputLT.second.getScalarType() == MVT::i8 && !IsUSDot &&
+      IsSupported(false, ST->hasDotProd()))
+    return Cost * 4 + INegCost;
+
   // f16 -> f32 is natively supported for fdot using either
   // SVE or NEON instruction.
   if (Opcode == Instruction::FAdd && !IsSub &&

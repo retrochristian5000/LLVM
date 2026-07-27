@@ -5083,10 +5083,11 @@ matchExtendedReductionOperand(VPWidenRecipe *UpdateR, VPValue *Op) {
       // optimizeExtendsForPartialReduction.
       Op = CastSource;
     } else {
-      return ExtendedReductionOperand{
-          UpdateR,
-          /*ExtendA=*/{CastSource->getScalarType(), *OuterExtKind},
-          /*ExtendB=*/{}};
+      Type *SrcTy = vputils::getExtendSrcTypeForPartialReduction(
+          CastRecipe->getOpcode(), CastSource);
+      return ExtendedReductionOperand{UpdateR,
+                                      /*ExtendA=*/{SrcTy, *OuterExtKind},
+                                      /*ExtendB=*/{}};
     }
   }
 

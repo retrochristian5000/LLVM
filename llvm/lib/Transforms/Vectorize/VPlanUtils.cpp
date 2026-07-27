@@ -762,6 +762,51 @@ VPInstruction *vputils::findComputeReductionResult(VPReductionPHIRecipe *PhiR) {
       cast<VPSingleDefRecipe>(SelR));
 }
 
+/// Returns the type at which the i1 vector \p Mask is already materialized
+/// in a register, or nullptr if it has no such type. A compare's mask exists
+/// at the width of the compared operands and a logical combination of masks
+/// exists at the width its operands share.
+static Type *getMaskMaterializationType(VPValue *Mask, unsigned Depth = 0) {
+  if (Depth > 3)
+    return nullptr;
+
+  VPValue *A, *B;
+  if (match(Mask, m_Cmp(m_VPValue(A), m_VPValue()))) {
+    Type *CmpTy = A->getScalarType();
+    if (CmpTy->isFloatingPointTy())
+      return IntegerType::get(CmpTy->getContext(),
+                              CmpTy->getPrimitiveSizeInBits());
+    if (CmpTy->isIntegerTy() && !CmpTy->isIntegerTy(1))
+      return CmpTy;
+    // Pointer compares and compares of i1 values have no suitable type.
+    return nullptr;
+  }
+
+  if (match(Mask, m_Binary<Instruction::And>(m_VPValue(A), m_VPValue(B))) ||
+      match(Mask, m_Binary<Instruction::Or>(m_VPValue(A), m_VPValue(B))) ||
+      match(Mask, m_Binary<Instruction::Xor>(m_VPValue(A), m_VPValue(B)))) {
+    Type *TyA = getMaskMaterializationType(A, Depth + 1);
+    Type *TyB = getMaskMaterializationType(B, Depth + 1);
+    return TyA == TyB ? TyA : nullptr;
+  }
+
+  return nullptr;
+}
+
+Type *vputils::getExtendSrcTypeForPartialReduction(unsigned ExtOpcode,
+                                                   VPValue *ExtSrc) {
+  Type *SrcTy = ExtSrc->getScalarType();
+  if (!SrcTy->isIntegerTy(1))
+    return SrcTy;
+
+  // A sext of a mask needs codegen support that does not exist yet.
+  if (ExtOpcode == Instruction::ZExt)
+    if (Type *MatTy = getMaskMaterializationType(ExtSrc))
+      return MatTy;
+
+  return SrcTy;
+}
+
 bool vputils::isUsedByLoadStoreAddress(const VPValue *V) {
   SmallPtrSet<const VPValue *, 4> Seen;
   SmallVector<const VPValue *> WorkList = {V};
