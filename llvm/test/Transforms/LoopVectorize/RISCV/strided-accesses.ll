@@ -2146,20 +2146,20 @@ exit:
 define void @iv_start_is_addrec(ptr %p, ptr noalias %q) {
 ; CHECK-LABEL: define void @iv_start_is_addrec(
 ; CHECK-SAME: ptr [[P:%.*]], ptr noalias [[Q:%.*]]) #[[ATTR0]] {
-; CHECK-NEXT:  [[ENTRY:.*]]:
-; CHECK-NEXT:    br label %[[PH:.*]]
-; CHECK:       [[PH]]:
-; CHECK-NEXT:    [[IND_INCOMING:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IND_INCOMING_NEXT:%.*]], %[[EXIT:.*]] ]
+; CHECK-NEXT:  [[PH:.*]]:
 ; CHECK-NEXT:    br label %[[VECTOR_PH:.*]]
 ; CHECK:       [[VECTOR_PH]]:
+; CHECK-NEXT:    [[IND_INCOMING:%.*]] = phi i64 [ 0, %[[PH]] ], [ [[IND_INCOMING_NEXT:%.*]], %[[EXIT:.*]] ]
 ; CHECK-NEXT:    [[TMP0:%.*]] = shl i64 [[IND_INCOMING]], 2
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP0]]
+; CHECK-NEXT:    br label %[[VECTOR_PH1:.*]]
+; CHECK:       [[VECTOR_PH1]]:
 ; CHECK-NEXT:    [[BROADCAST_SPLATINSERT:%.*]] = insertelement <vscale x 8 x ptr> poison, ptr [[Q]], i64 0
 ; CHECK-NEXT:    [[BROADCAST_SPLAT:%.*]] = shufflevector <vscale x 8 x ptr> [[BROADCAST_SPLATINSERT]], <vscale x 8 x ptr> poison, <vscale x 8 x i32> zeroinitializer
 ; CHECK-NEXT:    br label %[[VECTOR_BODY:.*]]
 ; CHECK:       [[VECTOR_BODY]]:
-; CHECK-NEXT:    [[INDEX:%.*]] = phi i64 [ 0, %[[VECTOR_PH]] ], [ [[CURRENT_ITERATION_NEXT:%.*]], %[[VECTOR_BODY]] ]
-; CHECK-NEXT:    [[AVL:%.*]] = phi i64 [ 129, %[[VECTOR_PH]] ], [ [[AVL_NEXT:%.*]], %[[VECTOR_BODY]] ]
+; CHECK-NEXT:    [[INDEX:%.*]] = phi i64 [ 0, %[[VECTOR_PH1]] ], [ [[CURRENT_ITERATION_NEXT:%.*]], %[[VECTOR_BODY]] ]
+; CHECK-NEXT:    [[AVL:%.*]] = phi i64 [ 129, %[[VECTOR_PH1]] ], [ [[AVL_NEXT:%.*]], %[[VECTOR_BODY]] ]
 ; CHECK-NEXT:    [[TMP2:%.*]] = call i32 @llvm.experimental.get.vector.length.i64(i64 [[AVL]], i32 8, i1 true)
 ; CHECK-NEXT:    [[TMP4:%.*]] = mul i64 [[INDEX]], -8
 ; CHECK-NEXT:    [[TMP6:%.*]] = getelementptr i8, ptr [[SCEVGEP]], i64 [[TMP4]]
@@ -2174,7 +2174,7 @@ define void @iv_start_is_addrec(ptr %p, ptr noalias %q) {
 ; CHECK-NEXT:    br label %[[EXIT]]
 ; CHECK:       [[EXIT]]:
 ; CHECK-NEXT:    [[IND_INCOMING_NEXT]] = add i64 [[IND_INCOMING]], 1
-; CHECK-NEXT:    br label %[[PH]]
+; CHECK-NEXT:    br label %[[VECTOR_PH]]
 ;
 ; CHECK-UF2-LABEL: define void @iv_start_is_addrec(
 ; CHECK-UF2-SAME: ptr [[P:%.*]], ptr noalias [[Q:%.*]]) #[[ATTR0]] {
@@ -2182,6 +2182,8 @@ define void @iv_start_is_addrec(ptr %p, ptr noalias %q) {
 ; CHECK-UF2-NEXT:    br label %[[PH:.*]]
 ; CHECK-UF2:       [[PH]]:
 ; CHECK-UF2-NEXT:    [[IND_INCOMING:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IND_INCOMING_NEXT:%.*]], %[[EXIT:.*]] ]
+; CHECK-UF2-NEXT:    [[TMP6:%.*]] = shl i64 [[IND_INCOMING]], 2
+; CHECK-UF2-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP6]]
 ; CHECK-UF2-NEXT:    [[TMP0:%.*]] = call i64 @llvm.vscale.i64()
 ; CHECK-UF2-NEXT:    [[TMP1:%.*]] = shl nuw i64 [[TMP0]], 5
 ; CHECK-UF2-NEXT:    [[MIN_ITERS_CHECK:%.*]] = icmp ult i64 129, [[TMP1]]
@@ -2194,8 +2196,6 @@ define void @iv_start_is_addrec(ptr %p, ptr noalias %q) {
 ; CHECK-UF2-NEXT:    [[TMP4:%.*]] = mul i64 [[N_VEC]], -2
 ; CHECK-UF2-NEXT:    [[TMP5:%.*]] = add i64 [[IND_INCOMING]], [[TMP4]]
 ; CHECK-UF2-NEXT:    [[TMP7:%.*]] = trunc i64 [[TMP2]] to i32
-; CHECK-UF2-NEXT:    [[TMP17:%.*]] = shl i64 [[IND_INCOMING]], 2
-; CHECK-UF2-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP17]]
 ; CHECK-UF2-NEXT:    br label %[[VECTOR_BODY:.*]]
 ; CHECK-UF2:       [[VECTOR_BODY]]:
 ; CHECK-UF2-NEXT:    [[INDEX:%.*]] = phi i64 [ 0, %[[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], %[[VECTOR_BODY]] ]

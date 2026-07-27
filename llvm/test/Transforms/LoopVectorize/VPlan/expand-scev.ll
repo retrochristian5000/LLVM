@@ -361,10 +361,10 @@ define void @addrec_outer_iv_narrow(ptr %dst) {
 ; CHECK:  VPlan 'Final VPlan for VF={4},UF={1}' {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:  ir-bb<outer>:
+; CHECK-NEXT:    IR   %indvar = phi i64 [ %indvar.next, %outer.latch ], [ 0, %entry ]
 ; CHECK-NEXT:    IR   %outer.iv = phi i32 [ 0, %entry ], [ %outer.iv.next, %outer.latch ]
+; CHECK-NEXT:    IR   %0 = add i64 %indvar, 5
 ; CHECK-NEXT:    IR   %ext = zext i32 %outer.iv to i64
-; CHECK-NEXT:    EMIT-SCALAR vp<[[VP2:%[0-9]+]]> = zext ir<%outer.iv> to i64
-; CHECK-NEXT:    EMIT vp<[[VP3:%[0-9]+]]> = add nuw ir<5>, vp<[[VP2]]>
 ; CHECK-NEXT:  Successor(s): vector.ph
 ;
 entry:

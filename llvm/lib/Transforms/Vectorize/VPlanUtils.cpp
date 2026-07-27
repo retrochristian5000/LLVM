@@ -994,18 +994,25 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
     auto *AR = cast<SCEVAddRecExpr>(S);
     VPlan &Plan = Builder.getPlan();
 
-    // We cannot create a phi in the Plan's entry, which would be required in
-    // the absence of a canonical IV to re-use or if AddRec is non-affine,
-    // because its predecessors are not modeled: fall back to the IR expander.
     // If a canonical IV to re-use is present, it would be in the Plan's entry.
-    PHINode *ARCanIV = AR->getLoop()->getCanonicalInductionVariable();
-    if (!AR->isAffine() || !ARCanIV ||
-        none_of(Plan.getEntry()->phis(), [ARCanIV](const VPRecipeBase &R) {
-          return &cast<VPIRPhi>(R).getIRPhi() == ARCanIV;
-        }))
+    // We cannot create a phi in the Plan's entry, which would be required in
+    // the absence of a canonical IV to re-use or if AR is non-affine, because
+    // its predecessors are not modeled: fall back to the IR expander.
+    if (!AR->isAffine())
+      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
+    auto FoundCanIV =
+        find_if(Plan.getEntry()->phis(), [&](const VPRecipeBase &R) {
+          const SCEV *Candidate = SE.getSCEV(&cast<VPIRPhi>(R).getIRPhi());
+          return match(Candidate,
+                       m_scev_AffineAddRec(m_scev_Zero(), m_scev_One(),
+                                           m_SpecificLoop(AR->getLoop()))) &&
+                 Candidate->getType() == AR->getType();
+        });
+    if (FoundCanIV == Plan.getEntry()->phis().end())
       return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
 
-    VPValue *CanonicalIV = Plan.getOrAddLiveIn(ARCanIV);
+    VPValue *CanonicalIV =
+        Plan.getOrAddLiveIn(&cast<VPIRPhi>(FoundCanIV)->getIRPhi());
     VPValue *Start;
     Start = tryToExpand(AR->getStart());
     if (!Start)
@@ -1023,8 +1030,6 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
 
     // {X,+,F} --> X + {0,+,F}
     // {0,+,F} --> {0,+,1} * F
-    CanonicalIV = Builder.createScalarZExtOrTrunc(
-        CanonicalIV, AR->getStepRecurrence(SE)->getType(), DL);
     VPValue *Offset = Builder.createOverflowingOp(Instruction::Mul,
                                                   {CanonicalIV, Step}, NWFlags);
     return AR->getType()->isPointerTy()
