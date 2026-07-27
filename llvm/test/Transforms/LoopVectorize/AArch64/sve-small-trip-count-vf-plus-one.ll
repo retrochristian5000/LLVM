@@ -417,28 +417,13 @@ exit:
   ret void
 }
 
-; FIXME: This is currently accepted as cost for vector is smaller than scalar.
-; Performance is poor due to poor CodeGen of using type promotion instead of
-; type widening.
 define void @tc3_smin_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
 ; CHECK-LABEL: define void @tc3_smin_i8_reject(
 ; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
-; CHECK-NEXT:  [[SCALAR_PH:.*:]]
-; CHECK-NEXT:    br label %[[LOOP:.*]]
-; CHECK:       [[LOOP]]:
-; CHECK-NEXT:    br label %[[VECTOR_BODY:.*]]
-; CHECK:       [[VECTOR_BODY]]:
-; CHECK-NEXT:    [[WIDE_LOAD:%.*]] = load <2 x i8>, ptr [[B]], align 1
-; CHECK-NEXT:    [[WIDE_LOAD1:%.*]] = load <2 x i8>, ptr [[A]], align 1
-; CHECK-NEXT:    [[TMP0:%.*]] = call <2 x i8> @llvm.smin.v2i8(<2 x i8> [[WIDE_LOAD]], <2 x i8> [[WIDE_LOAD1]])
-; CHECK-NEXT:    store <2 x i8> [[TMP0]], ptr [[B]], align 1
-; CHECK-NEXT:    br label %[[MIDDLE_BLOCK:.*]]
-; CHECK:       [[MIDDLE_BLOCK]]:
-; CHECK-NEXT:    br label %[[SCALAR_PH1:.*]]
-; CHECK:       [[SCALAR_PH1]]:
+; CHECK-NEXT:  [[SCALAR_PH1:.*]]:
 ; CHECK-NEXT:    br label %[[LOOP1:.*]]
 ; CHECK:       [[LOOP1]]:
-; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 2, %[[SCALAR_PH1]] ], [ [[IV_NEXT:%.*]], %[[LOOP1]] ]
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[SCALAR_PH1]] ], [ [[IV_NEXT:%.*]], %[[LOOP1]] ]
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i8, ptr [[B]], i64 [[IV]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = load i8, ptr [[ARRAYIDX]], align 1
 ; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i8, ptr [[A]], i64 [[IV]]
@@ -447,7 +432,7 @@ define void @tc3_smin_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
 ; CHECK-NEXT:    store i8 [[MIN]], ptr [[ARRAYIDX]], align 1
 ; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
 ; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 3
-; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP1]], !llvm.loop [[LOOP8:![0-9]+]]
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP1]]
 ; CHECK:       [[EXIT]]:
 ; CHECK-NEXT:    ret void
 ;
@@ -462,6 +447,44 @@ loop:
   %1 = load i8, ptr %arrayidx2, align 1
   %min = tail call i8 @llvm.smin.i8(i8 %0, i8 %1)
   store i8 %min, ptr %arrayidx, align 1
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, 3
+  br i1 %exitcond, label %exit, label %loop
+
+exit:
+  ret void
+}
+
+define void @tc3_smin_i16_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc3_smin_i16_reject(
+; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[SCALAR_PH:.*]]:
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[SCALAR_PH]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i16, ptr [[B]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP1:%.*]] = load i16, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i16, ptr [[A]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP2:%.*]] = load i16, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[MIN:%.*]] = tail call i16 @llvm.smin.i16(i16 [[TMP1]], i16 [[TMP2]])
+; CHECK-NEXT:    store i16 [[MIN]], ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 3
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
+  %arrayidx = getelementptr inbounds i16, ptr %b, i64 %iv
+  %0 = load i16, ptr %arrayidx, align 1
+  %arrayidx2 = getelementptr inbounds i16, ptr %a, i64 %iv
+  %1 = load i16, ptr %arrayidx2, align 1
+  %min = tail call i16 @llvm.smin.i16(i16 %0, i16 %1)
+  store i16 %min, ptr %arrayidx, align 1
   %iv.next = add nuw nsw i64 %iv, 1
   %exitcond = icmp eq i64 %iv.next, 3
   br i1 %exitcond, label %exit, label %loop
