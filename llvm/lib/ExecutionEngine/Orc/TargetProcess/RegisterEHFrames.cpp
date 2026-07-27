@@ -28,6 +28,11 @@ namespace orc {
 extern "C" void __register_frame(const void *);
 extern "C" void __deregister_frame(const void *);
 
+extern "C" void
+__unw_add_dynamic_eh_frame_section(const void *) LLVM_ATTRIBUTE_WEAK;
+extern "C" void
+__unw_remove_dynamic_eh_frame_section(const void *) LLVM_ATTRIBUTE_WEAK;
+
 Error registerFrameWrapper(const void *P) {
   __register_frame(P);
   return Error::success();
@@ -122,6 +127,14 @@ Error walkLibunwindEHFrameSection(const char *const SectionStart,
 
 Error registerEHFrameSection(const void *EHFrameSectionAddr,
                              size_t EHFrameSectionSize) {
+#if defined(HAVE_REGISTER_FRAME) && defined(HAVE_DEREGISTER_FRAME) &&          \
+    !defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
+  if (__unw_add_dynamic_eh_frame_section &&
+      __unw_remove_dynamic_eh_frame_section) {
+    __unw_add_dynamic_eh_frame_section(EHFrameSectionAddr);
+    return Error::success();
+  }
+#endif
   /* libgcc and libunwind __register_frame behave differently. We use the
    * presence of __unw_add_dynamic_fde to detect libunwind. */
 #if defined(HAVE_UNW_ADD_DYNAMIC_FDE) || defined(__APPLE__)
@@ -141,6 +154,14 @@ Error registerEHFrameSection(const void *EHFrameSectionAddr,
 
 Error deregisterEHFrameSection(const void *EHFrameSectionAddr,
                                size_t EHFrameSectionSize) {
+#if defined(HAVE_REGISTER_FRAME) && defined(HAVE_DEREGISTER_FRAME) &&          \
+    !defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
+  if (__unw_add_dynamic_eh_frame_section &&
+      __unw_remove_dynamic_eh_frame_section) {
+    __unw_remove_dynamic_eh_frame_section(EHFrameSectionAddr);
+    return Error::success();
+  }
+#endif
 #if defined(HAVE_UNW_ADD_DYNAMIC_FDE) || defined(__APPLE__)
   return walkLibunwindEHFrameSection(
       static_cast<const char *>(EHFrameSectionAddr), EHFrameSectionSize,
