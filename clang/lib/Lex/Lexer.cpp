@@ -2461,6 +2461,8 @@ bool Lexer::LexRawStringLiteral(Token &Result, const char *CurPtr,
 
 /// LexAngledStringLiteral - Lex the remainder of an angled string literal,
 /// after having lexed the '<' character.  This is used for #include filenames.
+/// Returns false if failed to lex the angled string literal; so the caller can
+/// lex the '<' normally.
 bool Lexer::LexAngledStringLiteral(Token &Result, const char *CurPtr) {
   // Does this string contain the \0 character?
   const char *NulCharacter = nullptr;
@@ -2474,10 +2476,8 @@ bool Lexer::LexAngledStringLiteral(Token &Result, const char *CurPtr) {
 
     if (isVerticalWhitespace(C) ||               // Newline.
         (C == 0 && (CurPtr - 1 == BufferEnd))) { // End of file.
-      // If the filename is unterminated, then it must just be a lone <
-      // character.  Return this as such.
-      FormTokenWithChars(Result, AfterLessPos, tok::less);
-      return true;
+      // If the filename is unterminated, let the caller lex the '<' normally.
+      return false;
     }
 
     if (C == 0) {
@@ -3302,15 +3302,6 @@ bool Lexer::LexEndOfFile(Token &Result, const char *CurPtr) {
 std::optional<Token> Lexer::peekNextPPToken() {
   assert(!LexingRawMode && "How can we expand a macro from a skipping buffer?");
 
-  if (isDependencyDirectivesLexer()) {
-    if (NextDepDirectiveTokenIndex == DepDirectives.front().Tokens.size())
-      return std::nullopt;
-    Token Result;
-    (void)convertDependencyDirectiveToken(
-        DepDirectives.front().Tokens[NextDepDirectiveTokenIndex], Result);
-    return Result;
-  }
-
   // Switch to 'skipping' mode.  This will ensure that we can lex a token
   // without emitting diagnostics, disables macro expansion, and will cause EOF
   // to return an EOF token instead of popping the include stack.
@@ -3325,7 +3316,14 @@ std::optional<Token> Lexer::peekNextPPToken() {
   MultipleIncludeOpt MIOptState = MIOpt;
 
   Token Tok;
-  Lex(Tok);
+  if (isDependencyDirectivesLexer()) {
+    if (NextDepDirectiveTokenIndex == DepDirectives.front().Tokens.size())
+      return std::nullopt;
+    (void)convertDependencyDirectiveToken(
+        DepDirectives.front().Tokens[NextDepDirectiveTokenIndex], Tok);
+  } else {
+    Lex(Tok);
+  }
 
   // Restore state that may have changed.
   BufferPtr = TmpBufferPtr;
@@ -4343,9 +4341,10 @@ LexStart:
     break;
   case '<':
     Char = getCharAndSize(CurPtr, SizeTmp);
-    if (ParsingFilename) {
-      return LexAngledStringLiteral(Result, CurPtr);
-    } else if (Char == '<') {
+    if (ParsingFilename && LexAngledStringLiteral(Result, CurPtr))
+      return true;
+
+    if (Char == '<') {
       char After = getCharAndSize(CurPtr+SizeTmp, SizeTmp2);
       if (After == '=') {
         Kind = tok::lesslessequal;
@@ -4692,7 +4691,10 @@ bool Lexer::LexDependencyDirectiveToken(Token &Result) {
 
   if (ParsingFilename && DDTok.is(tok::less)) {
     BufferPtr = BufferStart + DDTok.Offset;
-    LexAngledStringLiteral(Result, BufferPtr + 1);
+    if (!LexAngledStringLiteral(Result, BufferPtr + 1)) {
+      convertDependencyDirectiveToken(DDTok, Result);
+      return true;
+    }
     if (Result.isNot(tok::header_name))
       return true;
     // Advance the index of lexed tokens.
