@@ -27,7 +27,7 @@ entry:
   ret i32 %call4
 }
 
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline }
 
 declare i1 @llvm.type.test(ptr, metadata)
 declare void @llvm.assume(i1)

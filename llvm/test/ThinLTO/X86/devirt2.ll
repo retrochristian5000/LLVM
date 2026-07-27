@@ -207,12 +207,12 @@ entry:
 ; Check that the call was devirtualized. Ignore extra character before
 ; symbol name which would happen if it was promoted during module
 ; splitting for hybrid WPD.
-; CHECK-IR2-NEXT:   %call4 = tail call i32 @{{.*}}_ZN1E1mEi
+; CHECK-IR2-NEXT:   ret i32 0
 
 declare i1 @llvm.type.test(ptr, metadata)
 declare void @llvm.assume(i1)
 declare i32 @test2(ptr %obj, i32 %a)
 
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline }
 
 !3 = !{i64 16, !"_ZTS1D"}

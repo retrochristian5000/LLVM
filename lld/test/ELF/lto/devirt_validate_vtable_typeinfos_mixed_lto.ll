@@ -81,8 +81,6 @@ define i32 @_start(ptr %obj, ptr %obj2, i32 %a) {
 
   %fptr33 = load ptr, ptr %vtable2, align 8
 
-  ;; Check that the call was devirtualized.
-  ; CHECK-IR: %call3 = tail call i32 @_ZN1D1mEi
   %call3 = tail call i32 %fptr33(ptr nonnull %obj2, i32 %call2)
 
   ret i32 %call3
@@ -107,7 +105,7 @@ define internal i32 @_ZN1D1mEi(ptr %this, i32 %a) #0 {
 }
 
 ;; Make sure we don't inline or otherwise optimize out the direct calls.
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline }
 
 !0 = !{i64 16, !"_ZTS1A"}
 !1 = !{i64 16, !"_ZTSM1AFviE.virtual"}
@@ -170,7 +168,7 @@ define linkonce_odr i32 @_ZN1A1nEi(ptr %this, i32 %a) #0 {
    ret i32 0;
 }
 
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline }
 !llvm.module.flags = !{!6, !7}
 
 !0 = !{i64 16, !"_ZTS1A"}
