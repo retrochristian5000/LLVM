@@ -965,7 +965,7 @@ define void @sink_multiple_store_groups_noalias_via_scev_urem(ptr %dst, ptr %src
 ; CHECK-NEXT:    [[TMP12:%.*]] = load double, ptr [[TMP3]], align 8, !alias.scope [[META92]], !noalias [[META95]]
 ; CHECK-NEXT:    [[TMP13:%.*]] = insertelement <2 x double> poison, double [[TMP11]], i32 0
 ; CHECK-NEXT:    [[TMP14:%.*]] = insertelement <2 x double> [[TMP13]], double [[TMP12]], i32 1
-; CHECK-NEXT:    [[TMP15:%.*]] = urem <2 x i64> [[VEC_IND]], splat (i64 128)
+; CHECK-NEXT:    [[TMP15:%.*]] = and <2 x i64> [[VEC_IND]], splat (i64 127)
 ; CHECK-NEXT:    [[TMP20:%.*]] = fadd <2 x double> [[TMP14]], splat (double 8.000000e+00)
 ; CHECK-NEXT:    [[TMP17:%.*]] = extractelement <2 x i64> [[TMP15]], i64 0
 ; CHECK-NEXT:    [[TMP19:%.*]] = getelementptr double, ptr [[DST]], i64 [[TMP17]]
