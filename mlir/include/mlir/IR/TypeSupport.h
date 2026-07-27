@@ -158,14 +158,26 @@ private:
 // TypeStorage
 //===----------------------------------------------------------------------===//
 
+class TypeStorage;
+
 namespace detail {
 struct TypeUniquer;
+
+/// Compute, and record on `storage`, whether this type transitively contains a
+/// SymbolRefAttr. Kinds carrying the mutable-storage trait, and anything
+/// containing them, report true conservatively. Called once per newly uniqued
+/// instance, after its abstract descriptor and sub-elements are set and before
+/// it is published, so that the bits of its immediate sub-elements (interned
+/// first) are final. Runs under the uniquer lock; walk implementations must not
+/// create new attributes or types.
+void populateTypeContainsSymbolReferences(TypeStorage *storage);
 } // namespace detail
 
 /// Base storage class appearing in a Type.
 class TypeStorage : public StorageUniquer::BaseStorage {
   friend detail::TypeUniquer;
   friend StorageUniquer;
+  friend void detail::populateTypeContainsSymbolReferences(TypeStorage *);
 
 public:
   /// Return the abstract type descriptor for this type.
@@ -173,6 +185,14 @@ public:
     assert(abstractType && "Malformed type storage object.");
     return *abstractType;
   }
+
+  /// Return whether this type may transitively contain a SymbolRefAttr. False
+  /// is authoritative: no SymbolRefAttr is reachable through the sub-element
+  /// tree. True may be conservative: mutable-storage kinds, and anything
+  /// containing them, report true. A pure function of the type's interned
+  /// structure, synthesized at uniquing; not part of the unique key and taking
+  /// no part in hashing or equality.
+  bool mayContainSymbolRefs() const { return mayContainSymbolRefsBit; }
 
 protected:
   /// This constructor is used by derived classes as part of the TypeUniquer.
@@ -185,8 +205,18 @@ private:
     abstractType = const_cast<AbstractType *>(&abstractTy);
   }
 
+  /// Record the symbol-reference containment bit. Set once at uniquing.
+  void setMayContainSymbolRefs(bool mayContain) {
+    mayContainSymbolRefsBit = mayContain;
+  }
+
   /// The abstract description for this type.
   AbstractType *abstractType{nullptr};
+
+  /// Whether this type may transitively contain a SymbolRefAttr; a pure
+  /// function of the interned structure, taking no part in the unique key,
+  /// hashing, or equality.
+  bool mayContainSymbolRefsBit = false;
 };
 
 /// Default storage type for types that require no additional initialization or
@@ -233,6 +263,7 @@ struct TypeUniquer {
     return ctx->getTypeUniquer().get<typename T::ImplType>(
         [&, typeID](TypeStorage *storage) {
           storage->initialize(AbstractType::lookup(typeID, ctx));
+          populateTypeContainsSymbolReferences(storage);
         },
         typeID, std::forward<Args>(args)...);
   }
@@ -290,6 +321,7 @@ struct TypeUniquer {
     ctx->getTypeUniquer().registerSingletonStorageType<TypeStorage>(
         typeID, [&ctx, typeID](TypeStorage *storage) {
           storage->initialize(AbstractType::lookup(typeID, ctx));
+          populateTypeContainsSymbolReferences(storage);
         });
   }
 };

@@ -476,49 +476,57 @@ raw_ostream &mlir::operator<<(raw_ostream &os,
 // SymbolTable Trait Types
 //===----------------------------------------------------------------------===//
 
-/// Verify the symbol uses held by the types owned by `op`: its operand,
-/// result, and block-argument types, and any types nested within its
-/// attributes. `op` is the anchor used for symbol lookups. `verifiedTypes`
-/// records the types already verified within the current symbol table so that
-/// each type, which may be uniqued and shared across many positions or
-/// operations, is verified at most once. Verification fails fast on the first
-/// invalid symbol use.
+/// Verify the symbol uses held by the types owned by `op`: its operand, result,
+/// and block-argument types, and any types nested within its attributes.
+/// `typeWalker` carries the SymbolUserTypeInterface check as a walk callback,
+/// anchored at `op` for symbol lookups, and its shared visited set makes each
+/// uniqued type, which may recur across many positions and operations, verified
+/// against the enclosing symbol table at most once. A type or attribute whose
+/// interning-time bit is clear is skipped: it provably contains no
+/// SymbolRefAttr, and a SymbolUserTypeInterface type is required to spell its
+/// references as SymbolRefAttr sub-elements, so walking it would verify
+/// nothing. Verification fails fast on the first invalid symbol use.
 static LogicalResult verifyOpTypeSymbolUses(Operation *op,
-                                            SymbolTableCollection &symbolTable,
-                                            SetVector<Type> &verifiedTypes) {
-  // Walk `type` and any nested type parameters reachable from it, verifying
-  // each not-yet-seen type and interrupting on the first failure.
-  auto verify = [&](Type type) {
-    return type.walk<WalkOrder::PreOrder>([&](Type nestedType) {
-      if (!verifiedTypes.insert(nestedType))
-        return WalkResult::advance();
-      if (auto user = dyn_cast<SymbolUserTypeInterface>(nestedType))
-        if (failed(user.verifySymbolUses(op, symbolTable)))
-          return WalkResult::interrupt();
+                                            AttrTypeWalker &typeWalker) {
+  auto verifyType = [&](Type type) {
+    if (!type.mayContainSymbolRefs())
       return WalkResult::advance();
-    });
+    return typeWalker.walk<WalkOrder::PreOrder>(type);
+  };
+  auto verifyAttr = [&](Attribute attr) {
+    if (!attr || !attr.mayContainSymbolRefs())
+      return WalkResult::advance();
+    return typeWalker.walk<WalkOrder::PreOrder>(attr);
   };
 
   for (Type type : op->getOperandTypes())
-    if (verify(type).wasInterrupted())
+    if (verifyType(type).wasInterrupted())
       return failure();
   for (Type type : op->getResultTypes())
-    if (verify(type).wasInterrupted())
+    if (verifyType(type).wasInterrupted())
       return failure();
   for (Region &region : op->getRegions())
     for (Block &block : region)
       for (BlockArgument argument : block.getArguments())
-        if (verify(argument.getType()).wasInterrupted())
+        if (verifyType(argument.getType()).wasInterrupted())
           return failure();
 
-  // Verify types nested within the operation's attributes.
-  WalkResult attrResult =
-      op->getAttrDictionary().walk<WalkOrder::PreOrder>([&](Type type) {
-        if (verify(type).wasInterrupted())
-          return WalkResult::interrupt();
-        return WalkResult::advance();
-      });
-  return failure(attrResult.wasInterrupted());
+  // Verify types nested within the operation's attributes. Read the raw stored
+  // attribute dictionary rather than getAttrDictionary(): the latter allocates
+  // and uniques a fresh dictionary for every operation that keeps its inherent
+  // attributes in properties. The raw dictionary already covers inherent
+  // attributes for operations that do not use properties; the properties-held
+  // inherent attributes are walked separately below.
+  if (verifyAttr(op->getRawDictionaryAttrs()).wasInterrupted())
+    return failure();
+  if (op->getPropertiesStorageSize()) {
+    NamedAttrList inherentAttrs;
+    op->getName().populateInherentAttrs(op, inherentAttrs);
+    for (const NamedAttribute &namedAttr : inherentAttrs)
+      if (verifyAttr(namedAttr.getValue()).wasInterrupted())
+        return failure();
+  }
+  return success();
 }
 
 LogicalResult detail::verifySymbolTable(Operation *op) {
@@ -557,7 +565,21 @@ LogicalResult detail::verifySymbolTable(Operation *op) {
   // regardless of which operation anchors the lookup, so each is verified at
   // most once across the whole scope.
   SetVector<Attribute> verifiedAttrs;
-  SetVector<Type> verifiedTypes;
+
+  // A single walker, shared across the whole scope, checks the symbol uses of
+  // every SymbolUserTypeInterface type. Its visited set records each uniqued
+  // type once, so a type recurring across operand/result/block-argument and
+  // attribute positions is verified only at its first occurrence, whose
+  // operation supplies the lookup anchor.
+  Operation *typeSymbolUseAnchor = nullptr;
+  AttrTypeWalker typeWalker;
+  typeWalker.addWalk([&](Type type) -> WalkResult {
+    if (auto user = dyn_cast<SymbolUserTypeInterface>(type))
+      if (failed(user.verifySymbolUses(typeSymbolUseAnchor, symbolTable)))
+        return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+
   auto verifySymbolUserFn = [&](Operation *op) -> std::optional<WalkResult> {
     if (SymbolUserOpInterface user = dyn_cast<SymbolUserOpInterface>(op))
       if (failed(user.verifySymbolUses(symbolTable)))
@@ -570,7 +592,8 @@ LogicalResult detail::verifySymbolTable(Operation *op) {
           return WalkResult::interrupt();
       }
     }
-    if (failed(verifyOpTypeSymbolUses(op, symbolTable, verifiedTypes)))
+    typeSymbolUseAnchor = op;
+    if (failed(verifyOpTypeSymbolUses(op, typeWalker)))
       return WalkResult::interrupt();
     return WalkResult::advance();
   };

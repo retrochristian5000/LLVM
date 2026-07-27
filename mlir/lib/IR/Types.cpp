@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 
@@ -126,4 +127,31 @@ unsigned Type::getIntOrFloatBitWidth() const {
   if (auto intType = llvm::dyn_cast<IntegerType>(*this))
     return intType.getWidth();
   return llvm::cast<FloatType>(*this).getWidth();
+}
+
+//===----------------------------------------------------------------------===//
+// Symbol-reference containment bit synthesis
+//===----------------------------------------------------------------------===//
+
+/// Synthesize the interning-time "contains a SymbolRefAttr" bit for a newly
+/// uniqued type. A type is never itself a SymbolRefAttr, so the bit is set when
+/// it carries a mutable component (whose sub-elements may change after this bit
+/// is fixed, so it must report conservatively) or when any immediate
+/// sub-element already carries the bit. Sub-elements are interned before their
+/// parents, so their bits are final.
+void mlir::detail::populateTypeContainsSymbolReferences(TypeStorage *storage) {
+  const AbstractType &abstractType = storage->getAbstractType();
+  bool mayContain = abstractType.hasTrait<StorageUserTrait::IsMutable>();
+  if (!mayContain) {
+    Type type(storage);
+    abstractType.walkImmediateSubElements(
+        type,
+        [&](Attribute attr) {
+          mayContain |= attr && attr.mayContainSymbolRefs();
+        },
+        [&](Type subType) {
+          mayContain |= subType && subType.mayContainSymbolRefs();
+        });
+  }
+  storage->setMayContainSymbolRefs(mayContain);
 }

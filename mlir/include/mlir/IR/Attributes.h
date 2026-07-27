@@ -143,6 +143,15 @@ public:
   /// Return the internal Attribute implementation.
   ImplType *getImpl() const { return impl; }
 
+  /// Return whether this attribute may transitively contain a SymbolRefAttr.
+  /// False is authoritative: no SymbolRefAttr is reachable through the
+  /// sub-element tree. True may be conservative: mutable-storage kinds, and
+  /// anything containing them, report true. A pure function of the interned
+  /// structure; not part of the unique key, hashing, or equality. Symbol-table
+  /// verification uses it to skip attributes that cannot hold a symbol
+  /// reference.
+  bool mayContainSymbolRefs() const { return impl->mayContainSymbolRefs(); }
+
 protected:
   ImplType *impl{nullptr};
 };
