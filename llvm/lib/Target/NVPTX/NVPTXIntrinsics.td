@@ -5710,13 +5710,13 @@ defm TCGEN05_RELINQ_CG2: TCGEN05_RELINQ_PERMIT_INTR<"2", int_nvvm_tcgen05_relinq
 def tcgen05_wait_ld: NullaryInst<"tcgen05.wait::ld.sync.aligned", int_nvvm_tcgen05_wait_ld>;
 def tcgen05_wait_st: NullaryInst<"tcgen05.wait::st.sync.aligned", int_nvvm_tcgen05_wait_st>;
 
-multiclass TCGEN05_COMMIT_INTR<string AS, string num> {
+multiclass TCGEN05_COMMIT_INTR<string num> {
   defvar prefix = "tcgen05.commit.cta_group::" # num #
                   ".mbarrier::arrive::one.shared::cluster";
   defvar prefix_smem_a_read = prefix # ".sync_restrict::shared::read::mma::a";
 
   defvar intr_prefix = "int_nvvm_tcgen05_commit";
-  defvar intr_suffix = !if(!eq(AS, "shared"), "_shared", "") # "_cg" # num;
+  defvar intr_suffix = "_cg" # num;
   defvar Intr = !cast<Intrinsic>(intr_prefix # intr_suffix);
   defvar IntrMC = !cast<Intrinsic>(intr_prefix # "_mc" # intr_suffix);
   defvar IntrSmemARead =
@@ -5778,10 +5778,8 @@ foreach src_fmt = ["", "b6x16_p32", "b4x16_p64"] in {
 }
 } // Predicates
 
-defm TCGEN05_COMMIT_CG1 : TCGEN05_COMMIT_INTR<"", "1">;
-defm TCGEN05_COMMIT_CG2 : TCGEN05_COMMIT_INTR<"", "2">;
-defm TCGEN05_COMMIT_S64_CG1 : TCGEN05_COMMIT_INTR<"shared", "1">;
-defm TCGEN05_COMMIT_S64_CG2 : TCGEN05_COMMIT_INTR<"shared", "2">;
+defm TCGEN05_COMMIT_CG1 : TCGEN05_COMMIT_INTR<"1">;
+defm TCGEN05_COMMIT_CG2 : TCGEN05_COMMIT_INTR<"2">;
 
 let Predicates = [callSubtarget<"hasTcgen05ShiftSupport">] in {
 multiclass TCGEN05_SHIFT_INTR<string num, Intrinsic Intr> {

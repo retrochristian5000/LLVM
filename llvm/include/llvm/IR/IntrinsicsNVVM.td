@@ -3087,22 +3087,12 @@ foreach cta_group = ["cg1", "cg2"] in {
 
   foreach smem_a_read = ["", "smem_a_read_"] in {
     def int_nvvm_tcgen05_commit_ # smem_a_read # cta_group : Intrinsic<[],
-      [llvm_ptr_ty],        // mbar_ptr
-      [IntrConvergent, IntrInaccessibleMemOrArgMemOnly,
-       NoCapture<ArgIndex<0>>]>;
-
-    def int_nvvm_tcgen05_commit_ # smem_a_read # shared_ # cta_group : Intrinsic<[],
-      [llvm_shared_ptr_ty], // mbar_ptr
+      [llvm_anyptr_ty],        // mbar_ptr
       [IntrConvergent, IntrInaccessibleMemOrArgMemOnly,
        NoCapture<ArgIndex<0>>]>;
 
     def int_nvvm_tcgen05_commit_ # smem_a_read # mc_ # cta_group : Intrinsic<[],
-      [llvm_ptr_ty, llvm_anyint_ty], // mbar_ptr, cta_mask[16 or 32 bits]
-      [IntrConvergent, IntrInaccessibleMemOrArgMemOnly,
-       NoCapture<ArgIndex<0>>]>;
-
-    def int_nvvm_tcgen05_commit_ # smem_a_read # mc_shared_ # cta_group : Intrinsic<[],
-      [llvm_shared_ptr_ty, llvm_anyint_ty], // mbar_ptr, cta_mask[16 or 32 bits]
+      [llvm_anyptr_ty, llvm_anyint_ty], // mbar_ptr, cta_mask[16 or 32 bits]
       [IntrConvergent, IntrInaccessibleMemOrArgMemOnly,
        NoCapture<ArgIndex<0>>]>;
   }

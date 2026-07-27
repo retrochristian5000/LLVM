@@ -2628,19 +2628,21 @@ For more information, refer to the [PTX ISA](https://docs.nvidia.com/cuda/parall
 ##### Syntax:
 
 ```llvm
-declare void @llvm.nvvm.tcgen05.commit.{cg1,cg2}(ptr %mbar)
-declare void @llvm.nvvm.tcgen05.commit.shared.{cg1,cg2}(ptr addrspace(3) %mbar)
-declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.i16(ptr %mbar, i16 %mc)
-declare void @llvm.nvvm.tcgen05.commit.mc.shared.{cg1,cg2}.i16(ptr addrspace(3) %mbar, i16 %mc)
-declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.i32(ptr %mbar, i32 %mc)
-declare void @llvm.nvvm.tcgen05.commit.mc.shared.{cg1,cg2}.i32(ptr addrspace(3) %mbar, i32 %mc)
+declare void @llvm.nvvm.tcgen05.commit.{cg1,cg2}.p0(ptr %mbar)
+declare void @llvm.nvvm.tcgen05.commit.{cg1,cg2}.p3(ptr addrspace(3) %mbar)
 
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.{cg1,cg2}(ptr %bar_addr)
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.shared.{cg1,cg2}(ptr addrspace(3) %bar_addr)
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.i16(ptr %bar_addr, i16 %cta_mask)
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.shared.{cg1,cg2}.i16(ptr addrspace(3) %bar_addr, i16 %cta_mask)
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.i32(ptr %bar_addr, i32 %cta_mask)
-declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.shared.{cg1,cg2}.i32(ptr addrspace(3) %bar_addr, i32 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.p0.i16(ptr %mbar, i16 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.p0.i32(ptr %mbar, i32 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.p3.i16(ptr addrspace(3) %mbar, i16 %mc)
+declare void @llvm.nvvm.tcgen05.commit.mc.{cg1,cg2}.p3.i32(ptr addrspace(3) %mbar, i32 %mc)
+
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.{cg1,cg2}.p0(ptr %bar_addr)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.{cg1,cg2}.p3(ptr addrspace(3) %bar_addr)
+
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.p0.i16(ptr %bar_addr, i16 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.p0.i32(ptr %bar_addr, i32 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.p3.i16(ptr addrspace(3) %bar_addr, i16 %cta_mask)
+declare void @llvm.nvvm.tcgen05.commit.smem.a.read.mc.{cg1,cg2}.p3.i32(ptr addrspace(3) %bar_addr, i32 %cta_mask)
 ```
 
 ##### Overview:
