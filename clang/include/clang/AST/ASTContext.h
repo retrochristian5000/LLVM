@@ -813,7 +813,6 @@ public:
   mutable DeclarationNameTable DeclarationNames;
   IntrusiveRefCntPtr<ExternalASTSource> ExternalSource;
   ASTMutationListener *Listener = nullptr;
-  SmallVector<PartialDiagnosticAt> *MSConstExprDiag = nullptr;
 
   /// Returns the clang bytecode interpreter context.
   interp::Context &getInterpContext() const;
