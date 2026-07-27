@@ -213,13 +213,6 @@ def RetCC_SystemZ_XPLINK64 : CallingConv<[
 // examples.
 
 def CC_SystemZ_XPLINK64 : CallingConv<[
-  // Callers must pass i32 arguments in full 64-bit registers.  The XPLINK64
-  // ABI does not mandate sign- or zero-extension in the upper 32 bits (that
-  // requirement applies only to return values), but the caller is still
-  // responsible for placing the value in a 64-bit register before the call.
-  // Other compilers (e.g. xlc) behave this way unconditionally, so we promote
-  // i32 to i64 here regardless of any signext/zeroext attribute.
-  CCIfType<[i32], CCPromoteToType<i64>>,
   // Promote f32 to f64 and bitcast to i64, if it needs to be passed in GPRs.
   // Although we assign the f32 vararg to be bitcast, it will first be promoted
   // to an f64 within convertValVTToLocVT().
@@ -246,9 +239,12 @@ def CC_SystemZ_XPLINK64 : CallingConv<[
   // If i128 is not legal, such values are already split into two i64 here,
   // so we have to use a custom handler.
   CCIfType<[i64], CCCustom<"CC_SystemZ_I128Indirect">>,
-  // The first 3 integer arguments are passed in registers R1D-R3D.
+  // The first 3 integer arguments are passed in registers R1-R3.
+  // i32 uses the low-word sub-registers but occupies a full 8-byte slot,
+  // matching the XPLINK64 requirement that each parameter area word is 8 bytes.
   // The rest will be passed in the user area. The address offset of the user
   // area can be found in register R4D.
+  CCIfType<[i32], CCAssignToRegAndStack<[R1L, R2L, R3L], 8, 8>>,
   CCIfType<[i64], CCAssignToRegAndStack<[R1D, R2D, R3D], 8, 8>>,
 
   // The first 8 named vector arguments are passed in V24-V31. Sub-128 vectors

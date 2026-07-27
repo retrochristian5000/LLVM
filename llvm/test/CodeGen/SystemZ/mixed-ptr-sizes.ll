@@ -307,7 +307,7 @@ entry:
 ; CHECK-NEXT:    lg 5,16(5)
 ; CHECK-NEXT:    stg 1,2216(4)
 ; CHECK-NEXT:    stg 1,2208(4)
-; CHECK-NEXT:    lghi 1,5
+; CHECK-NEXT:    lhi 1,5
 ; CHECK-NEXT:    stg 2,2200(4)
 ; CHECK-NEXT:    lgr 3,2
 ; CHECK-NEXT:    basr 7,6

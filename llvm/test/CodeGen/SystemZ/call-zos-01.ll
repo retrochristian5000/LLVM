@@ -11,7 +11,7 @@ define i8 @call_char(){
 ; CHECK-NEXT:  L#end_of_prologue{{[0-9]+}} DS 0H
 ; CHECK-NEXT:    lg 6,8(5)
 ; CHECK-NEXT:    lg 5,0(5)
-; CHECK-NEXT:    lghi 1,8
+; CHECK-NEXT:    lhi 1,8
 ; CHECK-NEXT:    basr 7,6
 ; CHECK-NEXT:    bcr 0,0
 ; CHECK-NEXT:    lg 7,2072(4)
@@ -30,7 +30,7 @@ define i16 @call_short() {
 ; CHECK-NEXT:  L#end_of_prologue{{[0-9]+}} DS 0H
 ; CHECK-NEXT:    lg 6,24(5)
 ; CHECK-NEXT:    lg 5,16(5)
-; CHECK-NEXT:    lghi 1,16
+; CHECK-NEXT:    lhi 1,16
 ; CHECK-NEXT:    basr 7,6
 ; CHECK-NEXT:    bcr 0,0
 ; CHECK-NEXT:    lg 7,2072(4)
@@ -50,8 +50,8 @@ define i32 @call_int() {
 ; CHECK-NEXT:  L#end_of_prologue{{[0-9]+}} DS 0H
 ; CHECK-NEXT:    lg 6,40(5)
 ; CHECK-NEXT:    lg 5,32(5)
-; CHECK-NEXT:    lghi 1,32
-; CHECK-NEXT:    lghi 2,33
+; CHECK-NEXT:    lhi 1,32
+; CHECK-NEXT:    lhi 2,33
 ; CHECK-NEXT:    basr 7,6
 ; CHECK-NEXT:    bcr 0,0
 ; CHECK-NEXT:    lg 7,2072(4)
@@ -114,8 +114,8 @@ define i64 @call_integrals() {
 ; CHECK-NEXT:    lg 6,88(5)
 ; CHECK-NEXT:    lg 5,80(5)
 ; CHECK-NEXT:    lghi 1,64
-; CHECK-NEXT:    lghi 2,32
-; CHECK-NEXT:    lghi 3,16
+; CHECK-NEXT:    lhi 2,32
+; CHECK-NEXT:    lhi 3,16
 ; CHECK-NEXT:    mvghi 2200(4),128
 ; CHECK-NEXT:    basr 7,6
 ; CHECK-NEXT:    bcr 0,0
@@ -129,7 +129,7 @@ entry:
 
 define signext i8 @pass_char(i8 signext %arg) {
 ; CHECK-LABEL: pass_char DS 0H
-; CHECK:         lgr 3,1
+; CHECK:         lgfr 3,1
 ; CHECK-NEXT:    b 2(7)
 entry:
   ret i8 %arg
@@ -137,7 +137,7 @@ entry:
 
 define signext i16 @pass_short(i16 signext %arg) {
 ; CHECK-LABEL: pass_short DS 0H
-; CHECK:         lgr 3,1
+; CHECK:         lgfr 3,1
 ; CHECK-NEXT:    b 2(7)
 entry:
   ret i16 %arg
@@ -145,7 +145,7 @@ entry:
 
 define signext i32 @pass_int(i32 signext %arg0, i32 signext %arg1) {
 ; CHECK-LABEL: pass_int DS 0H
-; CHECK:         lgr 3,2
+; CHECK:         lgfr 3,2
 ; CHECK-NEXT:    b 2(7)
 entry:
   ret i32 %arg1
@@ -164,8 +164,8 @@ entry:
 
 define signext i64 @pass_integrals0(i64 signext %arg0, i32 signext %arg1, i16 signext %arg2, i64 signext %arg3) {
 ; CHECK-LABEL: pass_integrals0 DS 0H
-; CHECK:         ag 2,2200(4)
-; CHECK-NEXT:    lgr 3,2
+; CHECK:         lgfr 3,2
+; CHECK-NEXT:    ag 3,2200(4)
 ; CHECK-NEXT:    b 2(7)
 entry:
   %N = sext i32 %arg1 to i64

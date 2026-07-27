@@ -30,7 +30,7 @@ declare void @Caller(ptr noundef)
 ; CHECK:    aghi    4,-192
 ; CHECK:    lg  1,24(5)
 ; CHECK:    lg  2,32(5)
-; CHECK:    lgf 1,0(1)
+; CHECK:    l   1,0(1)
 ; CHECK:    lg  6,48(5)
 ; CHECK:    lg  5,40(5)
 ; CHECK:    l   8,0(2)

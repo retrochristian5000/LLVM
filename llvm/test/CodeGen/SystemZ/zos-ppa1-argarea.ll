@@ -19,7 +19,7 @@ define void @fLargeOutArgArea() {
 ; CHECK-LABEL: L#EPM_fLargeOutArgArea_0 DS 0H
 ; CHECK: *   Bit 1: 0 = Non-leaf function
 ; CHECK: *   Bit 2: 0 = Does not use alloca
-; CHECK:  DC XL4'00000260'
+; CHECK:  DC XL4'00000220'
 ; CHECK: fLargeOutArgArea DS 0H
   %1 = load [33 x i32], ptr @GlobLargeS, align 4
   call void @fLargeParm([33 x i32] inreg %1)

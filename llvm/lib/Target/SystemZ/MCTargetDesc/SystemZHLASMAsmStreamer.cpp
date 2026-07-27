@@ -469,7 +469,7 @@ void SystemZHLASMAsmStreamer::finishImpl() {
     if (Symbol.isTemporary() || !Symbol.isRegistered() || Symbol.isDefined())
       continue;
     auto &Sym = static_cast<MCSymbolGOFF &>(const_cast<MCSymbol &>(Symbol));
-    if (Sym.getCodeData() == GOFF::ESD_EXE_DATA && Sym.getADA()) {
+    if (Sym.getCodeData() == GOFF::ESD_EXE_DATA) {
       OS << Sym.getADA()->getParent()->getExternalName() << " CATTR PART("
          << Sym.getName() << ")";
       EmitEOL();
