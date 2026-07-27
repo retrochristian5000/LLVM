@@ -3651,13 +3651,13 @@ public:
     return new VPExpressionRecipe(ExpressionType, NewExpressiondRecipes);
   }
 
-  /// Clone this recipe and replace the reduction recipe to EVL recipe.
-  VPExpressionRecipe *cloneWithEVL(VPValue *Mask, VPValue *EVL);
+  /// Return and insert the recipes of the expression back into the VPlan,
+  /// directly before the current recipe. Leaves the expression recipe empty,
+  /// which must be removed before codegen.
+  SmallVector<VPSingleDefRecipe *> decompose();
 
-  /// Insert the recipes of the expression back into the VPlan,
-  /// directly before the current recipe. Leaves the expression
-  /// recipe empty, which must be removed before codegen.
-  void decompose();
+  /// Returns the expression type of this recipe.
+  ExpressionTypes getExpressionType() const { return ExpressionType; }
 
   unsigned getVFScaleFactor() const {
     auto *PR = dyn_cast<VPReductionRecipe>(ExpressionRecipes.back());

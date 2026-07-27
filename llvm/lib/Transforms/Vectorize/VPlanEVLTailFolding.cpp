@@ -231,7 +231,25 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
   if (auto *Expr = dyn_cast<VPExpressionRecipe>(&CurRecipe))
     if (match(Expr->getOperand(Expr->getNumOperands() - 1),
               m_RemoveMask(HeaderMask, Mask))) {
-      auto *NewExpr = Expr->cloneWithEVL(Mask, &EVL);
+      // Decompose first and construct with EVL recipes later.
+      SmallVector<VPSingleDefRecipe *> ExpressionRecipes(Expr->decompose());
+
+      // Convert recipes to EVL recipes.
+      for (auto [Idx, ExprR] : enumerate(ExpressionRecipes))
+        if (auto *EVLR = cast_if_present<VPSingleDefRecipe>(
+                optimizeMaskToEVL(HeaderMask, *ExprR, EVL))) {
+          VPSingleDefRecipe *OrigR = ExpressionRecipes[Idx];
+          EVLR->insertBefore(OrigR);
+          OrigR->replaceAllUsesWith(EVLR);
+          ExpressionRecipes[Idx] = EVLR;
+          OrigR->eraseFromParent();
+        }
+
+      auto *NewExpr =
+          new VPExpressionRecipe(Expr->getExpressionType(), ExpressionRecipes);
+
+      ExpressionRecipes[ExpressionRecipes.size() - 1]->replaceAllUsesWith(
+          NewExpr);
       return NewExpr;
     }
   return nullptr;

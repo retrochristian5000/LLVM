@@ -3524,7 +3524,7 @@ VPExpressionRecipe::VPExpressionRecipe(
       R->replaceUsesOfWith(LiveIn, Tmp);
 }
 
-void VPExpressionRecipe::decompose() {
+SmallVector<VPSingleDefRecipe *> VPExpressionRecipe::decompose() {
   for (auto *R : ExpressionRecipes)
     // Since the list could contain duplicates, make sure the recipe hasn't
     // already been inserted.
@@ -3535,32 +3535,7 @@ void VPExpressionRecipe::decompose() {
     LiveInPlaceholders[Idx]->replaceAllUsesWith(Op);
 
   replaceAllUsesWith(ExpressionRecipes.back());
-  ExpressionRecipes.clear();
-}
-
-VPExpressionRecipe *VPExpressionRecipe::cloneWithEVL(VPValue *Mask,
-                                                     VPValue *EVL) {
-  assert(!ExpressionRecipes.empty() && "empty expressions should be removed");
-  SmallVector<VPSingleDefRecipe *> NewExpressiondRecipes;
-  for (auto *R : ExpressionRecipes)
-    NewExpressiondRecipes.push_back(R->clone());
-
-  for (auto *New : NewExpressiondRecipes) {
-    for (const auto &[Idx, Old] : enumerate(ExpressionRecipes))
-      New->replaceUsesOfWith(Old, NewExpressiondRecipes[Idx]);
-    // Update placeholder operands in the cloned recipe to use the external
-    // operands, to be internalized when the cloned expression is constructed.
-    for (const auto &[Placeholder, OutsideOp] :
-         zip(LiveInPlaceholders, operands()))
-      New->replaceUsesOfWith(Placeholder, OutsideOp);
-  }
-
-  // Convert to VPReductionEVLRecipe
-  auto *Red = cast<VPReductionRecipe>(NewExpressiondRecipes.pop_back_val());
-  auto *NewRed = new VPReductionEVLRecipe(*Red, *EVL, Mask);
-  delete Red;
-  NewExpressiondRecipes.push_back(NewRed);
-  return new VPExpressionRecipe(ExpressionType, NewExpressiondRecipes);
+  return std::move(ExpressionRecipes);
 }
 
 InstructionCost VPExpressionRecipe::computeCost(ElementCount VF,
