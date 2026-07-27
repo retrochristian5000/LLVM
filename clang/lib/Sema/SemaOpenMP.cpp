@@ -3893,8 +3893,10 @@ StmtResult SemaOpenMP::ActOnOpenMPMetaDirective(
     if (ThenDK == OMPD_parallel) {
       StmtResult ParallelStmt =
           createParallelDirectiveForMetadirective(AStmt, StartLoc, EndLoc);
-      if (!ParallelStmt.isUsable())
+      if (!ParallelStmt.isUsable()) {
+        DSAStack->pop();
         return StmtError();
+      }
       ThenDirective = ParallelStmt.get();
       ThenStmt = ThenDirective;
     } else if (ThenDK == OMPD_unknown || ThenDK == OMPD_nothing) {

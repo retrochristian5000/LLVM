@@ -6422,7 +6422,7 @@ class OMPMetaDirective final : public OMPExecutableDirective {
         reinterpret_cast<OpenMPDirectiveKind *>(this + 1), NumVariants);
   }
 
-  const ArrayRef<OpenMPDirectiveKind> getTrailingDirectiveKinds() const {
+  ArrayRef<OpenMPDirectiveKind> getTrailingDirectiveKinds() const {
     return ArrayRef<OpenMPDirectiveKind>(
         reinterpret_cast<const OpenMPDirectiveKind *>(this + 1), NumVariants);
   }

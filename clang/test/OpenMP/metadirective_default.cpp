@@ -39,7 +39,7 @@ void func1() {
 // CHECK-NEXT:    store i32 [[INC]], ptr [[I]], align 4
 // CHECK-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP3:![0-9]+]]
 // CHECK:       [[FOR_END]]:
-// CHECK-NEXT:    call void (ptr, i32, ptr, ...) @__kmpc_fork_call(ptr @1, i32 0, ptr @_Z5func1v.omp_outlined)
+// CHECK-NEXT:    call void (ptr, i32, ptr, ...) @__kmpc_fork_call(ptr @[[GLOB1:[0-9]+]], i32 0, ptr @_Z5func1v.omp_outlined)
 // CHECK-NEXT:    ret void
 // CHECK-NEXT: }
 
@@ -49,24 +49,22 @@ void func1() {
 // CHECK-NEXT: entry
 // CHECK-NEXT:    [[GLOB_TID__ADDR:%.*]] = alloca ptr, align 8
 // CHECK-NEXT:    [[BOUND_TID__ADDR:%.*]] = alloca ptr, align 8
+// CHECK-NEXT:    [[OMP_IV:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[TMP:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[OMP_LB:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[OMP_UB:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[OMP_STRIDE:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[OMP_IS_LAST:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[I:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    store ptr [[DOTGLOBAL_TID_]], ptr [[GLOB_TID__ADDR]], align 8
 // CHECK-NEXT:    store ptr [[DOTBOUND_TID_]], ptr [[BOUND_TID__ADDR]], align 8
-// CHECK-NEXT:    store i32 0, ptr [[I]], align 4
-// CHECK-NEXT:    br label %for.cond
-// CHECK:for.cond:
-// CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[TMP0]], 100
-// CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY:%.*]], label [[FOR_END:%.*]]
-// CHECK:for.body:
-// CHECK-NEXT:    br label [[FOR_INC:%.*]]
-// CHECK:for.inc:
-// CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
-// CHECK-NEXT:    store i32 [[INC]], ptr [[I]], align 4
-// CHECK-NEXT:    br label [[FOR_COND:%.*]]
-// CHECK:for.end:
-// CHECK-NEXT:  ret void
+// CHECK-NEXT:    store i32 0, ptr [[OMP_LB]], align 4
+// CHECK-NEXT:    store i32 99, ptr [[OMP_UB]], align 4
+// CHECK-NEXT:    store i32 1, ptr [[OMP_STRIDE]], align 4
+// CHECK-NEXT:    store i32 0, ptr [[OMP_IS_LAST]], align 4
+// CHECK:         call void @__kmpc_for_static_init_4(
+// CHECK:         call void @__kmpc_for_static_fini(
+// CHECK-NEXT:    ret void
 // CHECK-NEXT:}
 
 void func2() {
@@ -102,9 +100,9 @@ void func2() {
 // CHECK-NEXT:  store i32 99, ptr [[OMP_UB:%.*]], align 4
 // CHECK-NEXT:  store i32 1, ptr [[OMP_STRIDE:%.*]], align 4
 // CHECK-NEXT:  store i32 0, ptr [[OMP_IS_LAST:%.*]], align 4
-// CHECK-NEXT:  [[TID_PTR:%.*]] = load ptr, ptr [[GLOBAL_TID_ADDR:%.*]], align 8
+// CHECK-NEXT:  [[TID_PTR:%.*]] = load ptr, ptr [[GLOB_TID__ADDR]], align 8
 // CHECK-NEXT:  [[TID_VAL:%.*]] = load i32, ptr [[TID_PTR]], align 4
-// CHECK-NEXT:  call void @__kmpc_for_static_init_4(ptr @2, i32 [[TID_VAL]], i32 34, ptr [[OMP_IS_LAST]], ptr [[OMP_LB]], ptr [[OMP_UB]], ptr [[OMP_STRIDE]], i32 1, i32 1)
+// CHECK-NEXT:  call void @__kmpc_for_static_init_4(ptr @[[GLOB_INIT:[0-9]+]], i32 [[TID_VAL]], i32 34, ptr [[OMP_IS_LAST]], ptr [[OMP_LB]], ptr [[OMP_UB]], ptr [[OMP_STRIDE]], i32 1, i32 1)
 // CHECK-NEXT:  [[UB_VAL:%.*]] = load i32, ptr [[OMP_UB]], align 4
 // CHECK-NEXT:  [[CMP:%.*]] = icmp sgt i32 [[UB_VAL]], 99
 // CHECK-NEXT:  br i1 [[CMP]], label [[COND_TRUE:%.*]], label [[COND_FALSE:%.*]]
@@ -148,7 +146,7 @@ void func2() {
 // CHECK-NEXT:  br label [[OMP_LOOP_EXIT:%.*]]
 
 // CHECK:omp.loop.exit:
-// CHECK-NEXT:  call void @__kmpc_for_static_fini(ptr @2, i32 [[TID:%.*]])
+// CHECK-NEXT:  call void @__kmpc_for_static_fini(ptr @[[GLOB_INIT]], i32 [[TID_VAL]])
 // CHECK-NEXT:  ret void
 // CHECK-NEXT: }
 
@@ -165,7 +163,7 @@ void func3() {
 
 // CHECK-LABEL: define dso_local void @_Z5func3v()
 // CHECK:       entry
-// CHECK-NEXT:    call void (ptr, i32, ptr, ...) @__kmpc_fork_call(ptr @1, i32 0, ptr @_Z5func3v.omp_outlined)
+// CHECK-NEXT:    call void (ptr, i32, ptr, ...) @__kmpc_fork_call(ptr @[[GLOB3:[0-9]+]], i32 0, ptr @_Z5func3v.omp_outlined)
 // CHECK-NEXT:    ret void
 // CHECK-NEXT:   }
 
@@ -175,23 +173,21 @@ void func3() {
 // CHECK-NEXT:  entry
 // CHECK-NEXT:    [[GLOB_TID__ADDR:%.*]] = alloca ptr, align 8
 // CHECK-NEXT:    [[BOUND_TID__ADDR:%.*]] = alloca ptr, align 8
-// CHECK-NEXT:    [[I:%.*]] = alloca i32, align 4
+// CHECK:       [[OMP_IV:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[TMP:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[OMP_LB:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[OMP_UB:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[OMP_STRIDE:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[OMP_IS_LAST:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[I:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    store ptr [[DOTGLOBAL_TID_]], ptr [[GLOB_TID__ADDR]], align 8
 // CHECK-NEXT:    store ptr [[DOTBOUND_TID_]], ptr [[BOUND_TID__ADDR]], align 8
-// CHECK-NEXT:    store i32 0, ptr [[I]], align 4
-// CHECK-NEXT:    br label %for.cond
-// CHECK:for.cond:
-// CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[TMP0]], 100
-// CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY:%.*]], label [[FOR_END:%.*]]
-// CHECK:for.body:
-// CHECK-NEXT:    br label [[FOR_INC:%.*]]
-// CHECK:for.inc:
-// CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
-// CHECK-NEXT:    store i32 [[INC]], ptr [[I]], align 4
-// CHECK-NEXT:    br label [[FOR_COND:%.*]]
-// CHECK:for.end:
+// CHECK:       store i32 0, ptr [[OMP_LB]], align 4
+// CHECK-NEXT:  store i32 99, ptr [[OMP_UB]], align 4
+// CHECK-NEXT:  store i32 1, ptr [[OMP_STRIDE]], align 4
+// CHECK-NEXT:  store i32 0, ptr [[OMP_IS_LAST]], align 4
+// CHECK:       call void @__kmpc_for_static_init_4(
+// CHECK:       call void @__kmpc_for_static_fini(
 // CHECK-NEXT:  ret void
 // CHECK-NEXT:}
 

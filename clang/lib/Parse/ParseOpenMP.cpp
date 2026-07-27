@@ -2527,12 +2527,11 @@ StmtResult Parser::ParseOpenMPInformationalDirective(
       if (ConsumeDirectiveOnlyInMetadirective) {
         // Runtime path: stop at ')' - let the caller handle it.
         break;
-      } else {
-        // Compile-time path: consume everything to pragma end.
-        while (Tok.isNot(tok::annot_pragma_openmp_end))
-          ConsumeAnyToken();
-        break;
       }
+      // Compile-time path: consume everything to pragma end.
+      while (Tok.isNot(tok::annot_pragma_openmp_end))
+        ConsumeAnyToken();
+      break;
     }
 
     OpenMPClauseKind CKind = Tok.isAnnotation()
@@ -2723,76 +2722,16 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
     // A single match is returned for OpenMP 5.0
     int BestIdx = getBestVariantMatchForContext(VMIs, OMPCtx);
 
-    // Check if we have user conditions that are not simple IntegerLiterals.
-    // For simple IntegerLiterals (like condition(0) or condition(1)), we can
-    // evaluate them here. For anything else (variables, templates, complex
-    // expressions), we need to send to Sema for proper handling.
-    bool HasNonConstantUserCondition = false;
+    // Check if we have any user conditions.
+    bool HasUserCondition = false;
     for (OMPTraitInfo *TI : TraitInfos) {
       if (TI && TI->hasUserCondition()) {
-        // Check if all user conditions are simple IntegerLiterals.
-        TI->anyScoreOrCondition([&](Expr *&E, bool IsScore) {
-          if (!IsScore && E) {
-            // If it's not a simple IntegerLiteral, we need Sema
-            if (!isa<IntegerLiteral>(E->IgnoreParenImpCasts())) {
-              HasNonConstantUserCondition = true;
-              return true;
-            }
-          }
-          return false;
-        });
-        if (HasNonConstantUserCondition)
-          break;
+        HasUserCondition = true;
+        break;
       }
     }
-    // For simple IntegerLiteral user conditions, re-evaluate BestIdx
-    // considering them. If the current BestIdx has a false user condition, find
-    // the next match.
-    if (!HasNonConstantUserCondition) {
-      // Helper to evaluate IntegerLiteral user conditions.
-      // All conditions were verified to be IntegerLiterals above.
-      auto evaluateUserCondition = [](OMPTraitInfo *TI) -> bool {
-        bool Result = true;
-        TI->anyScoreOrCondition([&](Expr *&E, bool IsScore) {
-          if (!IsScore && E) {
-            if (auto *IL = dyn_cast<IntegerLiteral>(E->IgnoreParenImpCasts())) {
-              Result = IL->getValue().getBoolValue();
-              return true;
-            }
-            llvm_unreachable("All user conditions verified as IntegerLiterals");
-          }
-          return false;
-        });
-        return Result;
-      };
-      if (BestIdx >= 0 && BestIdx < static_cast<int>(TraitInfos.size())) {
-        OMPTraitInfo *SelectedTI = TraitInfos[BestIdx];
-        if (SelectedTI && SelectedTI->hasUserCondition()) {
-          if (!evaluateUserCondition(SelectedTI)) {
-            // Current BestIdx has false condition, try to find next match.
-            BestIdx = -1;
-            for (int I = 0; I < static_cast<int>(VMIs.size()); ++I) {
-              if (I < static_cast<int>(TraitInfos.size())) {
-                OMPTraitInfo *TI = TraitInfos[I];
-                if (TI && TI->hasUserCondition()) {
-                  if (evaluateUserCondition(TI)) {
-                    BestIdx = I;
-                    break;
-                  }
-                } else {
-                  // No user condition or always-true context selector.
-                  BestIdx = I;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    // If we have non-constant user conditions, collect all variants and send to
-    // Sema.
-    if (HasNonConstantUserCondition) {
+    // If we have user conditions, collect all variants.
+    if (HasUserCondition) {
       // Collect all variants with their conditions.
       SmallVector<OpenMPDirectiveKind, 4> DirectiveKinds;
       SmallVector<Expr *, 4> Conditions;
