@@ -85,5 +85,6 @@
 ! MSVC-SAME: /subsystem:console
 ! MSVC-SAME: "[[object_file]]"
 
+! The compiler runtime and unwind library are selected independently. A
+! configured libgcc unwinder may therefore add "-lgcc_s" with compiler-rt.
 ! COMPILER-RT-NOT: "-lgcc"
-! COMPILER-RT-NOT: "-lgcc_s"
