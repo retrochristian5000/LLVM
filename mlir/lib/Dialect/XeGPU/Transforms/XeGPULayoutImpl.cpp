@@ -835,17 +835,6 @@ xegpu::inferShapeCastSourceLayout(xegpu::DistributeLayoutAttr resLayout,
   return nullptr;
 }
 
-/// Infers the layout attribute for mask and offset operand for Chunked load
-/// and store, given the anchor layout attribute for the value being load/store.
-xegpu::DistributeLayoutAttr xegpu::inferMaskOffsetLayoutForScatterIO(
-    xegpu::DistributeLayoutAttr payloadLayout, int chunkSize) {
-  auto rank = payloadLayout.getRank();
-  if (chunkSize > 1)
-    return payloadLayout.dropDims(
-        llvm::to_vector(llvm::seq<int64_t>(rank - 1, rank)));
-  return payloadLayout;
-}
-
 //===----------------------------------------------------------------------===//
 // Layout derivation helpers: factorize sgCount into
 // sg_layout candidates, then
@@ -1716,17 +1705,16 @@ static xegpu::DistributeLayoutAttr setupGenericLoadAnchorLayout(
 
 /// Sets up the anchor layout for a load gather operation.
 xegpu::DistributeLayoutAttr xegpu::setupLoadGatherAnchorLayout(
-    xegpu::LayoutKind layoutKind, VectorType resVecTy, int contigChunkSize,
+    xegpu::LayoutKind layoutKind, VectorType resVecTy,
     xegpu::DistributeLayoutAttr consumerLayout, const uArch::uArch *uArch) {
 
   const int subgroupSize = uArch->getSubgroupSize();
   ArrayRef<int64_t> resShape = resVecTy.getShape();
   auto context = resVecTy.getContext();
 
-  const auto *uArchInstruction = dyn_cast<xegpu::uArch::LoadGatherInstruction>(
-      uArch->getInstruction(xegpu::uArch::InstructionKind::LoadGather));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  // Gather loads one element per lane, so the innermost per-lane vector is
+  // capped at a single element.
+  int maxChunkSize = 1;
 
   return setupGenericLoadAnchorLayout(layoutKind, context, consumerLayout,
                                       maxChunkSize, resShape, subgroupSize);
@@ -1796,18 +1784,16 @@ static xegpu::DistributeLayoutAttr setupGenericStoreAnchorLayout(
 /// Sets up the anchor layout for a store scatter operation.
 xegpu::DistributeLayoutAttr
 xegpu::setupStoreScatterAnchorLayout(xegpu::LayoutKind layoutKind,
-                                     VectorType srcVecTy, int contigChunkSize,
-                                     int numSg, const uArch::uArch *uArch) {
+                                     VectorType srcVecTy, int numSg,
+                                     const uArch::uArch *uArch) {
 
   const int subgroupSize = uArch->getSubgroupSize();
   ArrayRef<int64_t> srcShape = srcVecTy.getShape();
   auto context = srcVecTy.getContext();
 
-  const auto *uArchInstruction =
-      dyn_cast<xegpu::uArch::StoreScatterInstruction>(
-          uArch->getInstruction(xegpu::uArch::InstructionKind::StoreScatter));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  // Scatter stores one element per lane, so the innermost per-lane vector is
+  // capped at a single element.
+  int maxChunkSize = 1;
   return setupGenericStoreAnchorLayout(layoutKind, context, maxChunkSize,
                                        srcShape, subgroupSize, numSg);
 }
