@@ -407,8 +407,8 @@ define amdgpu_kernel void @test_fmin_v4f32(ptr addrspace(1) %out, <4 x float> %a
 ; GFX12-GISEL-NEXT:    s_min_num_f32 s6, s7, s8
 ; GFX12-GISEL-NEXT:    s_mov_b32 s2, -1
 ; GFX12-GISEL-NEXT:    s_min_num_f32 s7, s9, s10
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_3)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v1, s5
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_2)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s6 :: v_dual_mov_b32 v3, s7
 ; GFX12-GISEL-NEXT:    s_mov_b32 s3, 0x31016000
 ; GFX12-GISEL-NEXT:    buffer_store_b128 v[0:3], off, s[0:3], null

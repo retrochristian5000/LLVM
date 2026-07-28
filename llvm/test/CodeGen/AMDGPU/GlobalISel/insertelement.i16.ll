@@ -3143,6 +3143,7 @@ define amdgpu_ps void @insertelement_s_v16i16_v_s(ptr addrspace(4) inreg %ptr, i
 ; GFX11-NEXT:    v_dual_mov_b32 v4, s12 :: v_dual_mov_b32 v7, s15
 ; GFX11-NEXT:    v_mov_b32_e32 v6, s14
 ; GFX11-NEXT:    v_mov_b32_e32 v8, 0
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_movreld_b32_e32 v0, v12
 ; GFX11-NEXT:    s_clause 0x1
 ; GFX11-NEXT:    global_store_b128 v[8:9], v[0:3], off

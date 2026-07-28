@@ -434,10 +434,9 @@ define amdgpu_kernel void @fp_to_uint_v2f32_to_v2i64(ptr addrspace(1) %out, <2 x
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
 ; GFX11-GISEL-NEXT:    v_readfirstlane_b32 s4, v0
 ; GFX11-GISEL-NEXT:    v_readfirstlane_b32 s6, v1
-; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_3)
+; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v3, s7 :: v_dual_mov_b32 v0, s4
-; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX11-GISEL-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
 ; GFX11-GISEL-NEXT:    s_endpgm
@@ -682,6 +681,7 @@ define amdgpu_kernel void @fp_to_uint_v4f32_to_v4i64(ptr addrspace(1) %out, <4 x
 ; GFX11-GISEL-NEXT:    v_readfirstlane_b32 s6, v3
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v8, 0 :: v_dual_mov_b32 v1, s1
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v3, s3
+; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v5, s5
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v4, s4 :: v_dual_mov_b32 v7, s7
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v6, s6

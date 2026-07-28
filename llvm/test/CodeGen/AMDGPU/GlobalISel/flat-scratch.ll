@@ -2825,6 +2825,7 @@ define void @store_load_v3i32_unaligned(ptr addrspace(5) nocapture %arg) {
 ; GFX11-NEXT:    s_mov_b32 s2, 3
 ; GFX11-NEXT:    s_mov_b32 s1, 2
 ; GFX11-NEXT:    s_mov_b32 s0, 1
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v3, s2 :: v_dual_mov_b32 v2, s1
 ; GFX11-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX11-NEXT:    scratch_store_b96 v0, v[1:3], off dlc
@@ -3207,6 +3208,7 @@ define void @store_load_v4i32_unaligned(ptr addrspace(5) nocapture %arg) {
 ; GFX11-NEXT:    s_mov_b32 s2, 3
 ; GFX11-NEXT:    s_mov_b32 s1, 2
 ; GFX11-NEXT:    s_mov_b32 s0, 1
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v4, s3 :: v_dual_mov_b32 v3, s2
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s1 :: v_dual_mov_b32 v1, s0
 ; GFX11-NEXT:    scratch_store_b128 v0, v[1:4], off dlc

@@ -29,6 +29,7 @@ define amdgpu_ps half @fptrunc_f32_to_f16_uniform(float inreg %a) {
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_cvt_f16_f32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_3)
@@ -64,6 +65,7 @@ define amdgpu_ps half @fptrunc_f32_to_f16_div(float %a) {
 ; GFX1250-FAKE16-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    v_nop
 ; GFX1250-FAKE16-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-FAKE16-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-FAKE16-NEXT:    v_cvt_f16_f32_e32 v0, v0
 ; GFX1250-FAKE16-NEXT:    ; return to shader part epilog
@@ -73,6 +75,7 @@ define amdgpu_ps half @fptrunc_f32_to_f16_div(float %a) {
 ; GFX1250-TRUE16-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    v_nop
 ; GFX1250-TRUE16-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-TRUE16-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-TRUE16-NEXT:    v_cvt_f16_f32_e32 v0.l, v0
 ; GFX1250-TRUE16-NEXT:    ; return to shader part epilog
@@ -96,6 +99,7 @@ define amdgpu_ps float @fptrunc_f64_to_f32_uniform(double inreg %a) {
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v0, s[0:1]
 ; GFX1250-NEXT:    ; return to shader part epilog
   %result = fptrunc double %a to float
@@ -118,6 +122,7 @@ define amdgpu_ps float @fptrunc_f64_to_f32_div(double %a) {
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v0, v[0:1]
 ; GFX1250-NEXT:    ; return to shader part epilog
   %result = fptrunc double %a to float
@@ -148,24 +153,27 @@ define amdgpu_ps half @fptrunc_f64_to_f16_uniform(double inreg %a) {
 ; GFX11-NEXT:    s_lshl_b32 s4, s6, s4
 ; GFX11-NEXT:    s_or_b32 s0, s0, s7
 ; GFX11-NEXT:    s_cmp_lg_u32 s4, s5
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_or_b32 s4, s6, s4
 ; GFX11-NEXT:    s_cmp_lt_i32 s2, 1
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_cselect_b32 s0, s4, s0
 ; GFX11-NEXT:    s_and_b32 s4, s0, 7
 ; GFX11-NEXT:    s_lshr_b32 s0, s0, 2
 ; GFX11-NEXT:    s_cmp_eq_u32 s4, 3
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_cselect_b32 s5, 1, 0
 ; GFX11-NEXT:    s_cmp_gt_i32 s4, 5
 ; GFX11-NEXT:    s_cselect_b32 s4, 1, 0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_or_b32 s4, s5, s4
 ; GFX11-NEXT:    s_cmp_lg_u32 s4, 0
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_add_i32 s0, s0, s4
 ; GFX11-NEXT:    s_cmp_gt_i32 s2, 30
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_cselect_b32 s0, 0x7c00, s0
 ; GFX11-NEXT:    s_cmpk_eq_i32 s2, 0x40f
 ; GFX11-NEXT:    s_cselect_b32 s0, s3, s0
@@ -200,24 +208,27 @@ define amdgpu_ps half @fptrunc_f64_to_f16_uniform(double inreg %a) {
 ; GFX12-NEXT:    s_lshl_b32 s4, s6, s4
 ; GFX12-NEXT:    s_or_b32 s0, s0, s7
 ; GFX12-NEXT:    s_cmp_lg_u32 s4, s5
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_or_b32 s4, s6, s4
 ; GFX12-NEXT:    s_cmp_lt_i32 s2, 1
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cselect_b32 s0, s4, s0
 ; GFX12-NEXT:    s_and_b32 s4, s0, 7
 ; GFX12-NEXT:    s_lshr_b32 s0, s0, 2
 ; GFX12-NEXT:    s_cmp_eq_u32 s4, 3
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cselect_b32 s5, 1, 0
 ; GFX12-NEXT:    s_cmp_gt_i32 s4, 5
 ; GFX12-NEXT:    s_cselect_b32 s4, 1, 0
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_or_b32 s4, s5, s4
 ; GFX12-NEXT:    s_cmp_lg_u32 s4, 0
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_add_co_i32 s0, s0, s4
 ; GFX12-NEXT:    s_cmp_gt_i32 s2, 30
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cselect_b32 s0, 0x7c00, s0
 ; GFX12-NEXT:    s_cmp_eq_u32 s2, 0x40f
 ; GFX12-NEXT:    s_cselect_b32 s0, s3, s0
@@ -255,24 +266,27 @@ define amdgpu_ps half @fptrunc_f64_to_f16_uniform(double inreg %a) {
 ; GFX1250-NEXT:    s_lshl_b32 s4, s6, s4
 ; GFX1250-NEXT:    s_or_b32 s0, s0, s7
 ; GFX1250-NEXT:    s_cmp_lg_u32 s4, s5
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_or_b32 s4, s6, s4
 ; GFX1250-NEXT:    s_cmp_lt_i32 s2, 1
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_cselect_b32 s0, s4, s0
 ; GFX1250-NEXT:    s_and_b32 s4, s0, 7
 ; GFX1250-NEXT:    s_lshr_b32 s0, s0, 2
 ; GFX1250-NEXT:    s_cmp_eq_u32 s4, 3
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_cselect_b32 s5, 1, 0
 ; GFX1250-NEXT:    s_cmp_gt_i32 s4, 5
 ; GFX1250-NEXT:    s_cselect_b32 s4, 1, 0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_or_b32 s4, s5, s4
 ; GFX1250-NEXT:    s_cmp_lg_u32 s4, 0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_cselect_b32 s4, 1, 0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_add_co_i32 s0, s0, s4
 ; GFX1250-NEXT:    s_cmp_gt_i32 s2, 30
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_cselect_b32 s0, 0x7c00, s0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s2, 0x40f
 ; GFX1250-NEXT:    s_cselect_b32 s0, s3, s0
@@ -549,6 +563,7 @@ define amdgpu_ps void @fptrunc_v2f64_to_v2f32_uniform(<2 x double> inreg %a, ptr
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v2, s[0:1]
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v3, s[2:3]
 ; GFX1250-NEXT:    global_store_b64 v[0:1], v[2:3], off
@@ -578,6 +593,7 @@ define amdgpu_ps void @fptrunc_v2f64_to_v2f32_div(<2 x double> %a, ptr addrspace
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v0, v[0:1]
 ; GFX1250-NEXT:    v_cvt_f32_f64_e32 v1, v[2:3]
 ; GFX1250-NEXT:    global_store_b64 v[4:5], v[0:1], off

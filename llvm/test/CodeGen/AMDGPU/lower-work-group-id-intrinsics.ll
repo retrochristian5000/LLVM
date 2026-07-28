@@ -42,6 +42,7 @@ define amdgpu_cs void @_amdgpu_cs_main() {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s0, ttmp9
 ; GFX12-GISEL-NEXT:    s_and_b32 s1, ttmp7, 0xffff
 ; GFX12-GISEL-NEXT:    s_lshr_b32 s2, ttmp7, 16
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX12-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -71,10 +72,10 @@ define amdgpu_cs void @_amdgpu_cs_main() {
 ; GFX1250-SDAG-NEXT:    s_getreg_b32 s6, hwreg(HW_REG_IB_STS2, 6, 4)
 ; GFX1250-SDAG-NEXT:    s_add_co_i32 s4, s4, s0
 ; GFX1250-SDAG-NEXT:    s_cmp_eq_u32 s6, 0
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GFX1250-SDAG-NEXT:    s_cselect_b32 s0, s5, s4
 ; GFX1250-SDAG-NEXT:    s_cselect_b32 s1, ttmp9, s1
 ; GFX1250-SDAG-NEXT:    s_cselect_b32 s2, s3, s2
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-SDAG-NEXT:    v_dual_mov_b32 v0, s1 :: v_dual_mov_b32 v1, s2
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX1250-SDAG-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -90,7 +91,7 @@ define amdgpu_cs void @_amdgpu_cs_main() {
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s0, s0, 1
 ; GFX1250-GISEL-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_IB_STS2, 6, 4)
 ; GFX1250-GISEL-NEXT:    s_mul_i32 s0, ttmp9, s0
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s1, s1, s0
 ; GFX1250-GISEL-NEXT:    s_cmp_eq_u32 s2, 0
 ; GFX1250-GISEL-NEXT:    s_cselect_b32 s0, ttmp9, s1
@@ -99,7 +100,7 @@ define amdgpu_cs void @_amdgpu_cs_main() {
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s1, s1, 1
 ; GFX1250-GISEL-NEXT:    s_bfe_u32 s4, ttmp6, 0x40004
 ; GFX1250-GISEL-NEXT:    s_mul_i32 s1, s3, s1
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s4, s4, s1
 ; GFX1250-GISEL-NEXT:    s_cmp_eq_u32 s2, 0
 ; GFX1250-GISEL-NEXT:    s_cselect_b32 s1, s3, s4
@@ -108,10 +109,11 @@ define amdgpu_cs void @_amdgpu_cs_main() {
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s3, s3, 1
 ; GFX1250-GISEL-NEXT:    s_bfe_u32 s5, ttmp6, 0x40008
 ; GFX1250-GISEL-NEXT:    s_mul_i32 s3, s4, s3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s5, s5, s3
 ; GFX1250-GISEL-NEXT:    s_cmp_eq_u32 s2, 0
 ; GFX1250-GISEL-NEXT:    s_cselect_b32 s2, s4, s5
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX1250-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -163,6 +165,7 @@ define amdgpu_cs void @workgroup_id_no_clusters() "amdgpu-cluster-dims"="0,0,0" 
 ; GFX12-GISEL-NEXT:    s_mov_b32 s0, ttmp9
 ; GFX12-GISEL-NEXT:    s_and_b32 s1, ttmp7, 0xffff
 ; GFX12-GISEL-NEXT:    s_lshr_b32 s2, ttmp7, 16
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX12-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -188,6 +191,7 @@ define amdgpu_cs void @workgroup_id_no_clusters() "amdgpu-cluster-dims"="0,0,0" 
 ; GFX1250-GISEL-NEXT:    s_mov_b32 s0, ttmp9
 ; GFX1250-GISEL-NEXT:    s_and_b32 s1, ttmp7, 0xffff
 ; GFX1250-GISEL-NEXT:    s_lshr_b32 s2, ttmp7, 16
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX1250-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -239,6 +243,7 @@ define amdgpu_cs void @workgroup_id_optimized() "amdgpu-cluster-dims"="2,3,4" {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s0, ttmp9
 ; GFX12-GISEL-NEXT:    s_and_b32 s1, ttmp7, 0xffff
 ; GFX12-GISEL-NEXT:    s_lshr_b32 s2, ttmp7, 16
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX12-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -279,6 +284,7 @@ define amdgpu_cs void @workgroup_id_optimized() "amdgpu-cluster-dims"="2,3,4" {
 ; GFX1250-GISEL-NEXT:    s_lshl1_add_u32 s0, ttmp9, s0
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s1, s2, s1
 ; GFX1250-GISEL-NEXT:    s_lshl2_add_u32 s2, s3, s4
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX1250-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -360,12 +366,13 @@ define amdgpu_cs void @caller() {
 ; GFX1250-SDAG-NEXT:    s_add_co_i32 s0, s0, 1
 ; GFX1250-SDAG-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_IB_STS2, 6, 4)
 ; GFX1250-SDAG-NEXT:    s_mul_i32 s0, ttmp9, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-SDAG-NEXT:    s_add_co_i32 s1, s1, s0
 ; GFX1250-SDAG-NEXT:    s_cmp_eq_u32 s2, 0
 ; GFX1250-SDAG-NEXT:    s_cselect_b32 s2, ttmp9, s1
 ; GFX1250-SDAG-NEXT:    s_mov_b64 s[0:1], callee@abs64
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v0, s2
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    s_swap_pc_i64 s[30:31], s[0:1]
 ; GFX1250-SDAG-NEXT:    s_endpgm
 ;
@@ -380,12 +387,13 @@ define amdgpu_cs void @caller() {
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s0, s0, 1
 ; GFX1250-GISEL-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_IB_STS2, 6, 4)
 ; GFX1250-GISEL-NEXT:    s_mul_i32 s0, ttmp9, s0
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-GISEL-NEXT:    s_add_co_i32 s1, s1, s0
 ; GFX1250-GISEL-NEXT:    s_cmp_eq_u32 s2, 0
 ; GFX1250-GISEL-NEXT:    s_cselect_b32 s2, ttmp9, s1
 ; GFX1250-GISEL-NEXT:    s_mov_b64 s[0:1], callee@abs64
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v0, s2
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-GISEL-NEXT:    s_swap_pc_i64 s[30:31], s[0:1]
 ; GFX1250-GISEL-NEXT:    s_endpgm
   %idx = call i32 @llvm.amdgcn.workgroup.id.x()

@@ -108,6 +108,7 @@ define amdgpu_kernel void @caller_exterinal() {
 ; GFX1250-PAL-NEXT:    s_mov_b64 s[12:13], external_func@abs64
 ; GFX1250-PAL-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX1250-PAL-NEXT:    s_mov_b64 s[6:7], s[2:3]
+; GFX1250-PAL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-PAL-NEXT:    s_swap_pc_i64 s[30:31], s[12:13]
 ; GFX1250-PAL-NEXT:    s_endpgm
 ;
@@ -141,6 +142,7 @@ define amdgpu_kernel void @caller_exterinal() {
 ; GFX1250-HSA-NEXT:    s_add_nc_u64 s[12:13], s[12:13], external_func@rel64+4
 ; GFX1250-HSA-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX1250-HSA-NEXT:    s_mov_b64 s[6:7], s[2:3]
+; GFX1250-HSA-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-HSA-NEXT:    s_swap_pc_i64 s[30:31], s[12:13]
 ; GFX1250-HSA-NEXT:    s_endpgm
   call void @external_func()

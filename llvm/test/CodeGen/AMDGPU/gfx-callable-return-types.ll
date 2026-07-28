@@ -3263,6 +3263,7 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; GFX11-NEXT:    s_add_i32 s0, s32, 0xa0
@@ -3305,7 +3306,7 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    v_dual_mov_b32 v31, 0 :: v_dual_mov_b32 v30, 0
 ; GFX11-NEXT:    s_mov_b32 s1, return_72xi32@abs32@hi
 ; GFX11-NEXT:    s_mov_b32 s0, return_72xi32@abs32@lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_clause 0xb
 ; GFX11-NEXT:    scratch_load_b128 v[43:46], off, s33 offset:624
@@ -3381,6 +3382,7 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    v_dual_mov_b32 v23, v60 :: v_dual_mov_b32 v24, v61
 ; GFX11-NEXT:    v_dual_mov_b32 v25, v54 :: v_dual_mov_b32 v26, v55
 ; GFX11-NEXT:    v_dual_mov_b32 v27, v56 :: v_dual_mov_b32 v28, v57
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_clause 0xd ; 56-byte Folded Reload
 ; GFX11-NEXT:    scratch_load_b32 v61, off, s33
