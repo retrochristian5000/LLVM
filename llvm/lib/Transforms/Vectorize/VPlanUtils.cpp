@@ -1002,6 +1002,8 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
       return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
     auto FoundCanIV =
         find_if(Plan.getEntry()->phis(), [&](const VPRecipeBase &R) {
+          if (!SE.isSCEVable(cast<VPIRPhi>(R).getIRPhi().getType()))
+            return false;
           const SCEV *Candidate = SE.getSCEV(&cast<VPIRPhi>(R).getIRPhi());
           return match(Candidate,
                        m_scev_AffineAddRec(m_scev_Zero(), m_scev_One(),
