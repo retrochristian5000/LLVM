@@ -948,7 +948,8 @@ void AsmPrinter::emitGlobalVariable(const GlobalVariable *GV,
       emitAlignment(Alignment, GV);
       OutStreamer->emitLabel(MangSym);
 
-      emitGlobalConstant(GV->getDataLayout(), GV->getInitializer());
+      emitGlobalConstant(GV->getDataLayout(),
+                         GV->getInitializer());
     }
 
     OutStreamer->addBlankLine();
@@ -2861,6 +2862,37 @@ static bool shouldTagGlobal(const llvm::GlobalVariable &G) {
   return globalSize(G) > 0;
 }
 
+static void tagGlobalDefinition(Module &M, GlobalVariable *G) {
+  uint64_t SizeInBytes = globalSize(*G);
+
+  uint64_t NewSize = alignTo(SizeInBytes, 16);
+  if (SizeInBytes != NewSize) {
+    // Pad the initializer out to the next multiple of 16 bytes.
+    llvm::SmallVector<uint8_t> Init(NewSize - SizeInBytes, 0);
+    Constant *Padding = ConstantDataArray::get(M.getContext(), Init);
+    Constant *Initializer = G->getInitializer();
+    Initializer = ConstantStruct::getAnon({Initializer, Padding});
+    auto *NewGV = new GlobalVariable(
+        M, Initializer->getType(), G->isConstant(), G->getLinkage(),
+        Initializer, "", G, G->getThreadLocalMode(), G->getAddressSpace());
+    NewGV->copyAttributesFrom(G);
+    NewGV->setComdat(G->getComdat());
+    NewGV->copyMetadata(G, 0);
+
+    NewGV->takeName(G);
+    G->replaceAllUsesWith(NewGV);
+    G->eraseFromParent();
+    G = NewGV;
+  }
+
+  if (G->getAlign().valueOrOne() < 16)
+    G->setAlignment(Align(16));
+
+  // Ensure that tagged globals don't get merged by ICF - as they should have
+  // different tags at runtime.
+  G->setUnnamedAddr(GlobalValue::UnnamedAddr::None);
+}
+
 static void removeMemtagFromGlobal(GlobalVariable &G) {
   auto Meta = G.getSanitizerMetadata();
   Meta.Memtag = false;
@@ -2874,6 +2906,7 @@ bool AsmPrinter::doFinalization(Module &M) {
   MF = nullptr;
   const Triple &Target = TM.getTargetTriple();
 
+  std::vector<GlobalVariable *> GlobalsToTag;
   for (GlobalVariable &G : M.globals()) {
     if (G.isDeclaration() || !G.isTagged())
       continue;
@@ -2883,10 +2916,10 @@ bool AsmPrinter::doFinalization(Module &M) {
       assert(!G.isTagged());
       continue;
     }
-    // Ensure that tagged globals don't get merged by ICF - as they should have
-    // different tags at runtime.
-    G.setUnnamedAddr(GlobalValue::UnnamedAddr::None);
+    GlobalsToTag.push_back(&G);
   }
+  for (GlobalVariable *G : GlobalsToTag)
+    tagGlobalDefinition(M, G);
 
   // Gather all GOT equivalent globals in the module. We really need two
   // passes over the globals: one to compute and another to avoid its emission
