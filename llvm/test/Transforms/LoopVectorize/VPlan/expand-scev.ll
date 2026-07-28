@@ -653,6 +653,48 @@ exit:
   ret void
 }
 
+define void @scev_addrec_nonscevable(ptr %dst) {
+; CHECK-LABEL: VPlan for loop in 'scev_addrec_nonscevable'
+; CHECK:  VPlan 'Final VPlan for VF={4},UF={1}' {
+; CHECK-EMPTY:
+; CHECK-NEXT:  ir-bb<outer>:
+; CHECK-NEXT:    IR   %fp.phi = phi float [ 0.000000e+00, %entry ], [ %fp.next, %outer.latch ]
+; CHECK-NEXT:    IR   %outer.iv = phi i64 [ 0, %entry ], [ %outer.iv.next, %outer.latch ]
+; CHECK-NEXT:    EMIT vp<[[VP2:%[0-9]+]]> = add nuw ir<4>, ir<%outer.iv>
+; CHECK-NEXT:    EMIT vp<[[VP3:%[0-9]+]]> = udiv vp<[[VP2]]>, ir<3>
+; CHECK-NEXT:    EMIT vp<[[VP4:%[0-9]+]]> = add nuw nsw vp<[[VP3]]>, ir<1>
+; CHECK-NEXT:    EMIT vp<%min.iters.check> = icmp ult vp<[[VP4]]>, ir<4>
+; CHECK-NEXT:    EMIT branch-on-cond vp<%min.iters.check>
+; CHECK-NEXT:  Successor(s): ir-bb<scalar.ph>, vector.ph
+;
+entry:
+  br label %outer
+
+outer:
+  %fp.phi = phi float [ 0.0, %entry ], [ %fp.next, %outer.latch ]
+  %outer.iv = phi i64 [ 0, %entry ], [ %outer.iv.next, %outer.latch ]
+  br label %inner
+
+inner:
+  %iv = phi i64 [ 0, %outer ], [ %iv.next, %inner ]
+  %gep = getelementptr i8, ptr %dst, i64 %iv
+  store float %fp.phi, ptr %gep
+  %iv.next = add nuw i64 %iv, 3
+  %bound = add i64 %outer.iv, 5
+  %ec.inner = icmp ult i64 %iv.next, %bound
+  br i1 %ec.inner, label %inner, label %outer.latch
+
+outer.latch:
+  %fp.next = fadd float %fp.phi, 1.0
+  %outer.iv.next = add nuw i64 %outer.iv, 1
+  %ec.outer = icmp ult i64 %outer.iv.next, 100
+  br i1 %ec.outer, label %outer, label %exit
+
+exit:
+  ret void
+}
+
+
 !0 = distinct !{!0, !1, !2}
 !1 = !{!"llvm.loop.vectorize.scalable.enable", i1 true}
 !2 = !{!"llvm.loop.vectorize.width", i32 4}
