@@ -53,12 +53,14 @@
 // UNSUPPORTED: internal_symbolizer
 
 #include <assert.h>
+#include <cxxabi.h>
 #include <errno.h>
 #include <limits>
 #include <new>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <typeinfo>
 
 constexpr size_t MaxAllocationSize = size_t{2} << 20;
 
@@ -77,13 +79,43 @@ static void *allocate(const char *Action, size_t Size) {
     return nullptr;
   }
   if (!strcmp(Action, "new")) {
+    // DIAGNOSTIC (DO NOT MERGE): print the test-side typeinfo pointer for
+    // std::bad_alloc so CI logs let us compare it to the runtime-side pointer
+    // printed just before the throw. If the pointers agree, the catch failure
+    // is not a typeinfo-identity issue; if they differ, it is.
+    fprintf(stderr, "DIAG-TEST-BADALLOC-TINFO: %p\n",
+            (const void *)&typeid(std::bad_alloc));
+    fflush(stderr);
     try {
       void *p = ::operator new(Size);
       assert(p != nullptr &&
              "throwing operator new returned nullptr without throwing -- "
              "violates [basic.stc.dynamic.allocation]/3");
       return p;
-    } catch (const std::bad_alloc &) {
+    } catch (const std::bad_alloc &e) {
+      fprintf(stderr, "DIAG-TEST-CAUGHT-BADALLOC: caught=%p thrown=%p\n",
+              (const void *)&typeid(std::bad_alloc),
+              (const void *)&typeid(e));
+      fflush(stderr);
+      errno = ENOMEM;
+      return nullptr;
+    } catch (...) {
+      // DIAGNOSTIC (DO NOT MERGE): fallback so we can distinguish
+      //   (a) bad_alloc arrived but the typed catch above didn't match
+      //       (typeinfo identity issue), from
+      //   (b) some other type arrived (wrong throw), from
+      //   (c) no exception reached user code at all (terminated before
+      //       unwinding to this frame — neither this line nor the typed
+      //       catch's line will appear in the log).
+      // __cxa_current_exception_type() returns the type_info* of whatever
+      // is currently being handled, without needing to name the type.
+      const std::type_info *ti = abi::__cxa_current_exception_type();
+      fprintf(stderr,
+              "DIAG-TEST-CAUGHT-OTHER: expected_badalloc=%p got_ti=%p "
+              "got_name=%s\n",
+              (const void *)&typeid(std::bad_alloc), (const void *)ti,
+              ti ? ti->name() : "<null>");
+      fflush(stderr);
       errno = ENOMEM;
       return nullptr;
     }

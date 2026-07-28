@@ -11,7 +11,9 @@
 // REQUIRES: stable-runtime
 
 #include <cstdio>
+#include <cxxabi.h>
 #include <new>
+#include <typeinfo>
 
 static const size_t kHugeSize =
 #if __LP64__ || defined(_WIN64)
@@ -21,11 +23,30 @@ static const size_t kHugeSize =
 #endif
 
 int main() {
+  // DIAGNOSTIC (DO NOT MERGE): print test-side typeinfo pointer for
+  // std::bad_alloc so CI logs let us compare it to the runtime-side pointer.
+  fprintf(stderr, "DIAG-TEST-BADALLOC-TINFO: %p\n",
+          (const void *)&typeid(std::bad_alloc));
+  fflush(stderr);
   bool caught = false;
   try {
     char *p = new char[kHugeSize];
     fprintf(stderr, "FAIL: allocation unexpectedly returned %p\n", p);
-  } catch (const std::bad_alloc &) {
+  } catch (const std::bad_alloc &e) {
+    fprintf(stderr, "DIAG-TEST-CAUGHT-BADALLOC: caught=%p thrown=%p\n",
+            (const void *)&typeid(std::bad_alloc), (const void *)&typeid(e));
+    fflush(stderr);
+    caught = true;
+  } catch (...) {
+    // DIAGNOSTIC (DO NOT MERGE): distinguish typeinfo-identity failure
+    // from wrong-type-thrown from exception-died-before-user-code.
+    const std::type_info *ti = abi::__cxa_current_exception_type();
+    fprintf(stderr,
+            "DIAG-TEST-CAUGHT-OTHER: expected_badalloc=%p got_ti=%p "
+            "got_name=%s\n",
+            (const void *)&typeid(std::bad_alloc), (const void *)ti,
+            ti ? ti->name() : "<null>");
+    fflush(stderr);
     caught = true;
   }
   if (caught)

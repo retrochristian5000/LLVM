@@ -77,6 +77,15 @@ NORETURN void InvokeOnExhausted(OnExhausted on_exhausted) {
   UNREACHABLE("operator new OnExhausted callable returned");
 }
 
+// DIAGNOSTIC (DO NOT MERGE): forward-declare the Itanium ABI typeinfo symbol
+// for std::bad_alloc so we can print its address from a -fno-rtti TU without
+// invoking typeid. Guarded to the same condition as the throw itself.
+#if !SANITIZER_WINDOWS && defined(__cpp_exceptions)
+extern "C" {
+extern const char _ZTISt9bad_alloc[];
+}
+#endif
+
 // Throwing operator new: chain, then on exhaustion throw std::bad_alloc
 // when this TU was compiled with exception support and AllocatorMayReturnNull()
 // is true. Otherwise (Windows runtimes, -fno-exceptions builds, or the
@@ -87,8 +96,14 @@ void* NewImplThrowing(Alloc alloc, OnExhausted on_exhausted) {
   if (LIKELY(res != nullptr))
     return res;
 #if !SANITIZER_WINDOWS && defined(__cpp_exceptions)
-  if (AllocatorMayReturnNull())
+  if (AllocatorMayReturnNull()) {
+    // DIAGNOSTIC (DO NOT MERGE): print the runtime-side typeinfo pointer for
+    // std::bad_alloc right before the throw, so CI logs let us compare it to
+    // the pointer observed by the test binary at the catch site.
+    Printf("DIAG-RUNTIME-BADALLOC-TINFO: %p\n",
+           (const void*)&_ZTISt9bad_alloc);
     throw std::bad_alloc();
+  }
 #endif
   InvokeOnExhausted(on_exhausted);
 }
