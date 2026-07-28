@@ -161,7 +161,7 @@ SourceLocation getLocationForNoexceptSpecifier(const FunctionDecl *FuncDecl,
                                                const SourceManager &SM);
 
 /// Returns ``true`` if the pragma directive at \p Loc is a ``#pragma once``.
-bool hasPragmaOnce(SourceLocation Loc, const SourceManager &SM);
+bool isPragmaOnce(SourceLocation Loc, const SourceManager &SM);
 
 } // namespace tidy::utils::lexer
 } // namespace clang

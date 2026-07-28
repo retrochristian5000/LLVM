@@ -371,7 +371,7 @@ SourceLocation getLocationForNoexceptSpecifier(const FunctionDecl *FuncDecl,
   return {};
 }
 
-bool hasPragmaOnce(SourceLocation Loc, const SourceManager &SM) {
+bool isPragmaOnce(SourceLocation Loc, const SourceManager &SM) {
   auto Str = StringRef(SM.getCharacterData(Loc));
   if (!Str.consume_front("#"))
     return false;

@@ -17,6 +17,14 @@
 
 namespace clang::tidy::misc {
 
+/// Canonicalize a path by removing ./ and ../ components, matching the
+/// format of the ``Filename`` passed to the ``HeaderGuardCheck`` virtuals.
+static std::string cleanPath(StringRef Path) {
+  SmallString<256> Result = Path;
+  llvm::sys::path::remove_dots(Result, true);
+  return std::string(Result);
+}
+
 HeaderGuardCheck::HeaderGuardCheck(StringRef Name, ClangTidyContext *Context)
     : clang::tidy::utils::HeaderGuardCheck(Name, Context),
       AllowPragmaOnce(Options.get("AllowPragmaOnce", false)),
@@ -56,9 +64,14 @@ bool HeaderGuardCheck::shouldSuggestEndifComment(StringRef /*Filename*/) {
 }
 
 bool HeaderGuardCheck::shouldSuggestToAddHeaderGuard(StringRef Filename) {
-  if (HasPragmaOnce && AllowPragmaOnce)
+  if (AllowPragmaOnce && PragmaOnceLocs.contains(Filename))
     return false;
   return utils::HeaderGuardCheck::shouldSuggestToAddHeaderGuard(Filename);
+}
+
+SourceLocation HeaderGuardCheck::getPragmaOnceLoc(StringRef Filename) const {
+  const auto It = PragmaOnceLocs.find(Filename);
+  return It == PragmaOnceLocs.end() ? SourceLocation() : It->second;
 }
 
 void HeaderGuardCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
@@ -77,9 +90,10 @@ public:
       : Check(Check), SM(SM) {}
   void PragmaDirective(SourceLocation Loc,
                        PragmaIntroducerKind /*Introducer*/) override {
-    if (!utils::lexer::hasPragmaOnce(Loc, SM))
+    if (!utils::lexer::isPragmaOnce(Loc, SM))
       return;
-    Check->HasPragmaOnce = true;
+    if (OptionalFileEntryRef FE = SM.getFileEntryRefForID(SM.getFileID(Loc)))
+      Check->PragmaOnceLocs[cleanPath(FE->getName())] = Loc;
     if (!Check->AllowPragmaOnce)
       Check->diag(Loc, "use include guards instead of 'pragma once'");
   }

@@ -24,7 +24,7 @@ public:
       : Check(Check), SM(SM) {}
   void PragmaDirective(SourceLocation Loc,
                        PragmaIntroducerKind Introducer) override {
-    if (utils::lexer::hasPragmaOnce(Loc, SM))
+    if (utils::lexer::isPragmaOnce(Loc, SM))
       Check->diag(Loc,
                   "avoid 'pragma once' directive; use include guards instead");
   }

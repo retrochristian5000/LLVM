@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MISC_HEADERGUARDCHECK_H
 
 #include "../utils/HeaderGuard.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace clang::tidy::misc {
 
@@ -29,11 +30,17 @@ public:
 
   bool shouldSuggestEndifComment(StringRef Filename) override;
   bool shouldSuggestToAddHeaderGuard(StringRef Filename) override;
+  SourceLocation getPragmaOnceLoc(StringRef Filename) const override;
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   std::string getHeaderGuard(StringRef Filename, StringRef OldGuard) override;
 
   const bool AllowPragmaOnce;
-  bool HasPragmaOnce = false;
+
+  /// Records, per file, the location of a ``#pragma once`` directive found
+  /// while preprocessing. Tracked per file (rather than as a single flag for
+  /// the whole translation unit) so that a pragma in one header does not
+  /// affect the diagnostic for a different header included in the same TU.
+  llvm::StringMap<SourceLocation> PragmaOnceLocs;
 
 private:
   const std::vector<StringRef> HeaderDirs;
