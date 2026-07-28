@@ -240,11 +240,17 @@ def CC_SystemZ_XPLINK64 : CallingConv<[
   // so we have to use a custom handler.
   CCIfType<[i64], CCCustom<"CC_SystemZ_I128Indirect">>,
   // The first 3 integer arguments are passed in registers R1-R3.
-  // i32 uses the low-word sub-registers but occupies a full 8-byte slot,
-  // matching the XPLINK64 requirement that each parameter area word is 8 bytes.
+  // i32 is promoted to i64 (AExt) unconditionally so that the full 64-bit
+  // register (R1D/R2D/R3D) is written by the caller.  Callees compiled by
+  // other compilers (e.g. xlc / @@CLASSB) read the full GPR; writing only
+  // the 32-bit sub-register leaves the upper half undefined and produces
+  // wrong results (e.g. isinf returning 1 instead of 0).
+  // Note: CCPromoteToType sets LocInfo=AExt when no signext/zeroext flag is
+  // present, so formal-arg lowering truncates back to i32 via TRUNCATE,
+  // leaving the callee's view of the value correct at its natural width.
   // The rest will be passed in the user area. The address offset of the user
   // area can be found in register R4D.
-  CCIfType<[i32], CCAssignToRegAndStack<[R1L, R2L, R3L], 8, 8>>,
+  CCIfType<[i32], CCPromoteToType<i64>>,
   CCIfType<[i64], CCAssignToRegAndStack<[R1D, R2D, R3D], 8, 8>>,
 
   // The first 8 named vector arguments are passed in V24-V31. Sub-128 vectors
