@@ -2308,8 +2308,8 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 };
 } // end anonymous namespace
 
-/// Perform a common-subexpression-elimination of VPSingleDefRecipes on the \p
-/// Plan.
+/// Perform a common-subexpression-elimination of single-def recipes on the \p
+/// Plan, also eliminating redundant widened loads within a basic block.
 void VPlanTransforms::cse(VPlan &Plan) {
   VPDominatorTree VPDT(Plan);
   DenseMap<VPSingleDefRecipe *, VPSingleDefRecipe *, VPCSEDenseMapInfo> CSEMap;
@@ -2317,7 +2317,42 @@ void VPlanTransforms::cse(VPlan &Plan) {
   ReversePostOrderTraversal<VPBlockDeepTraversalWrapper<VPBlockBase *>> RPOT(
       Plan.getEntry());
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(RPOT)) {
-    for (VPRecipeBase &R : *VPBB) {
+    // Widened loads that can be reused within this block, cleared by any
+    // intervening store (see below).
+    SmallVector<VPWidenLoadRecipe *, 4> LoadCandidates;
+    for (VPRecipeBase &R : make_early_inc_range(*VPBB)) {
+      // A recipe that may write to memory could alias a candidate load, so
+      // conservatively drop all candidates: a later load must not be CSE'd to a
+      // value read before the write. This avoids needing alias analysis.
+      if (R.mayWriteToMemory())
+        LoadCandidates.clear();
+
+      // Widened loads are not handled by the map-based CSE below; match them
+      // against the per-block candidates instead, reusing an earlier load with
+      // the same address, mask, type and alignment.
+      if (auto *Load = dyn_cast<VPWidenLoadRecipe>(&R)) {
+        VPWidenLoadRecipe *Match = nullptr;
+        for (VPWidenLoadRecipe *C : LoadCandidates) {
+          // Consecutive vs. gather loads have different address operands, so
+          // the operand check below also distinguishes those cases.
+          if (C->getScalarType() != Load->getScalarType() ||
+              C->getAlign() != Load->getAlign() ||
+              !equal(C->operands(), Load->operands()))
+            continue;
+          Match = C;
+          break;
+        }
+        if (Match) {
+          // Keep only metadata common to both loads on the survivor.
+          Match->intersect(*Load);
+          Load->replaceAllUsesWith(Match);
+          Load->eraseFromParent();
+        } else {
+          LoadCandidates.push_back(Load);
+        }
+        continue;
+      }
+
       auto *Def = dyn_cast<VPSingleDefRecipe>(&R);
       if (!Def || !VPCSEDenseMapInfo::canHandle(Def))
         continue;
