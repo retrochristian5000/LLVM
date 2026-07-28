@@ -651,7 +651,28 @@ class LinkerWrapperJobAction : public JobAction {
   void anchor() override;
 
 public:
+  struct DeviceOutputInfo final {
+    const ToolChain *DeviceToolChain = nullptr;
+    BoundArch DeviceBoundArch;
+
+    DeviceOutputInfo(const ToolChain *DeviceToolChain,
+                     BoundArch DeviceBoundArch)
+        : DeviceToolChain(DeviceToolChain), DeviceBoundArch(DeviceBoundArch) {}
+  };
+
+private:
+  SmallVector<DeviceOutputInfo, 4> DeviceOutputInfoArray;
+
+public:
   LinkerWrapperJobAction(ActionList &Inputs, types::ID Type);
+
+  void registerDeviceOutputInfo(const ToolChain *TC, BoundArch BA) {
+    DeviceOutputInfoArray.emplace_back(TC, BA);
+  }
+
+  ArrayRef<DeviceOutputInfo> getDeviceOutputInfo() const {
+    return DeviceOutputInfoArray;
+  }
 
   static bool classof(const Action *A) {
     return A->getKind() == LinkerWrapperJobClass;

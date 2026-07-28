@@ -12,6 +12,8 @@ __attribute__((visibility("protected"), used)) int x;
 // RUN: llvm-offload-binary -o %t.out \
 // RUN:   --image=file=%t.amdgpu.bc,kind=hip,triple=amdgpu9.4-amd-amdhsa,arch=gfx9-4-generic:xnack+ \
 // RUN:   --image=file=%t.amdgpu.bc,kind=hip,triple=amdgpu12.00-amd-amdhsa,arch=gfx1200
+// RUN: llvm-offload-binary -o %t.single.out \
+// RUN:   --image=file=%t.amdgpu.bc,kind=hip,triple=amdgpu12.00-amd-amdhsa,arch=gfx1200
 
 // Test that linker wrapper outputs .hipfb file without -r option for HIP non-RDC
 // The linker wrapper is called directly with the packaged device binary (not embedded in host object)
@@ -55,3 +57,70 @@ __attribute__((visibility("protected"), used)) int x;
 // RUN: test -s %t.gfx9-4-generic-xnack+.co
 // RUN: test -f %t.gfx1200.co
 // RUN: test -s %t.gfx1200.co
+
+// Emit one linked code object without bundling it into a HIP fat binary.
+// RUN: clang-linker-wrapper --host-triple=x86_64-unknown-linux-gnu \
+// RUN:   --emit-device-images-only --linker-path=/usr/bin/ld %t.single.out \
+// RUN:   -o %t.raw.co
+// RUN: llvm-readobj --file-headers %t.raw.co | FileCheck %s --check-prefix=RAW
+
+// RAW: Format: elf64-amdgpu
+
+// Emit each linked code object to the filename selected by the driver.
+// RUN: clang-linker-wrapper --emit-device-images-only \
+// RUN:   --device-image-output=amdgpu9.4-amd-amdhsa,gfx9-4-generic:xnack+ %t.raw-gfx9-4-generic-xnack+.co \
+// RUN:   --device-image-output=amdgpu12.00-amd-amdhsa,gfx1200 %t.raw-gfx1200.co \
+// RUN:   --linker-path=/usr/bin/ld %t.out
+// RUN: test -f %t.raw-gfx1200.co
+// RUN: test -f %t.raw-gfx9-4-generic-xnack+.co
+
+// Clang passes the exact output filename for each device image.
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: cd %t.dir && %clang -x hip --cuda-device-only \
+// RUN:   --no-gpu-bundle-output --offload-arch=gfx900 \
+// RUN:   --offload-arch=gfx1200 -nogpuinc -nogpulib %s
+// RUN: test -f %t.dir/linker-wrapper-hip-no-rdc-hip-amdgcn-amd-amdhsa-gfx900.out
+// RUN: test -f %t.dir/linker-wrapper-hip-no-rdc-hip-amdgcn-amd-amdhsa-gfx1200.out
+
+// The implicit filename keeps its target suffix for one architecture too.
+// RUN: rm -rf %t.single.dir && mkdir %t.single.dir
+// RUN: cd %t.single.dir && %clang -x hip --cuda-device-only \
+// RUN:   --no-gpu-bundle-output --offload-arch=gfx1200 \
+// RUN:   -nogpuinc -nogpulib %s
+// RUN: test -f %t.single.dir/linker-wrapper-hip-no-rdc-hip-amdgcn-amd-amdhsa-gfx1200.out
+
+// An explicit output name is invalid for multiple device images.
+// RUN: not clang-linker-wrapper --emit-device-images-only \
+// RUN:   --linker-path=/usr/bin/ld %t.out -o %t.multiple 2>&1 \
+// RUN:   | FileCheck %s --check-prefix=MULTIPLE
+
+// MULTIPLE: error: cannot specify -o when emitting multiple device images
+
+// Every device image needs exactly one output mapping.
+// RUN: not clang-linker-wrapper --emit-device-images-only \
+// RUN:   --device-image-output=amdgpu12.00-amd-amdhsa,gfx1200 %t.raw-gfx1200.co \
+// RUN:   --linker-path=/usr/bin/ld %t.out 2>&1 \
+// RUN:   | FileCheck %s --check-prefix=MISSING-OUTPUT
+
+// MISSING-OUTPUT: error: expected an output file for each linked device image
+
+// RUN: not clang-linker-wrapper --emit-device-images-only \
+// RUN:   --device-image-output=amdgpu12.00-amd-amdhsa,gfx1200 %t.raw-gfx1200.co \
+// RUN:   --device-image-output=amdgpu12.00-amd-amdhsa,gfx1200 %t.raw-gfx1200-duplicate.co \
+// RUN:   --linker-path=/usr/bin/ld %t.single.out 2>&1 \
+// RUN:   | FileCheck %s --check-prefix=DUPLICATE-OUTPUT
+
+// DUPLICATE-OUTPUT: error: duplicate output for device image 'amdgpu12.00-amd-amdhsa,gfx1200'
+
+// RUN: not clang-linker-wrapper --emit-device-images-only \
+// RUN:   --device-image-output=amdgpu12.00-amd-amdhsa,gfx1200 %t.raw-gfx1200.co \
+// RUN:   --linker-path=/usr/bin/ld %t.single.out -o %t.raw.co 2>&1 \
+// RUN:   | FileCheck %s --check-prefix=OUTPUT-CONFLICT
+
+// OUTPUT-CONFLICT: error: cannot combine -o with explicit device image outputs
+
+// RUN: not clang-linker-wrapper --emit-fatbin-only \
+// RUN:   --emit-device-images-only --linker-path=/usr/bin/ld %t.single.out \
+// RUN:   -o %t.invalid 2>&1 | FileCheck %s --check-prefix=CONFLICT
+
+// CONFLICT: error: cannot emit a fat binary and raw device images together

@@ -69,6 +69,16 @@ def emit_fatbin_only
       Flags<[WrapperOnlyOption]>,
       HelpText<"Emit fat binary directly without wrapping or host linking">;
 
+def emit_device_images_only
+    : Flag<["--"], "emit-device-images-only">,
+      Flags<[WrapperOnlyOption]>,
+      HelpText<"Emit linked device images without bundling or host linking">;
+
+def device_image_output
+    : JoinedAndSeparate<["--"], "device-image-output=">,
+      Flags<[WrapperOnlyOption, HelpHidden]>,
+      MetaVarName<"<triple>,<arch> <file>">;
+
 def no_canonical_prefixes : Flag<["--"], "no-canonical-prefixes">,
   Flags<[WrapperOnlyOption]>,
   HelpText<"Do not resolve symbolic links, turn relative paths into absolute ones, or do anything else to identify the executable">;
