@@ -585,8 +585,8 @@ define amdgpu_ps float @s_fmaak_f32(float inreg %x, float inreg %y) {
 ; GFX1250-NEXT:    v_nop ; encoding: [0x00,0x00,0x00,0x7e]
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    ; encoding: [0x41,0x06,0x80,0xb9,0x01,0x00,0x00,0x00]
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_3) ; encoding: [0x99,0x05,0x87,0xbf]
 ; GFX1250-NEXT:    s_fmaak_f32 s0, s0, s1, 0x43800000 ; encoding: [0x00,0x01,0x80,0xa2,0x00,0x00,0x80,0x43]
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_3) ; encoding: [0x0b,0x00,0x87,0xbf]
 ; GFX1250-NEXT:    v_mov_b32_e32 v0, s0 ; encoding: [0x00,0x02,0x00,0x7e]
 ; GFX1250-NEXT:    ; return to shader part epilog
   %fma = call float @llvm.fma.f32(float %x, float %y, float 256.0)
@@ -721,7 +721,6 @@ define i64 @v_add_u64_vop2_literal_32(i64 %x) {
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0) ; encoding: [0x00,0x00,0x89,0xbf]
 ; GFX11-NEXT:    v_add_co_u32 v0, vcc_lo, 0x7b, v0 ; encoding: [0x00,0x6a,0x00,0xd7,0xff,0x00,0x02,0x02,0x7b,0x00,0x00,0x00]
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) ; encoding: [0x01,0x00,0x87,0xbf]
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo ; encoding: [0x01,0x7c,0x20,0xd5,0x80,0x02,0xaa,0x01]
 ; GFX11-NEXT:    s_setpc_b64 s[30:31] ; encoding: [0x1e,0x48,0x80,0xbe]
 ;
@@ -772,7 +771,6 @@ define i64 @v_add_u64_vop2_literal_64(i64 %x) {
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0) ; encoding: [0x00,0x00,0x89,0xbf]
 ; GFX11-NEXT:    v_add_co_u32 v0, vcc_lo, 0x12345678, v0 ; encoding: [0x00,0x6a,0x00,0xd7,0xff,0x00,0x02,0x02,0x78,0x56,0x34,0x12]
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) ; encoding: [0x01,0x00,0x87,0xbf]
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v1, null, 1, v1, vcc_lo ; encoding: [0x01,0x7c,0x20,0xd5,0x81,0x02,0xaa,0x01]
 ; GFX11-NEXT:    s_setpc_b64 s[30:31] ; encoding: [0x1e,0x48,0x80,0xbe]
 ;

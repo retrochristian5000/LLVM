@@ -313,7 +313,7 @@ define void @v_constained_fma_v3f32_fpexcept_strict_uni(<3 x float> inreg %x, <3
 ; GFX12-NEXT:    s_fmac_f32 s5, s1, s16
 ; GFX12-NEXT:    s_fmac_f32 s6, s2, s17
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_2)
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s4 :: v_dual_mov_b32 v3, s5
 ; GFX12-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX12-NEXT:    global_store_b96 v[0:1], v[2:4], off
@@ -471,8 +471,8 @@ define void @v_constained_fma_v4f32_fpexcept_strict_uni(<4 x float> inreg %x, <4
 ; GFX12-NEXT:    s_fmac_f32 s22, s2, s18
 ; GFX12-NEXT:    s_fmac_f32 s23, s3, s19
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_2)
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s20 :: v_dual_mov_b32 v3, s21
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s22 :: v_dual_mov_b32 v5, s23
 ; GFX12-NEXT:    global_store_b128 v[0:1], v[2:5], off
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]

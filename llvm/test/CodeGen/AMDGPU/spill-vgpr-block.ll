@@ -67,6 +67,7 @@ define amdgpu_kernel void @entry_func(i32 %x) #0 {
 ; GISEL-NEXT:    v_mov_b32_e32 v0, s6
 ; GISEL-NEXT:    s_mov_b64 s[6:7], s[2:3]
 ; GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GISEL-NEXT:    s_endpgm
 ;
@@ -87,6 +88,7 @@ define amdgpu_kernel void @entry_func(i32 %x) #0 {
 ; DAGISEL-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL-NEXT:    v_mov_b32_e32 v0, s12
+; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; DAGISEL-NEXT:    s_endpgm
   call void asm "s_nop", "~{v0},~{v8},~{v40},~{v41},~{v49},~{v52},~{v56},~{v60},~{v120},~{s0},~{s48}"()

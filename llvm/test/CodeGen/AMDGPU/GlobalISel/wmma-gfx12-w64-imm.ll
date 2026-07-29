@@ -18,7 +18,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_f16_imm_non_inlineable(<4 x half> 
 ; GCN-LABEL: test_wmma_f32_16x16x16_f16_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -52,7 +52,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_bf16_imm_non_inlineable(<4 x i16> 
 ; GCN-LABEL: test_wmma_f32_16x16x16_bf16_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -86,10 +86,11 @@ define amdgpu_ps void @test_wmma_f16_16x16x16_f16_imm_non_inlineable(<4 x half> 
 ; GCN-LABEL: test_wmma_f16_16x16x16_f16_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x42004200
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    v_mov_b32_e32 v6, s0
 ; GCN-NEXT:    v_mov_b32_e32 v7, s1
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GCN-NEXT:    v_wmma_f16_16x16x16_f16 v[6:7], v[0:1], v[2:3], v[6:7]
 ; GCN-NEXT:    global_store_b64 v[4:5], v[6:7], off
 ; GCN-NEXT:    s_endpgm
@@ -103,10 +104,11 @@ define amdgpu_ps void @test_wmma_bf16_16x16x16_bf16_imm(<4 x i16> %A, <4 x i16> 
 ; GCN-LABEL: test_wmma_bf16_16x16x16_bf16_imm:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x3f803f80
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    v_mov_b32_e32 v6, s0
 ; GCN-NEXT:    v_mov_b32_e32 v7, s1
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GCN-NEXT:    v_wmma_bf16_16x16x16_bf16 v[6:7], v[0:1], v[2:3], v[6:7]
 ; GCN-NEXT:    global_store_b64 v[4:5], v[6:7], off
 ; GCN-NEXT:    s_endpgm
@@ -120,10 +122,11 @@ define amdgpu_ps void @test_wmma_bf16_16x16x16_bf16_imm_non_inlineable(<4 x i16>
 ; GCN-LABEL: test_wmma_bf16_16x16x16_bf16_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x3fc03fc0
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    v_mov_b32_e32 v6, s0
 ; GCN-NEXT:    v_mov_b32_e32 v7, s1
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GCN-NEXT:    v_wmma_bf16_16x16x16_bf16 v[6:7], v[0:1], v[2:3], v[6:7]
 ; GCN-NEXT:    global_store_b64 v[4:5], v[6:7], off
 ; GCN-NEXT:    s_endpgm
@@ -149,7 +152,7 @@ define amdgpu_ps void @test_wmma_i32_16x16x16_iu8_imm_non_inlineable(i32 %A, i32
 ; GCN-LABEL: test_wmma_i32_16x16x16_iu8_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_movk_i32 s0, 0x80
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -183,7 +186,7 @@ define amdgpu_ps void @test_wmma_i32_16x16x16_iu4_imm_non_inlineable(i32 %A, i32
 ; GCN-LABEL: test_wmma_i32_16x16x16_iu4_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_movk_i32 s0, 0x80
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -217,7 +220,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_fp8_fp8_imm_non_inlineable(i32 %A,
 ; GCN-LABEL: test_wmma_f32_16x16x16_fp8_fp8_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -251,7 +254,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_bf8_fp8_imm_non_inlineable(i32 %A,
 ; GCN-LABEL: test_wmma_f32_16x16x16_bf8_fp8_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -285,7 +288,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_fp8_bf8_imm_non_inlineable(i32 %A,
 ; GCN-LABEL: test_wmma_f32_16x16x16_fp8_bf8_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -319,7 +322,7 @@ define amdgpu_ps void @test_wmma_f32_16x16x16_bf8_bf8_imm_non_inlineable(i32 %A,
 ; GCN-LABEL: test_wmma_f32_16x16x16_bf8_bf8_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s0, 0x40400000
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0
@@ -353,7 +356,7 @@ define amdgpu_ps void @test_wmma_i32_16x16x32_iu4_imm_non_inlineable(i32 %A, i32
 ; GCN-LABEL: test_wmma_i32_16x16x32_iu4_imm_non_inlineable:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_movk_i32 s0, 0x80
-; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
 ; GCN-NEXT:    s_mov_b32 s1, s0
 ; GCN-NEXT:    s_mov_b32 s2, s0
 ; GCN-NEXT:    s_mov_b32 s3, s0

@@ -7,7 +7,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push4_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_dual_mov_b32 v22, v7 :: v_dual_mov_b32 v21, v6
 ; CHECK-NEXT:    v_dual_mov_b32 v20, v5 :: v_dual_mov_b32 v5, 0
 ; CHECK-NEXT:    s_mov_b32 s4, exec_lo
-; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; CHECK-NEXT:    v_dual_mov_b32 v33, v22 :: v_dual_mov_b32 v32, v21
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
@@ -101,7 +101,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_dual_mov_b32 v22, v7 :: v_dual_mov_b32 v21, v6
 ; CHECK-NEXT:    v_dual_mov_b32 v20, v5 :: v_dual_mov_b32 v5, 0
 ; CHECK-NEXT:    s_mov_b32 s4, exec_lo
-; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; CHECK-NEXT:    v_dual_mov_b32 v33, v22 :: v_dual_mov_b32 v32, v21
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
@@ -203,7 +203,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop2(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_dual_mov_b32 v22, v7 :: v_dual_mov_b32 v21, v6
 ; CHECK-NEXT:    v_dual_mov_b32 v20, v5 :: v_dual_mov_b32 v5, 0
 ; CHECK-NEXT:    s_mov_b32 s4, exec_lo
-; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; CHECK-NEXT:    v_dual_mov_b32 v33, v22 :: v_dual_mov_b32 v32, v21
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]

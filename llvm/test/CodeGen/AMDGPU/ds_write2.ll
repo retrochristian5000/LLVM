@@ -1240,13 +1240,14 @@ define amdgpu_kernel void @write2_sgemm_sequence(ptr addrspace(1) %C, i32 %lda, 
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_add_co_i32 s1, s1, 1
 ; GFX1250-NEXT:    s_mul_i32 s1, ttmp9, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_add_co_i32 s2, s2, s1
 ; GFX1250-NEXT:    s_cmp_eq_u32 s3, 0
 ; GFX1250-NEXT:    s_cselect_b32 s1, ttmp9, s2
-; GFX1250-NEXT:    s_lshl_b32 s1, s1, 2
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_lshl_b32 s1, s1, 2
 ; GFX1250-NEXT:    s_add_co_i32 s2, s1, 0xc20
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_dual_mov_b32 v1, s2 :: v_dual_lshrrev_b32 v0, 8, v0
 ; GFX1250-NEXT:    s_addk_co_i32 s1, 0xc60
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0

@@ -765,6 +765,7 @@ define amdgpu_kernel void @s_brev_v2i64(ptr addrspace(1) noalias %out, <2 x i64>
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    s_brev_b64 s[0:1], s[0:1]
 ; GFX11-GISEL-NEXT:    s_brev_b64 s[2:3], s[2:3]
+; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-GISEL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; GFX11-GISEL-NEXT:    global_store_b128 v4, v[0:3], s[4:5]

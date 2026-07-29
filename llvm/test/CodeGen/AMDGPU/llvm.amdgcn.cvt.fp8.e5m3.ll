@@ -303,6 +303,7 @@ define amdgpu_ps float @test_cvt_f32_fp8_e5m3_byte0_s(i32 inreg %a) {
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_f32_fp8_e64 v0, s0 clamp
 ; GFX1250-NEXT:    ; return to shader part epilog
   %ret = tail call float @llvm.amdgcn.cvt.f32.fp8.e5m3(i32 %a, i32 0)

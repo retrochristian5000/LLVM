@@ -63,12 +63,13 @@ define amdgpu_kernel void @indirect_call_known_no_special_inputs() {
 ; GFX12-NEXT:    s_mov_b32 s32, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_and_b32 s12, 1, s14
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cmp_eq_u32 s12, 1
 ; GFX12-NEXT:    s_cselect_b32 s13, s7, s5
 ; GFX12-NEXT:    s_cselect_b32 s12, s6, s4
 ; GFX12-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-NEXT:    s_mov_b64 s[6:7], s[2:3]
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_swappc_b64 s[30:31], s[12:13]
 ; GFX12-NEXT:    s_endpgm
 

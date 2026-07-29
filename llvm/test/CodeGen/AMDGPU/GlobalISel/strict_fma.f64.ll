@@ -191,7 +191,7 @@ define void @v_constained_fma_v2f64_fpexcept_strict_uni(<2 x double> inreg %x, <
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_4)
 ; GFX11-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX11-NEXT:    v_readfirstlane_b32 s3, v5
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX11-NEXT:    global_store_b128 v[0:1], v[2:5], off
@@ -216,7 +216,7 @@ define void @v_constained_fma_v2f64_fpexcept_strict_uni(<2 x double> inreg %x, <
 ; GFX12-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX12-NEXT:    v_readfirstlane_b32 s3, v5
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX12-NEXT:    global_store_b128 v[0:1], v[2:5], off
@@ -384,7 +384,7 @@ define void @v_constained_fma_v3f64_fpexcept_strict_uni(<3 x double> inreg %x, <
 ; GFX11-NEXT:    v_readfirstlane_b32 s1, v3
 ; GFX11-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX11-NEXT:    v_readfirstlane_b32 s3, v5
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX11-NEXT:    s_clause 0x1
@@ -413,7 +413,7 @@ define void @v_constained_fma_v3f64_fpexcept_strict_uni(<3 x double> inreg %x, <
 ; GFX12-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX12-NEXT:    v_readfirstlane_b32 s3, v5
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX12-NEXT:    s_clause 0x1
@@ -1174,7 +1174,7 @@ define void @v_constained_fma_v2f64_fpexcept_strict_fneg_fneg_uni(<2 x double> i
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_4)
 ; GFX11-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX11-NEXT:    v_readfirstlane_b32 s3, v5
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX11-NEXT:    global_store_b128 v[0:1], v[2:5], off
@@ -1199,7 +1199,7 @@ define void @v_constained_fma_v2f64_fpexcept_strict_fneg_fneg_uni(<2 x double> i
 ; GFX12-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX12-NEXT:    v_readfirstlane_b32 s3, v5
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX12-NEXT:    global_store_b128 v[0:1], v[2:5], off

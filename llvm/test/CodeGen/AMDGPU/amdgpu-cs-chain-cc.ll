@@ -39,7 +39,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_simple_call(<4 x i32> inreg %sgpr, 
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; GISEL-GFX11-NEXT:    s_mov_b32 s4, use@abs32@lo
 ; GISEL-GFX11-NEXT:    s_mov_b32 s5, use@abs32@hi
-; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; GISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[4:5]
 ; GISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -70,7 +70,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_simple_call(<4 x i32> inreg %sgpr, 
 ; DAGISEL-GFX11-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s5, use@abs32@hi
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s4, use@abs32@lo
-; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; DAGISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[4:5]
 ; DAGISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -152,7 +152,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_spill(<24 x i32> inreg %sgprs, <24 
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v30, v38 :: v_dual_mov_b32 v31, v39
 ; GISEL-GFX11-NEXT:    s_mov_b32 s24, use@abs32@lo
 ; GISEL-GFX11-NEXT:    s_mov_b32 s25, use@abs32@hi
-; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; GISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[24:25]
 ; GISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -278,7 +278,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_spill(<24 x i32> inreg %sgprs, <24 
 ; DAGISEL-GFX11-NEXT:    v_dual_mov_b32 v30, v33 :: v_dual_mov_b32 v31, v32
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s25, use@abs32@hi
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s24, use@abs32@lo
-; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; DAGISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[24:25]
 ; DAGISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -362,6 +362,7 @@ define amdgpu_cs_chain void @alloca_and_call() #0 {
 ; GISEL-GFX11-NEXT:    s_add_i32 s32, s32, 16
 ; GISEL-GFX11-NEXT:    scratch_store_b32 off, v0, s33
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v0, s33
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -390,6 +391,7 @@ define amdgpu_cs_chain void @alloca_and_call() #0 {
 ; DAGISEL-GFX11-NEXT:    s_add_i32 s32, s32, 16
 ; DAGISEL-GFX11-NEXT:    scratch_store_b32 off, v0, s33
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v0, s33
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; DAGISEL-GFX11-NEXT:    s_endpgm
 ;
@@ -594,6 +596,7 @@ define amdgpu_cs_chain void @chain_to_chain(<3 x i32> inreg %a, <3 x i32> %b) #0
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v1
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: chain_to_chain:
@@ -624,6 +627,7 @@ define amdgpu_cs_chain void @chain_to_chain(<3 x i32> inreg %a, <3 x i32> %b) #0
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: chain_to_chain:
@@ -651,9 +655,10 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; GISEL-GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GISEL-GFX11-NEXT:    s_mov_b32 s3, s0
 ; GISEL-GFX11-NEXT:    s_or_saveexec_b32 s0, -1
-; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s0
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v2, v1
 ; GISEL-GFX11-NEXT:    ;;#ASMSTART
 ; GISEL-GFX11-NEXT:    s_nop
@@ -663,6 +668,7 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v2
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: chain_to_chain_wwm:
@@ -690,7 +696,7 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s3, s0
 ; DAGISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s4
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s4
-; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v2, v1
 ; DAGISEL-GFX11-NEXT:    ;;#ASMSTART
 ; DAGISEL-GFX11-NEXT:    s_nop
@@ -700,6 +706,7 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v2
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: chain_to_chain_wwm:
@@ -741,6 +748,7 @@ define amdgpu_cs_chain void @chain_to_chain_use_all_v0_v7(<3 x i32> inreg %a, <3
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v11
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: chain_to_chain_use_all_v0_v7:
@@ -771,6 +779,7 @@ define amdgpu_cs_chain void @chain_to_chain_use_all_v0_v7(<3 x i32> inreg %a, <3
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v11
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: chain_to_chain_use_all_v0_v7:
@@ -806,6 +815,7 @@ define amdgpu_cs_chain void @chain_to_chain_fewer_args(<3 x i32> inreg %a, <3 x 
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v1
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s2
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: chain_to_chain_fewer_args:
@@ -836,6 +846,7 @@ define amdgpu_cs_chain void @chain_to_chain_fewer_args(<3 x i32> inreg %a, <3 x 
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s2
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: chain_to_chain_fewer_args:
@@ -874,6 +885,7 @@ define amdgpu_cs_chain void @chain_to_chain_more_args(<3 x i32> inreg %a, <3 x i
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; GISEL-GFX11-NEXT:    s_mov_b32 s3, 0
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: chain_to_chain_more_args:
@@ -907,6 +919,7 @@ define amdgpu_cs_chain void @chain_to_chain_more_args(<3 x i32> inreg %a, <3 x i
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s3
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s3, 0
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: chain_to_chain_more_args:
@@ -940,6 +953,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_dont_realign_stack(i32 %idx) #0 {
 ; GISEL-GFX11-NEXT:    s_mov_b32 s2, 3
 ; GISEL-GFX11-NEXT:    s_mov_b32 s1, 2
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, 1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v1, s1 :: v_dual_lshlrev_b32 v0, 4, v8
 ; GISEL-GFX11-NEXT:    s_add_i32 s33, s32, 31
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v2, s2
@@ -1030,10 +1044,10 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_realign_stack_chain_call(i32 %idx, 
 ; GISEL-GFX11-NEXT:    s_mov_b32 s6, 3
 ; GISEL-GFX11-NEXT:    s_mov_b32 s5, 2
 ; GISEL-GFX11-NEXT:    s_mov_b32 s4, 1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_3)
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v1, s5 :: v_dual_lshlrev_b32 v4, 4, v8
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v3, s7
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v2, s6
-; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GISEL-GFX11-NEXT:    v_add_nc_u32_e32 v4, s33, v4
 ; GISEL-GFX11-NEXT:    s_addk_i32 s32, 0xc0
 ; GISEL-GFX11-NEXT:    s_mov_b32 s4, chain_callee@abs32@lo
@@ -1044,6 +1058,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_realign_stack_chain_call(i32 %idx, 
 ; GISEL-GFX11-NEXT:    v_mov_b32_e32 v10, v11
 ; GISEL-GFX11-NEXT:    s_mov_b32 s32, s34
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; GISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; GISEL-GFX10-LABEL: amdgpu_cs_chain_realign_stack_chain_call:
@@ -1096,6 +1111,7 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_realign_stack_chain_call(i32 %idx, 
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v10, v11
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s32, s34
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
 ; DAGISEL-GFX10-LABEL: amdgpu_cs_chain_realign_stack_chain_call:

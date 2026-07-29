@@ -284,6 +284,7 @@ define amdgpu_kernel void @s_ctpop_v4i64(ptr addrspace(1) noalias %out, <4 x i64
 ; GFX12-NEXT:    s_bcnt1_i32_b64 s1, s[10:11]
 ; GFX12-NEXT:    s_bcnt1_i32_b64 s2, s[12:13]
 ; GFX12-NEXT:    s_bcnt1_i32_b64 s3, s[14:15]
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; GFX12-NEXT:    global_store_b128 v4, v[0:3], s[4:5]
@@ -535,7 +536,7 @@ define amdgpu_kernel void @ctpop_i64_in_br(ptr addrspace(1) %out, ptr addrspace(
 ; GFX12-NEXT:    ; implicit-def: $sgpr2_sgpr3
 ; GFX12-NEXT:  .LBB7_3: ; %Flow
 ; GFX12-NEXT:    s_xor_b32 s6, s6, 1
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cmp_lg_u32 s6, 0
 ; GFX12-NEXT:    s_cbranch_scc1 .LBB7_5
 ; GFX12-NEXT:  ; %bb.4: ; %if

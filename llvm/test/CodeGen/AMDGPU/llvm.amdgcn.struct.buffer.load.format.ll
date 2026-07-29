@@ -895,7 +895,7 @@ define amdgpu_cs float @buffer_load_v4i32_tfe(<4 x i32> inreg %rsrc, ptr addrspa
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s1, v3
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s3, v5
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX12-GISEL-NEXT:    global_store_b128 v[0:1], v[2:5], off
@@ -989,7 +989,7 @@ define amdgpu_cs float @buffer_load_v4f32_tfe(<4 x i32> inreg %rsrc, ptr addrspa
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s1, v3
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s2, v4
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s3, v5
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v5, s3
 ; GFX12-GISEL-NEXT:    global_store_b128 v[0:1], v[2:5], off
@@ -1080,7 +1080,7 @@ define amdgpu_cs float @buffer_load_v3i32_tfe(<4 x i32> inreg %rsrc, ptr addrspa
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s0, v2
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s1, v3
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s2, v4
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX12-GISEL-NEXT:    global_store_b96 v[0:1], v[2:4], off
@@ -1171,7 +1171,7 @@ define amdgpu_cs float @buffer_load_v3f32_tfe(<4 x i32> inreg %rsrc, ptr addrspa
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s0, v2
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s1, v3
 ; GFX12-GISEL-NEXT:    v_readfirstlane_b32 s2, v4
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX12-GISEL-NEXT:    global_store_b96 v[0:1], v[2:4], off

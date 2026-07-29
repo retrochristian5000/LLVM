@@ -344,7 +344,7 @@ define amdgpu_kernel void @test_fmax_v3f32(ptr addrspace(1) %out, <3 x float> %a
 ; GFX12-GISEL-NEXT:    s_max_num_f32 s5, s5, s6
 ; GFX12-GISEL-NEXT:    s_mov_b32 s3, 0x31016000
 ; GFX12-GISEL-NEXT:    s_max_num_f32 s6, s7, s8
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_3)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v1, s5
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX12-GISEL-NEXT:    buffer_store_b96 v[0:2], off, s[0:3], null
@@ -492,8 +492,8 @@ define amdgpu_kernel void @test_fmax_v4f32(ptr addrspace(1) %out, <4 x float> %a
 ; GFX12-GISEL-NEXT:    s_max_num_f32 s6, s7, s8
 ; GFX12-GISEL-NEXT:    s_mov_b32 s2, -1
 ; GFX12-GISEL-NEXT:    s_max_num_f32 s7, s9, s10
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_3)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v1, s5
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_2)
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v2, s6 :: v_dual_mov_b32 v3, s7
 ; GFX12-GISEL-NEXT:    s_mov_b32 s3, 0x31016000
 ; GFX12-GISEL-NEXT:    buffer_store_b128 v[0:3], off, s[0:3], null

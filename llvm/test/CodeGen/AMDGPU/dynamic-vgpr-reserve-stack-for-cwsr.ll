@@ -8,7 +8,7 @@ define amdgpu_cs void @amdgpu_cs() #0 {
 ; CHECK-LABEL: amdgpu_cs:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_cmp_lg_u32 0, s33
 ; CHECK-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-NEXT:    s_alloc_vgpr 0
@@ -20,7 +20,7 @@ define amdgpu_kernel void @kernel() #0 {
 ; CHECK-LABEL: kernel:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_cmp_lg_u32 0, s33
 ; CHECK-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-NEXT:    s_alloc_vgpr 0
@@ -34,6 +34,7 @@ define amdgpu_cs void @with_local() #0 {
 ; CHECK-TRUE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-TRUE16-NEXT:    v_mov_b16_e32 v0.l, 13
 ; CHECK-TRUE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-TRUE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-TRUE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
@@ -45,6 +46,7 @@ define amdgpu_cs void @with_local() #0 {
 ; CHECK-FAKE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 13
 ; CHECK-FAKE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-FAKE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-FAKE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
@@ -70,6 +72,7 @@ define amdgpu_cs void @with_calls_inline_const() #0 {
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-TRUE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-TRUE16-NEXT:    s_cselect_b32 s32, 0x1d0, 16
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-TRUE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-TRUE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-TRUE16-NEXT:    s_endpgm
@@ -86,6 +89,7 @@ define amdgpu_cs void @with_calls_inline_const() #0 {
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-FAKE16-NEXT:    s_cselect_b32 s32, 0x1d0, 16
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-FAKE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-FAKE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-FAKE16-NEXT:    s_endpgm
@@ -111,6 +115,7 @@ define amdgpu_cs void @with_calls_no_inline_const() #0 {
 ; CHECK-TRUE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-TRUE16-NEXT:    s_movk_i32 s32, 0x100
 ; CHECK-TRUE16-NEXT:    s_cmovk_i32 s32, 0x2c0
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-TRUE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-TRUE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-TRUE16-NEXT:    s_endpgm
@@ -128,6 +133,7 @@ define amdgpu_cs void @with_calls_no_inline_const() #0 {
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-FAKE16-NEXT:    s_movk_i32 s32, 0x100
 ; CHECK-FAKE16-NEXT:    s_cmovk_i32 s32, 0x2c0
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-FAKE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-FAKE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-FAKE16-NEXT:    s_endpgm
@@ -141,7 +147,7 @@ define amdgpu_cs void @with_spills() #0 {
 ; CHECK-LABEL: with_spills:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_cmp_lg_u32 0, s33
 ; CHECK-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-NEXT:    s_alloc_vgpr 0
@@ -173,6 +179,7 @@ define amdgpu_cs void @realign_stack(<32 x i32> %x) #0 {
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-NEXT:    s_movk_i32 s32, 0x100
 ; CHECK-NEXT:    s_cmovk_i32 s32, 0x300
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-NEXT:    s_alloc_vgpr 0
 ; CHECK-NEXT:    s_endpgm
@@ -190,6 +197,7 @@ define amdgpu_cs void @frame_pointer_none() #1 {
 ; CHECK-TRUE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-TRUE16-NEXT:    v_mov_b16_e32 v0.l, 13
 ; CHECK-TRUE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-TRUE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-TRUE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
@@ -201,6 +209,7 @@ define amdgpu_cs void @frame_pointer_none() #1 {
 ; CHECK-FAKE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 13
 ; CHECK-FAKE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-FAKE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-FAKE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
@@ -217,6 +226,7 @@ define amdgpu_cs void @frame_pointer_all() #2 {
 ; CHECK-TRUE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-TRUE16-NEXT:    v_mov_b16_e32 v0.l, 13
 ; CHECK-TRUE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-TRUE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-TRUE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
@@ -228,6 +238,7 @@ define amdgpu_cs void @frame_pointer_all() #2 {
 ; CHECK-FAKE16-NEXT:    s_getreg_b32 s33, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 13
 ; CHECK-FAKE16-NEXT:    s_cmp_lg_u32 0, s33
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-FAKE16-NEXT:    s_cmovk_i32 s33, 0x1c0
 ; CHECK-FAKE16-NEXT:    scratch_store_b8 off, v0, s33 scope:SCOPE_SYS
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
@@ -249,6 +260,7 @@ define amdgpu_gs void @amdgpu_gs() #0 {
 ; CHECK-TRUE16-NEXT:    scratch_store_b8 off, v0, off scope:SCOPE_SYS
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-TRUE16-NEXT:    v_mov_b32_e32 v0, 0x47
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-TRUE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-TRUE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-TRUE16-NEXT:    s_endpgm
@@ -262,6 +274,7 @@ define amdgpu_gs void @amdgpu_gs() #0 {
 ; CHECK-FAKE16-NEXT:    scratch_store_b8 off, v0, off scope:SCOPE_SYS
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 0x47
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-FAKE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-FAKE16-NEXT:    s_alloc_vgpr 0
 ; CHECK-FAKE16-NEXT:    s_endpgm
@@ -297,6 +310,7 @@ define amdgpu_gfx void @amdgpu_gfx() #0 {
 ; CHECK-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-TRUE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; CHECK-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-TRUE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-TRUE16-NEXT:    v_readlane_b32 s30, v40, 0
 ; CHECK-TRUE16-NEXT:    v_readlane_b32 s31, v40, 1
@@ -336,6 +350,7 @@ define amdgpu_gfx void @amdgpu_gfx() #0 {
 ; CHECK-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 0x47
 ; CHECK-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; CHECK-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-FAKE16-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-FAKE16-NEXT:    v_readlane_b32 s30, v40, 0
 ; CHECK-FAKE16-NEXT:    v_readlane_b32 s31, v40, 1

@@ -15,6 +15,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_bf6_bf16_vv(<16 x bfloat> %src, i32
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_bf6_bf16 v[12:14], v[0:7], v8, v9
 ; GFX1250-NEXT:    global_store_b96 v[10:11], v[12:14], off
 ; GFX1250-NEXT:    s_endpgm
@@ -48,6 +49,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_bf6_f16_vv(<16 x half> %src, i32 %s
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_bf6_f16 v[12:14], v[0:7], v8, v9
 ; GFX1250-NEXT:    global_store_b96 v[10:11], v[12:14], off
 ; GFX1250-NEXT:    s_endpgm
@@ -128,6 +130,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_fp6_bf16_vv(<16 x bfloat> %src, i32
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_fp6_bf16 v[12:14], v[0:7], v8, v9
 ; GFX1250-NEXT:    global_store_b96 v[10:11], v[12:14], off
 ; GFX1250-NEXT:    s_endpgm
@@ -161,6 +164,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_fp6_f16_vv(<16 x half> %src, i32 %s
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_fp6_f16 v[12:14], v[0:7], v8, v9
 ; GFX1250-NEXT:    global_store_b96 v[10:11], v[12:14], off
 ; GFX1250-NEXT:    s_endpgm
@@ -241,6 +245,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_bf6_f32_vv(<16 x float> %src, i32 %
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_bf6_f32 v[20:22], v[0:15], v16, v17
 ; GFX1250-NEXT:    global_store_b96 v[18:19], v[20:22], off
 ; GFX1250-NEXT:    s_endpgm
@@ -337,6 +342,7 @@ define amdgpu_ps void @test_scalef32_sr_pk16_fp6_f32_vv(<16 x float> %src, i32 %
 ; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cvt_scalef32_sr_pk16_fp6_f32 v[20:22], v[0:15], v16, v17
 ; GFX1250-NEXT:    global_store_b96 v[18:19], v[20:22], off
 ; GFX1250-NEXT:    s_endpgm
