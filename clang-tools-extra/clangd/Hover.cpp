@@ -951,6 +951,22 @@ llvm::StringLiteral getNameForExpr(const Expr *E) {
 void maybeAddCalleeArgInfo(const SelectionTree::Node *N, HoverInfo &HI,
                            const PrintingPolicy &PP);
 
+static std::optional<HoverInfo> getHoverContents(const Expr *E, ParsedAST &AST,
+                                                 const PrintingPolicy &PP) {
+  HoverInfo HI;
+  if (const auto *VecExpr = dyn_cast<ExtVectorElementExpr>(E)) {
+    HI.Name = VecExpr->getAccessor().getName().str();
+    HI.Type = printType(VecExpr->getType(), AST.getASTContext(), PP);
+    return HI;
+  }
+  if (const auto *MatExpr = dyn_cast<MatrixElementExpr>(E)) {
+    HI.Name = MatExpr->getAccessor().getName().str();
+    HI.Type = printType(MatExpr->getType(), AST.getASTContext(), PP);
+    return HI;
+  }
+  return std::nullopt;
+}
+
 // Generates hover info for `this` and evaluatable expressions.
 // FIXME: Support hover for literals (esp user-defined)
 std::optional<HoverInfo> getHoverContents(const SelectionTree::Node *N,
@@ -958,6 +974,9 @@ std::optional<HoverInfo> getHoverContents(const SelectionTree::Node *N,
                                           const PrintingPolicy &PP,
                                           const SymbolIndex *Index) {
   std::optional<HoverInfo> HI;
+
+  if (auto SwizzleHI = getHoverContents(E, AST, PP))
+    return SwizzleHI;
 
   if (const StringLiteral *SL = dyn_cast<StringLiteral>(E)) {
     // Print the type and the size for string literals
