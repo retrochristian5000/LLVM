@@ -355,8 +355,7 @@ public:
   static bool isFastForwardProducer(const MachineInstr &MI,
                                     const MachineOperand &MO, Register VccReg,
                                     Register ExecReg) {
-    if (!MO.isReg() || !MO.isDef())
-      return false;
+    assert((MO.isReg() && MO.isDef()) && "Expected a register definition");
 
     if (!SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/false))
       return false;
@@ -364,7 +363,7 @@ public:
     const TargetRegisterInfo *TRI =
         MI.getMF()->getSubtarget().getRegisterInfo();
     Register Reg = MO.getReg();
-    if (TRI->isSubRegisterEq(Reg, VccReg)) {
+    if (AMDGPU::isSGPR(Reg, TRI)) {
       switch (MI.getOpcode()) {
       // VOP2 carry-out producers (implicit VCC)
       case AMDGPU::V_ADD_CO_U32_e32:
@@ -373,28 +372,7 @@ public:
       case AMDGPU::V_ADDC_U32_e32:
       case AMDGPU::V_SUBB_U32_e32:
       case AMDGPU::V_SUBBREV_U32_e32:
-      // VOP3 carry-out producers (explicit VCC)
-      case AMDGPU::V_ADD_CO_U32_e64:
-      case AMDGPU::V_SUB_CO_U32_e64:
-      case AMDGPU::V_SUBREV_CO_U32_e64:
-      case AMDGPU::V_ADDC_U32_e64:
-      case AMDGPU::V_SUBB_U32_e64:
-      case AMDGPU::V_SUBBREV_U32_e64:
-        return true;
-      default:
-        // V_CMP* produces condition masks (excluding V_CMPX)
-        if (MI.isCompare() && !AMDGPU::isVCMPX(MI.getOpcode())) {
-          // VOPC: implicit VCC def
-          return true;
-        }
-      }
-    } else if (TRI->isSubRegisterEq(Reg, ExecReg)) {
-      // V_CMPX writes EXEC (implicit)
-      if (AMDGPU::isVCMPX(MI.getOpcode()))
-        return true;
-    } else if (AMDGPU::isSGPR(Reg, TRI)) {
-      switch (MI.getOpcode()) {
-      // VOP3 carry-out producers (explicit SGPR)
+      // VOP3 carry-out producers (explicit VCC/SGPR)
       case AMDGPU::V_ADD_CO_U32_e64:
       case AMDGPU::V_SUB_CO_U32_e64:
       case AMDGPU::V_SUBREV_CO_U32_e64:
@@ -405,9 +383,11 @@ public:
       case AMDGPU::V_DIV_SCALE_F64_e64:
         return true;
       default:
-        // V_CMP* produces condition masks (excluding V_CMPX)
-        if (MI.isCompare() && !AMDGPU::isVCMPX(MI.getOpcode())) {
-          // VOP3: explicit SGPR def (operand 0)
+        if (MI.isCompare()) {
+          // V_CMPX produces EXEC (implicit)
+          if (AMDGPU::isVCMPX(MI.getOpcode()))
+            return TRI->isSubRegisterEq(Reg, ExecReg);
+          // V_CMP* produces condition masks
           return true;
         }
       }
@@ -480,8 +460,7 @@ public:
   static bool isFastForwardConsumer(const MachineInstr &MI,
                                     const MachineOperand &MO, Register VccReg,
                                     Register ExecReg, unsigned OpNo) {
-    if (!MO.isReg() || !MO.isUse())
-      return false;
+    assert((MO.isReg() && MO.isUse()) && "Expected a register use");
 
     if (!SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/false))
       return false;
@@ -521,7 +500,8 @@ public:
       case AMDGPU::V_CNDMASK_B16_t16_e64:
         int Src2Idx =
             AMDGPU::getNamedOperandIdx(MIOpCode, AMDGPU::OpName::src2);
-        return Src2Idx >= 0 && OpNo == static_cast<unsigned>(Src2Idx);
+        assert(Src2Idx >= 0 && "Unexpected source index");
+        return OpNo == static_cast<unsigned>(Src2Idx);
       }
     } else if (TRI->isSubRegisterEq(Reg, ExecReg)) {
       switch (MIOpCode) {
@@ -545,7 +525,8 @@ public:
       case AMDGPU::V_CNDMASK_B16_t16_e64:
         int Src2Idx =
             AMDGPU::getNamedOperandIdx(MIOpCode, AMDGPU::OpName::src2);
-        return Src2Idx >= 0 && OpNo == static_cast<unsigned>(Src2Idx);
+        assert(Src2Idx >= 0 && "Unexpected source index");
+        return OpNo == static_cast<unsigned>(Src2Idx);
       }
     }
     return false;
@@ -574,7 +555,6 @@ public:
       // Ignore some more instructions that do not generate any code.
       switch (MI.getOpcode()) {
       case AMDGPU::SI_RETURN_TO_EPILOG:
-      case AMDGPU::S_SETPC_B64_return:
         continue;
       }
 
@@ -598,7 +578,7 @@ public:
         DelayInfo Delay;
         Register VccReg = AMDGPU::LaneMaskConstants::get(*ST).VccReg;
         Register ExecReg = AMDGPU::LaneMaskConstants::get(*ST).ExecReg;
-        // TODO: Scan implicit uses too?
+
         for (const auto &Op : MI.all_uses()) {
           if (Op.isReg()) {
             // One of the operands of the writelane is also the output operand.
@@ -610,6 +590,10 @@ public:
             // producer and consumer are in the hardware fast-forward set.
             Register Reg = Op.getReg();
             unsigned OperandNo = MI.getOperandNo(&Op);
+            if (OperandNo >= MI.getDesc().getNumOperands() &&
+                !MI.getDesc().hasImplicitUseOfPhysReg(Reg))
+              continue;
+
             if (isFastForwardConsumer(MI, Op, VccReg, ExecReg, OperandNo) &&
                 llvm::all_of(TRI->regunits(Reg), [&](MCRegUnit Unit) {
                   auto It = State.find(Unit);
@@ -647,7 +631,6 @@ public:
       }
 
       if (Type != OTHER) {
-        // TODO: Scan implicit defs too?
         Register VccReg = AMDGPU::LaneMaskConstants::get(*ST).VccReg;
         Register ExecReg = AMDGPU::LaneMaskConstants::get(*ST).ExecReg;
         for (const auto &Op : MI.all_defs()) {
