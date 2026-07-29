@@ -73,8 +73,25 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 //
 // If you want fully customized LLVM IR lowering logic, simply exclude the
 // `llvmOp` field from your CIR operation definition.
+//
+// The `constrainedLLVMIntrinsic` field enables a specialized variant of this
+// generated lowering for floating-point operations that carry an optional
+// `fenv` attribute. When it is set (to the mnemonic of an experimental
+// constrained floating-point intrinsic, e.g. "fadd"), the generated pattern
+// lowers the operation to a plain `llvmOp` when it has no `fenv` attribute and
+// to a call to the corresponding constrained intrinsic when it does. Setting
+// `constrainedLLVMIntrinsic` requires `llvmOp` to be set as well.
+//
+// `constrainedLLVMIntrinsicHasRoundingMode` indicates whether the constrained
+// intrinsic takes a rounding-mode metadata argument in addition to the
+// exception-behavior metadata argument. Arithmetic and transcendental
+// intrinsics (e.g. constrained.fadd, constrained.sqrt) take a rounding mode,
+// while intrinsics whose rounding is implied by the operation (e.g.
+// constrained.ceil, constrained.maxnum) take only the exception behavior.
 class LLVMLoweringInfo {
   string llvmOp = "";
+  string constrainedLLVMIntrinsic = "";
+  bit constrainedLLVMIntrinsicHasRoundingMode = true;
 }
 
 class LoweringBuilders<dag p> {
@@ -1882,7 +1899,9 @@ class CIR_UnaryOp<string mnemonic, Type type, list<Trait> traits = []>
         DeclareOpInterfaceMethods<CIR_UnaryOpInterface>
       ], traits)>
 {
-  let arguments = (ins type:$input);
+  dag commonArgs = (ins type:$input);
+
+  let arguments = commonArgs;
 
   let results = (outs type:$result);
 
@@ -2019,7 +2038,18 @@ def CIR_FNegOp : CIR_UnaryOp<"fneg", CIR_AnyFloatOrVecOfFloatType> {
     %3 = cir.fneg %2 : !cir.double
     %5 = cir.fneg %4 : !cir.vector<4 x !cir.float>
     ```
+
+    The optional `fenv` attribute describes constraints on the floating-point
+    handling of the operation.
   }];
+
+  let arguments = !con(commonArgs, (ins OptionalAttr<CIR_FenvAttr>:$fenv));
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input), [{
+      build($_builder, $_state, input, cir::FenvAttr{});
+    }]>
+  ];
 
   let hasFolder = 1;
 
@@ -2569,10 +2599,12 @@ class CIR_BinaryOp<string mnemonic, Type type, list<Trait> traits = []>
         DeclareOpInterfaceMethods<CIR_BinaryOpInterface>
       ], traits)>
 {
-  let arguments = (ins
+  dag commonArgs = (ins
     type:$lhs,
     type:$rhs
   );
+
+  let arguments = commonArgs;
 
   let results = (outs type:$result);
 
@@ -2749,9 +2781,26 @@ def CIR_RemOp : CIR_BinaryOp<"rem", CIR_AnyIntOrVecOfIntType> {
 
 // Base class for floating-point binary arithmetic operations. The lhs, rhs,
 // and result must all be the same floating-point scalar or vector type.
+//
+// The optional `fenv` attribute describes constraints on the floating-point
+// handling of the operation. The LLVM lowering pattern is generated from the
+// `llvmOp` and `constrainedLLVMIntrinsic` fields: an operation without an
+// `fenv` attribute is lowered to the plain `llvmOp`, while an operation with an
+// `fenv` attribute is lowered to a call to the matching constrained
+// floating-point intrinsic (whose mnemonic matches this operation's mnemonic).
 class CIR_FPBinaryOp<string mnemonic, list<Trait> traits = []>
     : CIR_BinaryOp<mnemonic, CIR_AnyFloatOrVecOfFloatType,
-                   !listconcat([Pure], traits)>;
+                   !listconcat([Pure], traits)> {
+  let arguments = !con(commonArgs, (ins OptionalAttr<CIR_FenvAttr>:$fenv));
+
+  let constrainedLLVMIntrinsic = mnemonic;
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, lhs, rhs, cir::FenvAttr{});
+    }]>
+  ];
+}
 
 //===----------------------------------------------------------------------===//
 // FAddOp
@@ -3198,6 +3247,11 @@ def CIR_GlobalOp : CIR_Op<"global", [
     function-local static variable that requires guarded initialization
     (e.g., C++ static local variables with non-constant initializers).
     It contains the mangled name of the guard variable.
+
+    The `strictfp` attribute indicates that the dynamic initialization emitted
+    into the `ctorRegion`/`dtorRegion` runs under a constrained floating-point
+    environment. LoweringPrepare forwards it to the `strictfp` attribute of the
+    generated `__cxx_global_var_init` function.
   }];
 
   // Note that both sym_name and sym_visibility are tied to Symbol trait.
@@ -3223,7 +3277,8 @@ def CIR_GlobalOp : CIR_Op<"global", [
                        OptionalAttr<ASTVarDeclInterface>:$ast,
                        OptionalAttr<StrAttr>:$section,
                        OptionalAttr<CIR_AnnotationArrayAttr>:$annotations,
-                       OptionalAttr<FlatSymbolRefAttr>:$aliasee
+                       OptionalAttr<FlatSymbolRefAttr>:$aliasee,
+                       UnitAttr:$strictfp
                        );
 
   let regions = (region AnyRegion:$ctorRegion,
@@ -6905,15 +6960,31 @@ def CIR_PtrDiffOp : CIR_Op<"ptr_diff", [Pure, SameTypeOperands]> {
 // Floating Point Ops
 //===----------------------------------------------------------------------===//
 
+// The optional `fenv` attribute describes constraints on the floating-point
+// handling of the operation. When it is present, the operation is lowered to a
+// call to the constrained floating-point intrinsic whose mnemonic matches this
+// operation's mnemonic; otherwise it is lowered to the plain `llvmOp`. Rounding
+// mode is passed to the intrinsic by default; operations whose rounding is
+// implied (e.g. ceil, floor, trunc) set
+// `constrainedLLVMIntrinsicHasRoundingMode` to 0, and operations with no
+// constrained variant (e.g. fabs) clear `constrainedLLVMIntrinsic`.
 class CIR_UnaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
     : CIR_Op<mnemonic, [Pure, SameOperandsAndResultType]>
 {
-  let arguments = (ins CIR_AnyFloatOrVecOfFloatType:$src);
+  let arguments = (ins CIR_AnyFloatOrVecOfFloatType:$src,
+                       OptionalAttr<CIR_FenvAttr>:$fenv);
   let results = (outs CIR_AnyFloatOrVecOfFloatType:$result);
 
   let assemblyFormat = "$src `:` type($src) attr-dict";
 
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$src), [{
+      build($_builder, $_state, src, cir::FenvAttr{});
+    }]>
+  ];
+
   let llvmOp = llvmOpName;
+  let constrainedLLVMIntrinsic = mnemonic;
 }
 
 def CIR_SqrtOp : CIR_UnaryFPToFPBuiltinOp<"sqrt", "SqrtOp"> {
@@ -6975,6 +7046,8 @@ def CIR_CeilOp : CIR_UnaryFPToFPBuiltinOp<"ceil", "FCeilOp"> {
 
     Floating-point exceptions are ignored, and it does not set `errno`.
   }];
+
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_CosOp : CIR_UnaryFPToFPBuiltinOp<"cos", "CosOp"> {
@@ -7067,6 +7140,8 @@ def CIR_RoundOp : CIR_UnaryFPToFPBuiltinOp<"round", "RoundOp"> {
 
     Floating-point exceptions are ignored, and it does not set `errno`.
   }];
+
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_RoundEvenOp : CIR_UnaryFPToFPBuiltinOp<"roundeven", "RoundEvenOp"> {
@@ -7077,6 +7152,8 @@ def CIR_RoundEvenOp : CIR_UnaryFPToFPBuiltinOp<"roundeven", "RoundEvenOp"> {
 
     Floating-point exceptions are ignored, and it does not set `errno`.
   }];
+
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_SinOp : CIR_UnaryFPToFPBuiltinOp<"sin", "SinOp"> {
@@ -7107,6 +7184,8 @@ def CIR_TruncOp : CIR_UnaryFPToFPBuiltinOp<"trunc", "FTruncOp"> {
 
     Floating-point exceptions are ignored, and it does not set `errno`.
   }];
+
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_FAbsOp : CIR_UnaryFPToFPBuiltinOp<"fabs", "FAbsOp"> {
@@ -7117,6 +7196,11 @@ def CIR_FAbsOp : CIR_UnaryFPToFPBuiltinOp<"fabs", "FAbsOp"> {
 
     Floating-point exceptions are ignored, and it does not set `errno`.
   }];
+
+  // fabs is exact and has no constrained floating-point intrinsic, so it is
+  // always lowered to the plain llvm.fabs, even under a floating-point
+  // environment.
+  let constrainedLLVMIntrinsic = "";
 }
 
 def CIR_AbsOp : CIR_Op<"abs", [Pure, SameOperandsAndResultType]> {
@@ -7163,6 +7247,8 @@ def CIR_FloorOp : CIR_UnaryFPToFPBuiltinOp<"floor", "FFloorOp"> {
     %y = cir.floor %x : !cir.double
     ```
   }];
+
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 class CIR_UnaryFPToIntBuiltinOp<string mnemonic, string llvmOpName>
@@ -7224,7 +7310,8 @@ class CIR_BinaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
 
   let arguments = (ins
     CIR_AnyFloatOrVecOfFloatType:$lhs,
-    CIR_AnyFloatOrVecOfFloatType:$rhs
+    CIR_AnyFloatOrVecOfFloatType:$rhs,
+    OptionalAttr<CIR_FenvAttr>:$fenv
   );
 
   let results = (outs  CIR_AnyFloatOrVecOfFloatType:$result);
@@ -7232,6 +7319,13 @@ class CIR_BinaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
   let assemblyFormat = [{
     $lhs `,` $rhs `:` qualified(type($lhs)) attr-dict
   }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Type":$result, "mlir::Value":$lhs,
+                   "mlir::Value":$rhs), [{
+      build($_builder, $_state, result, lhs, rhs, cir::FenvAttr{});
+    }]>
+  ];
 
   let llvmOp = llvmOpName;
 }
@@ -7242,6 +7336,10 @@ def CIR_CopysignOp : CIR_BinaryFPToFPBuiltinOp<"copysign", "CopySignOp"> {
     `cir.copysign` returns a value with the magnitude of the first operand
     and the sign of the second operand.
   }];
+
+  // copysign is exact and has no constrained floating-point intrinsic, so it is
+  // always lowered to the plain llvm.copysign, even under a floating-point
+  // environment.
 }
 
 def CIR_FMaxNumOp : CIR_BinaryFPToFPBuiltinOp<"fmaxnum", "MaxNumOp"> {
@@ -7260,6 +7358,9 @@ def CIR_FMaximumOp : CIR_BinaryFPToFPBuiltinOp<"fmaximum", "MaximumOp"> {
     `cir.fmaximum` returns the larger of its two operands according to
     IEEE 754-2019 semantics. If either operand is NaN, NaN is returned.
   }];
+
+  let constrainedLLVMIntrinsic = "maximum";
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_FMinNumOp : CIR_BinaryFPToFPBuiltinOp<"fminnum", "MinNumOp"> {
@@ -7278,6 +7379,9 @@ def CIR_FMinimumOp : CIR_BinaryFPToFPBuiltinOp<"fminimum", "MinimumOp"> {
     `cir.fminimum` returns the smaller of its two operands according to
     IEEE 754-2019 semantics. If either operand is NaN, NaN is returned.
   }];
+
+  let constrainedLLVMIntrinsic = "minimum";
+  let constrainedLLVMIntrinsicHasRoundingMode = 0;
 }
 
 def CIR_FModOp : CIR_BinaryFPToFPBuiltinOp<"fmod", "FRemOp"> {
@@ -7286,6 +7390,9 @@ def CIR_FModOp : CIR_BinaryFPToFPBuiltinOp<"fmod", "FRemOp"> {
     `cir.fmod` computes the floating-point remainder of dividing the first
     operand by the second operand.
   }];
+
+  // fmod maps to the constrained frem intrinsic.
+  let constrainedLLVMIntrinsic = "frem";
 }
 
 def CIR_PowOp : CIR_BinaryFPToFPBuiltinOp<"pow", "PowOp"> {
@@ -7294,6 +7401,8 @@ def CIR_PowOp : CIR_BinaryFPToFPBuiltinOp<"pow", "PowOp"> {
     `cir.pow` computes the first operand raised to the power of the second
     operand.
   }];
+
+  let constrainedLLVMIntrinsic = "pow";
 }
 
 def CIR_ATan2Op : CIR_BinaryFPToFPBuiltinOp<"atan2", "ATan2Op"> {
@@ -7302,6 +7411,8 @@ def CIR_ATan2Op : CIR_BinaryFPToFPBuiltinOp<"atan2", "ATan2Op"> {
     `cir.atan2` computes the arc tangent of the first operand divided by the
     second operand, using the signs of both to determine the quadrant.
   }];
+
+  let constrainedLLVMIntrinsic = "atan2";
 }
 
 def CIR_FrexpOp : CIR_Op<"frexp", [Pure]> {
