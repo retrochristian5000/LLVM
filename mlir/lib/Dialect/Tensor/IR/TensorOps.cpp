@@ -2612,6 +2612,50 @@ public:
   }
 };
 
+/// Fold a full-slice rank-reducing extract_slice of an expand_shape back to
+/// the expand_shape source when the expanded and sliced dimensions match.
+///
+/// Example:
+/// ```
+///   %expanded = tensor.expand_shape %src [[0, 1]] output_shape [4096, 1]
+///       : tensor<4096xf32> into tensor<4096x1xf32>
+///   %slice = tensor.extract_slice %expanded[0, 0] [4096, 1] [1, 1]
+///       : tensor<4096x1xf32> to tensor<4096xf32>
+/// ```
+///
+class FoldExtractSliceOfExpandShape final
+    : public OpRewritePattern<ExtractSliceOp> {
+public:
+  using OpRewritePattern<ExtractSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtractSliceOp sliceOp,
+                                PatternRewriter &rewriter) const override {
+    auto expandOp = sliceOp.getSource().getDefiningOp<ExpandShapeOp>();
+    if (!expandOp)
+      return failure();
+
+    if (sliceOp.getType() != expandOp.getSrcType())
+      return failure();
+
+    SmallVector<OpFoldResult> mixedExpandedSizes = expandOp.getMixedOutputShape();
+    if (mixedExpandedSizes.size() != sliceOp.getMixedSizes().size())
+      return failure();
+
+    for (auto [offset, size, stride, expandedSize] : llvm::zip_equal(
+             sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
+             sliceOp.getMixedStrides(), mixedExpandedSizes)) {
+      if (getConstantIntValue(offset) != static_cast<int64_t>(0) ||
+          getConstantIntValue(stride) != static_cast<int64_t>(1))
+        return failure();
+      if (size != expandedSize)
+        return failure();
+    }
+
+    rewriter.replaceOp(sliceOp, expandOp.getSrc());
+    return success();
+  }
+};
+
 /// Slice elements from `values` into `outValues`. `counts` represents the
 /// numbers of elements to stride in the original values for each dimension.
 /// The output values can be used to construct a DenseElementsAttr.
@@ -2767,8 +2811,8 @@ void ExtractSliceOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
   results.add<
       OpWithOffsetSizesAndStridesConstantArgumentFolder<
-          ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
-      ExtractSliceOpCastFolder>(context);
+      ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
+    FoldExtractSliceOfExpandShape, ExtractSliceOpCastFolder>(context);
 }
 
 //
