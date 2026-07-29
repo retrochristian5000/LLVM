@@ -31,10 +31,12 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Enum.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/DXILResource.h"
 #include "llvm/Frontend/HLSL/RootSignatureMetadata.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -99,6 +101,35 @@ void addRootSignatureMD(llvm::dxbc::RootSignatureVersion RootSigVer,
   StringRef RootSignatureValKey = "dx.rootsignatures";
   auto *RootSignatureValMD = M.getOrInsertNamedMetadata(RootSignatureValKey);
   RootSignatureValMD->addOperand(MDVals);
+}
+
+MDNode *buildSemanticSignatureMD(
+    ArrayRef<llvm::hlsl::SemanticSignatureElement> Elements, LLVMContext &Ctx) {
+  if (Elements.empty())
+    return nullptr;
+
+  SmallVector<Metadata *> ElementMD;
+  llvm::transform(Elements, std::back_inserter(ElementMD),
+                  [&Ctx](const llvm::hlsl::SemanticSignatureElement &Element) {
+                    return Element.toMetadata(Ctx);
+                  });
+  return MDNode::get(Ctx, ElementMD);
+}
+
+void addSemanticSignatureMD(
+    ArrayRef<llvm::hlsl::SemanticSignatureElement> InputElements,
+    ArrayRef<llvm::hlsl::SemanticSignatureElement> OutputElements,
+    llvm::Function *Fn, llvm::Module &M) {
+  if (InputElements.empty() && OutputElements.empty())
+    return;
+
+  LLVMContext &Ctx = M.getContext();
+  MDNode *InputSignature = buildSemanticSignatureMD(InputElements, Ctx);
+  MDNode *OutputSignature = buildSemanticSignatureMD(OutputElements, Ctx);
+  MDNode *MDVals = MDNode::get(
+      Ctx, {ValueAsMetadata::get(Fn), InputSignature, OutputSignature});
+
+  M.getOrInsertNamedMetadata("dx.semantic.signatures")->addOperand(MDVals);
 }
 
 static void copyGlobalResource(CodeGenFunction &CGF, const VarDecl *ResourceVD,
@@ -1226,12 +1257,63 @@ static SemanticShape getSemanticShape(ASTContext &Ctx, QualType Ty) {
   return {Rows, Cols, Ty};
 }
 
+static llvm::dxil::ElementType getSignatureComponentType(CodeGenModule &CGM,
+                                                         QualType Ty) {
+  if (const auto *VT = Ty->getAs<clang::VectorType>())
+    Ty = VT->getElementType();
+  else if (const auto *MT = Ty->getAs<clang::ConstantMatrixType>())
+    Ty = MT->getElementType();
+
+  llvm::Type *IRTy = CGM.getTypes().ConvertTypeForMem(Ty);
+  bool IsSigned = Ty->isSignedIntegerOrEnumerationType();
+  return llvm::dxil::toDXILElementType(IRTy, IsSigned);
+}
+
+static llvm::dxbc::PSV::SemanticKind
+getSignatureSemanticKind(StringRef SemanticName) {
+  if (!SemanticName.consume_front_insensitive("SV_"))
+    return llvm::dxbc::PSV::SemanticKind::Arbitrary;
+
+  for (const auto &Kind : llvm::dxbc::PSV::getSemanticKinds())
+    if (SemanticName.equals_insensitive(Kind.name()))
+      return Kind.value();
+
+  return llvm::dxbc::PSV::SemanticKind::Invalid;
+}
+
+static llvm::hlsl::SemanticSignatureElement createSemanticSignatureElement(
+    CodeGenModule &CGM, uint32_t SigId, HLSLAppliedSemanticAttr *Semantic,
+    std::optional<unsigned> Index, const SemanticShape &Shape) {
+  llvm::hlsl::SemanticSignatureElement Element{};
+  Element.SigId = SigId;
+  Element.SemanticName = Semantic->getAttrName()->getName();
+  Element.CompType = getSignatureComponentType(CGM, Shape.RowType);
+  Element.SemanticKind = getSignatureSemanticKind(Element.SemanticName);
+  Element.Rows = Shape.Rows;
+  Element.Cols = static_cast<uint8_t>(Shape.Cols);
+  // All members with a default value will be filled at a later stage, either
+  // during packing or analysis of usage
+  //
+  // FIXME #189762: Element.InterpMode is to be set
+
+  uint32_t FirstSemanticIndex = Index.value_or(0);
+  for (uint32_t I = 0; I < Shape.Rows; ++I)
+    Element.SemanticIndices.push_back(FirstSemanticIndex + I);
+
+  return Element;
+}
+
 llvm::Value *CGHLSLRuntime::emitDXILUserSemanticLoad(
     llvm::IRBuilder<> &B, llvm::Type *Type, const clang::DeclaratorDecl *Decl,
-    HLSLAppliedSemanticAttr *Semantic, std::optional<unsigned> Index) {
+    HLSLAppliedSemanticAttr *Semantic, std::optional<unsigned> Index,
+    SemanticSignatures &Signature) {
   StringRef Name = Semantic->getAttrName()->getName();
   SemanticShape Shape =
       getSemanticShape(CGM.getContext(), getSemanticLeafType(Decl));
+
+  uint32_t SigId = Signature.size();
+  Signature.push_back(
+      createSemanticSignatureElement(CGM, SigId, Semantic, Index, Shape));
 
   llvm::Type *RowTy = CGM.getTypes().ConvertTypeForMem(Shape.RowType);
 
@@ -1244,7 +1326,6 @@ llvm::Value *CGHLSLRuntime::emitDXILUserSemanticLoad(
     OB.emplace_back("convergencectrl", bundleArgs);
   }
 
-  unsigned SigId = DXILInputSemanticIndex++;
   unsigned Row = 0;
 
   // Scalar and vector leaves need no aggregate reconstruction.
@@ -1312,9 +1393,15 @@ void CGHLSLRuntime::emitDXILUserSemanticStore(llvm::IRBuilder<> &B,
                                               llvm::Value *Source,
                                               const clang::DeclaratorDecl *Decl,
                                               HLSLAppliedSemanticAttr *Semantic,
-                                              std::optional<unsigned> Index) {
+                                              std::optional<unsigned> Index,
+                                              SemanticSignatures &Signature) {
   SemanticShape Shape =
       getSemanticShape(CGM.getContext(), getSemanticLeafType(Decl));
+
+  uint32_t SigId = Signature.size();
+  Signature.push_back(
+      createSemanticSignatureElement(CGM, SigId, Semantic, Index, Shape));
+
   llvm::Type *RowTy = CGM.getTypes().ConvertTypeForMem(Shape.RowType);
 
   llvm::Function *IntrFn = llvm::Intrinsic::getOrInsertDeclaration(
@@ -1327,7 +1414,6 @@ void CGHLSLRuntime::emitDXILUserSemanticStore(llvm::IRBuilder<> &B,
     OB.emplace_back("convergencectrl", bundleArgs);
   }
 
-  unsigned SigId = DXILOutputSemanticIndex++;
   unsigned Row = 0;
 
   struct StoreItem {
@@ -1360,12 +1446,12 @@ void CGHLSLRuntime::emitDXILUserSemanticStore(llvm::IRBuilder<> &B,
 llvm::Value *CGHLSLRuntime::emitUserSemanticLoad(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Type *Type,
     const clang::DeclaratorDecl *Decl, HLSLAppliedSemanticAttr *Semantic,
-    std::optional<unsigned> Index) {
+    std::optional<unsigned> Index, SemanticSignatures &Signature) {
   if (CGM.getTarget().getTriple().isSPIRV())
     return emitSPIRVUserSemanticLoad(B, FD, Type, Decl, Semantic, Index);
 
   if (CGM.getTarget().getTriple().isDXIL())
-    return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index);
+    return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index, Signature);
 
   llvm_unreachable("Unsupported target for user-semantic load.");
 }
@@ -1373,12 +1459,14 @@ llvm::Value *CGHLSLRuntime::emitUserSemanticLoad(
 void CGHLSLRuntime::emitUserSemanticStore(IRBuilder<> &B, llvm::Value *Source,
                                           const clang::DeclaratorDecl *Decl,
                                           HLSLAppliedSemanticAttr *Semantic,
-                                          std::optional<unsigned> Index) {
+                                          std::optional<unsigned> Index,
+                                          SemanticSignatures &Signature) {
   if (CGM.getTarget().getTriple().isSPIRV())
     return emitSPIRVUserSemanticStore(B, Source, Decl, Semantic, Index);
 
   if (CGM.getTarget().getTriple().isDXIL())
-    return emitDXILUserSemanticStore(B, Source, Decl, Semantic, Index);
+    return emitDXILUserSemanticStore(B, Source, Decl, Semantic, Index,
+                                     Signature);
 
   llvm_unreachable("Unsupported target for user-semantic load.");
 }
@@ -1386,7 +1474,7 @@ void CGHLSLRuntime::emitUserSemanticStore(IRBuilder<> &B, llvm::Value *Source,
 llvm::Value *CGHLSLRuntime::emitSystemSemanticLoad(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Type *Type,
     const clang::DeclaratorDecl *Decl, HLSLAppliedSemanticAttr *Semantic,
-    std::optional<unsigned> Index) {
+    std::optional<unsigned> Index, SemanticSignatures &Signature) {
 
   std::string SemanticName = Semantic->getAttrName()->getName().upper();
   if (SemanticName == "SV_GROUPINDEX") {
@@ -1433,11 +1521,13 @@ llvm::Value *CGHLSLRuntime::emitSystemSemanticLoad(
                                       Semantic->getAttrName()->getName(),
                                       /* BuiltIn::FragCoord */ 15);
       if (CGM.getTarget().getTriple().isDXIL())
-        return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index);
+        return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index,
+                                        Signature);
     }
 
     if (ST == Triple::EnvironmentType::Vertex) {
-      return emitUserSemanticLoad(B, FD, Type, Decl, Semantic, Index);
+      return emitUserSemanticLoad(B, FD, Type, Decl, Semantic, Index,
+                                  Signature);
     }
   }
 
@@ -1448,7 +1538,8 @@ llvm::Value *CGHLSLRuntime::emitSystemSemanticLoad(
                                       Semantic->getAttrName()->getName(),
                                       /* BuiltIn::VertexIndex */ 42);
       else
-        return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index);
+        return emitDXILUserSemanticLoad(B, Type, Decl, Semantic, Index,
+                                        Signature);
     }
   }
 
@@ -1473,12 +1564,13 @@ static void createSPIRVBuiltinStore(IRBuilder<> &B, llvm::Module &M,
 void CGHLSLRuntime::emitSystemSemanticStore(IRBuilder<> &B, llvm::Value *Source,
                                             const clang::DeclaratorDecl *Decl,
                                             HLSLAppliedSemanticAttr *Semantic,
-                                            std::optional<unsigned> Index) {
+                                            std::optional<unsigned> Index,
+                                            SemanticSignatures &Signature) {
 
   std::string SemanticName = Semantic->getAttrName()->getName().upper();
   if (SemanticName == "SV_POSITION") {
     if (CGM.getTarget().getTriple().isDXIL()) {
-      emitDXILUserSemanticStore(B, Source, Decl, Semantic, Index);
+      emitDXILUserSemanticStore(B, Source, Decl, Semantic, Index, Signature);
       return;
     }
 
@@ -1491,7 +1583,7 @@ void CGHLSLRuntime::emitSystemSemanticStore(IRBuilder<> &B, llvm::Value *Source,
   }
 
   if (SemanticName == "SV_TARGET") {
-    emitUserSemanticStore(B, Source, Decl, Semantic, Index);
+    emitUserSemanticStore(B, Source, Decl, Semantic, Index, Signature);
     return;
   }
 
@@ -1501,22 +1593,27 @@ void CGHLSLRuntime::emitSystemSemanticStore(IRBuilder<> &B, llvm::Value *Source,
 
 llvm::Value *CGHLSLRuntime::handleScalarSemanticLoad(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Type *Type,
-    const clang::DeclaratorDecl *Decl, HLSLAppliedSemanticAttr *Semantic) {
+    const clang::DeclaratorDecl *Decl, HLSLAppliedSemanticAttr *Semantic,
+    SemanticSignatures &Signature) {
 
   std::optional<unsigned> Index = Semantic->getSemanticIndex();
   if (Semantic->getAttrName()->getName().starts_with_insensitive("SV_"))
-    return emitSystemSemanticLoad(B, FD, Type, Decl, Semantic, Index);
-  return emitUserSemanticLoad(B, FD, Type, Decl, Semantic, Index);
+    return emitSystemSemanticLoad(B, FD, Type, Decl, Semantic, Index,
+                                  Signature);
+  return emitUserSemanticLoad(B, FD, Type, Decl, Semantic, Index, Signature);
 }
 
-void CGHLSLRuntime::handleScalarSemanticStore(
-    IRBuilder<> &B, const FunctionDecl *FD, llvm::Value *Source,
-    const clang::DeclaratorDecl *Decl, HLSLAppliedSemanticAttr *Semantic) {
+void CGHLSLRuntime::handleScalarSemanticStore(IRBuilder<> &B,
+                                              const FunctionDecl *FD,
+                                              llvm::Value *Source,
+                                              const clang::DeclaratorDecl *Decl,
+                                              HLSLAppliedSemanticAttr *Semantic,
+                                              SemanticSignatures &Signature) {
   std::optional<unsigned> Index = Semantic->getSemanticIndex();
   if (Semantic->getAttrName()->getName().starts_with_insensitive("SV_"))
-    emitSystemSemanticStore(B, Source, Decl, Semantic, Index);
+    emitSystemSemanticStore(B, Source, Decl, Semantic, Index, Signature);
   else
-    emitUserSemanticStore(B, Source, Decl, Semantic, Index);
+    emitUserSemanticStore(B, Source, Decl, Semantic, Index, Signature);
 }
 
 std::pair<llvm::Value *, specific_attr_iterator<HLSLAppliedSemanticAttr>>
@@ -1524,7 +1621,8 @@ CGHLSLRuntime::handleStructSemanticLoad(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Type *Type,
     const clang::DeclaratorDecl *Decl,
     specific_attr_iterator<HLSLAppliedSemanticAttr> AttrBegin,
-    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd) {
+    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd,
+    SemanticSignatures &Signature) {
   const llvm::StructType *ST = cast<StructType>(Type);
   const clang::RecordDecl *RD = Decl->getType()->getAsRecordDecl();
 
@@ -1533,8 +1631,9 @@ CGHLSLRuntime::handleStructSemanticLoad(
   llvm::Value *Aggregate = llvm::PoisonValue::get(Type);
   auto FieldDecl = RD->field_begin();
   for (unsigned I = 0; I < ST->getNumElements(); ++I) {
-    auto [ChildValue, NextAttr] = handleSemanticLoad(
-        B, FD, ST->getElementType(I), *FieldDecl, AttrBegin, AttrEnd);
+    auto [ChildValue, NextAttr] =
+        handleSemanticLoad(B, FD, ST->getElementType(I), *FieldDecl, AttrBegin,
+                           AttrEnd, Signature);
     AttrBegin = NextAttr;
     assert(ChildValue);
     Aggregate = B.CreateInsertValue(Aggregate, ChildValue, I);
@@ -1549,7 +1648,8 @@ CGHLSLRuntime::handleStructSemanticStore(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Value *Source,
     const clang::DeclaratorDecl *Decl,
     specific_attr_iterator<HLSLAppliedSemanticAttr> AttrBegin,
-    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd) {
+    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd,
+    SemanticSignatures &Signature) {
 
   const llvm::StructType *ST = cast<StructType>(Source->getType());
 
@@ -1565,8 +1665,8 @@ CGHLSLRuntime::handleStructSemanticStore(
   auto FieldDecl = RD->field_begin();
   for (unsigned I = 0; I < ST->getNumElements(); ++I, ++FieldDecl) {
     llvm::Value *Extract = B.CreateExtractValue(Source, I);
-    AttrBegin =
-        handleSemanticStore(B, FD, Extract, *FieldDecl, AttrBegin, AttrEnd);
+    AttrBegin = handleSemanticStore(B, FD, Extract, *FieldDecl, AttrBegin,
+                                    AttrEnd, Signature);
   }
 
   return AttrBegin;
@@ -1577,15 +1677,17 @@ CGHLSLRuntime::handleSemanticLoad(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Type *Type,
     const clang::DeclaratorDecl *Decl,
     specific_attr_iterator<HLSLAppliedSemanticAttr> AttrBegin,
-    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd) {
+    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd,
+    SemanticSignatures &Signature) {
   assert(AttrBegin != AttrEnd);
   if (Type->isStructTy())
-    return handleStructSemanticLoad(B, FD, Type, Decl, AttrBegin, AttrEnd);
+    return handleStructSemanticLoad(B, FD, Type, Decl, AttrBegin, AttrEnd,
+                                    Signature);
 
   HLSLAppliedSemanticAttr *Attr = *AttrBegin;
   ++AttrBegin;
-  return std::make_pair(handleScalarSemanticLoad(B, FD, Type, Decl, Attr),
-                        AttrBegin);
+  return std::make_pair(
+      handleScalarSemanticLoad(B, FD, Type, Decl, Attr, Signature), AttrBegin);
 }
 
 specific_attr_iterator<HLSLAppliedSemanticAttr>
@@ -1593,19 +1695,24 @@ CGHLSLRuntime::handleSemanticStore(
     IRBuilder<> &B, const FunctionDecl *FD, llvm::Value *Source,
     const clang::DeclaratorDecl *Decl,
     specific_attr_iterator<HLSLAppliedSemanticAttr> AttrBegin,
-    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd) {
+    specific_attr_iterator<HLSLAppliedSemanticAttr> AttrEnd,
+    SemanticSignatures &Signature) {
   assert(AttrBegin != AttrEnd);
   if (Source->getType()->isStructTy())
-    return handleStructSemanticStore(B, FD, Source, Decl, AttrBegin, AttrEnd);
+    return handleStructSemanticStore(B, FD, Source, Decl, AttrBegin, AttrEnd,
+                                     Signature);
 
   HLSLAppliedSemanticAttr *Attr = *AttrBegin;
   ++AttrBegin;
-  handleScalarSemanticStore(B, FD, Source, Decl, Attr);
+  handleScalarSemanticStore(B, FD, Source, Decl, Attr, Signature);
   return AttrBegin;
 }
 
 void CGHLSLRuntime::emitEntryFunction(const FunctionDecl *FD,
                                       llvm::Function *Fn) {
+  SmallVector<llvm::hlsl::SemanticSignatureElement> InputSignature;
+  SmallVector<llvm::hlsl::SemanticSignatureElement> OutputSignature;
+
   llvm::Module &M = CGM.getModule();
   llvm::LLVMContext &Ctx = M.getContext();
   auto *EntryTy = llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx), false);
@@ -1668,8 +1775,8 @@ void CGHLSLRuntime::emitEntryFunction(const FunctionDecl *FD,
 
       auto AttrBegin = PD->specific_attr_begin<HLSLAppliedSemanticAttr>();
       auto AttrEnd = PD->specific_attr_end<HLSLAppliedSemanticAttr>();
-      auto Result =
-          handleSemanticLoad(B, FD, ParamType, PD, AttrBegin, AttrEnd);
+      auto Result = handleSemanticLoad(B, FD, ParamType, PD, AttrBegin, AttrEnd,
+                                       InputSignature);
       SemanticValue = Result.first;
       if (!SemanticValue)
         return;
@@ -1702,7 +1809,8 @@ void CGHLSLRuntime::emitEntryFunction(const FunctionDecl *FD,
 
     auto AttrBegin = FD->specific_attr_begin<HLSLAppliedSemanticAttr>();
     auto AttrEnd = FD->specific_attr_end<HLSLAppliedSemanticAttr>();
-    handleSemanticStore(B, FD, SourceValue, FD, AttrBegin, AttrEnd);
+    handleSemanticStore(B, FD, SourceValue, FD, AttrBegin, AttrEnd,
+                        OutputSignature);
   }
 
   B.CreateRetVoid();
@@ -1715,6 +1823,8 @@ void CGHLSLRuntime::emitEntryFunction(const FunctionDecl *FD,
                          EntryFn, M);
     }
   }
+
+  addSemanticSignatureMD(InputSignature, OutputSignature, EntryFn, M);
 }
 
 static void gatherFunctions(SmallVectorImpl<Function *> &Fns, llvm::Module &M,
