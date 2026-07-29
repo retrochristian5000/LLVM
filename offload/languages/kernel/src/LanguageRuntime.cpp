@@ -20,8 +20,6 @@
 
 #include "OffloadAPI.h"
 
-#include "DefineLanguageNames.inc"
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -31,16 +29,8 @@
 
 namespace language_runtime = llvm::offload::kernel;
 
-static Error_t convertResult(ol_result_t Result) {
-  if (Result == OL_SUCCESS)
-    return Success;
-  switch (Result->Code) {
-  case OL_ERRC_INVALID_VALUE:
-    return ErrorInvalidValue;
-  default:
-    return ErrorInvalidValue;
-  }
-}
+#include "DefineLanguageNames.inc"
+#include "LanguageUtils.cpp"
 
 Error_t Malloc(void **DevPtr, size_t Size) {
   ol_device_handle_t Device = language_runtime::getDefaultDevice();
@@ -104,7 +94,7 @@ Error_t DeviceSynchronize() {
 Error_t GetDevice(int *DeviceNo) {
   ol_device_handle_t Device = language_runtime::getDevice(DeviceNo);
   if (!Device)
-    return ErrorInvalidValue;
+    return ErrorInvalidDevice;
   return Success;
 }
 
@@ -116,7 +106,7 @@ Error_t GetDeviceCount(int *Count) {
 Error_t SetDevice(int DeviceNo) {
   ol_device_handle_t Device = language_runtime::setDefaultDevice(DeviceNo);
   if (!Device)
-    return ErrorInvalidValue;
+    return ErrorInvalidDevice;
   assert(Device == language_runtime::getDefaultDevice() &&
          "Set Device is not Default Device");
   return Success;
@@ -152,18 +142,13 @@ Error_t GetDeviceProperties(DeviceProp_t *DeviceProp, int DeviceNo) {
   return Success;
 }
 
-static Error_t getQueueFromStream(Stream_t Stream, ol_queue_handle_t *Queue) {
-  if (!Stream)
-    return ErrorInvalidValue;
-  *Queue = reinterpret_cast<ol_queue_handle_t>(Stream);
-  return Success;
-}
-
 Error_t StreamCreate(Stream_t *Stream) {
   ol_queue_handle_t Queue;
-  olCreateQueue(language_runtime::getDefaultDevice(), &Queue);
-  *Stream = reinterpret_cast<Stream_t>(Queue);
-  return Success;
+  ol_result_t Result =
+      olCreateQueue(language_runtime::getDefaultDevice(), &Queue);
+  if (Result == OL_SUCCESS)
+    *Stream = reinterpret_cast<Stream_t>(Queue);
+  return convertResult(Result);
 }
 
 Error_t StreamDestroy(Stream_t Stream) {

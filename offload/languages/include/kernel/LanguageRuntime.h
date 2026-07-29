@@ -17,7 +17,13 @@
 enum Error_t : uint32_t {
   Success = 0,
   ErrorInvalidValue = 1,
+  ErrorInvalidDevice = 2,
+  ErrorUnknown = 3,
 };
+
+const char *GetErrorName(Error_t Error);
+
+const char *GetErrorString(Error_t Error);
 
 struct DeviceProp_t {
   char name[256];
