@@ -653,6 +653,19 @@ func.func @dont_fold_extract_slice_of_expand_shape_with_different_sizes(
 
 // -----
 
+// CHECK-LABEL: func @fold_extract_slice_of_empty
+//   CHECK-NOT:   tensor.extract_slice
+//       CHECK:   %[[EMPTY:.*]] = tensor.empty() : tensor<4096xf32>
+//       CHECK:   return %[[EMPTY]] : tensor<4096xf32>
+func.func @fold_extract_slice_of_empty() -> tensor<4096xf32> {
+  %empty = tensor.empty() : tensor<4096x1xf32>
+  %slice = tensor.extract_slice %empty[0, 0] [4096, 1] [1, 1]
+    : tensor<4096x1xf32> to tensor<4096xf32>
+  return %slice : tensor<4096xf32>
+}
+
+// -----
+
 // CHECK-LABEL: func @trivial_insert_slice
 //  CHECK-SAME:   %[[ARG0:.[a-z0-9A-Z_]+]]: tensor<4x6x16x32xi8>
 //   CHECK-NOT:   tensor.extract_slice

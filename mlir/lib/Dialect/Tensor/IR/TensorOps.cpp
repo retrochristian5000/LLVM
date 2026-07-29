@@ -2656,6 +2656,28 @@ public:
   }
 };
 
+/// Fold extract_slice of tensor.empty to a smaller tensor.empty.
+class FoldExtractSliceOfEmpty final
+    : public OpRewritePattern<ExtractSliceOp> {
+public:
+  using OpRewritePattern<ExtractSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtractSliceOp sliceOp,
+                                PatternRewriter &rewriter) const override {
+    auto makeSmallerEmpty = [&]() -> Value {
+      return EmptyOp::create(rewriter, sliceOp.getLoc(), sliceOp.getType(),
+                             sliceOp.getSizes())
+          .getResult();
+    };
+
+    if (sliceOp.getSource().getDefiningOp<EmptyOp>()) {
+      rewriter.replaceOp(sliceOp, makeSmallerEmpty());
+      return success();
+    }
+    return failure();
+  }
+};
+
 /// Slice elements from `values` into `outValues`. `counts` represents the
 /// numbers of elements to stride in the original values for each dimension.
 /// The output values can be used to construct a DenseElementsAttr.
@@ -2812,7 +2834,8 @@ void ExtractSliceOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<
       OpWithOffsetSizesAndStridesConstantArgumentFolder<
       ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
-    FoldExtractSliceOfExpandShape, ExtractSliceOpCastFolder>(context);
+      FoldExtractSliceOfEmpty, FoldExtractSliceOfExpandShape,
+      ExtractSliceOpCastFolder>(context);
 }
 
 //
