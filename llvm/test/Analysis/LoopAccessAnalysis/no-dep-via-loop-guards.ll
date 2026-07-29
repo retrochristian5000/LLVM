@@ -5,13 +5,19 @@
 define void @access_after_via_loop_guard(ptr %a, i64 %off) {
 ; CHECK-LABEL: 'access_after_via_loop_guard'
 ; CHECK-NEXT:    loop:
-; CHECK-NEXT:      Memory dependences are safe
+; CHECK-NEXT:      Report: unsafe dependent memory operations in loop. Use #pragma clang loop distribute(enable) to allow loop distribution to attempt to isolate the offending operations into a separate loop
+; CHECK-NEXT:  Unknown data dependence.
 ; CHECK-NEXT:      Dependences:
+; CHECK-NEXT:        Unknown:
+; CHECK-NEXT:            %l = load i32, ptr %gep.after, align 4 ->
+; CHECK-NEXT:            store i32 %add, ptr %gep, align 4
+; CHECK-EMPTY:
 ; CHECK-NEXT:      Run-time memory checks:
 ; CHECK-NEXT:      Grouped accesses:
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %off == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
 ;
@@ -53,6 +59,7 @@ define void @access_after_via_loop_guard_sge(ptr %a, i64 %off) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %off == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
 ;
@@ -92,6 +99,7 @@ define void @access_after_via_loop_guard_99(ptr %a, i64 %off) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %off == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
 ;
@@ -133,6 +141,7 @@ define void @access_after_via_loop_guard_sge_99(ptr %a, i64 %off) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %off == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
 ;
@@ -172,6 +181,7 @@ define void @access_after_via_loop_guard_uge(ptr %a, i64 %off) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %off == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
 ;
@@ -354,20 +364,22 @@ exit:
 define void @nodep_via_logical_and_1(ptr %A, i32 %index, i32 %n) {
 ; CHECK-LABEL: 'nodep_via_logical_and_1'
 ; CHECK-NEXT:    loop:
-; CHECK-NEXT:      Report: unsafe dependent memory operations in loop. Use #pragma clang loop distribute(enable) to allow loop distribution to attempt to isolate the offending operations into a separate loop
-; CHECK-NEXT:  Unknown data dependence.
+; CHECK-NEXT:      Memory dependences are safe
 ; CHECK-NEXT:      Dependences:
-; CHECK-NEXT:        Unknown:
-; CHECK-NEXT:            %0 = load double, ptr %gep.load, align 8 ->
-; CHECK-NEXT:            store double %0, ptr %gep.store, align 8
-; CHECK-EMPTY:
 ; CHECK-NEXT:      Run-time memory checks:
 ; CHECK-NEXT:      Grouped accesses:
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %index == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
+; CHECK-NEXT:      [PSE] %gep.load = getelementptr double, ptr %A, i64 %iv:
+; CHECK-NEXT:        {((8 * (zext i32 (1 + %index) to i64))<nuw><nsw> + %A),+,8}<nw><%loop>
+; CHECK-NEXT:        --> {(16 + %A),+,8}<nw><%loop>
+; CHECK-NEXT:      [PSE] %gep.store = getelementptr double, ptr %A, i64 %index.ext:
+; CHECK-NEXT:        ((8 * (zext i32 %index to i64))<nuw><nsw> + %A)
+; CHECK-NEXT:        --> (8 + %A)
 ;
 entry:
   %pre.0 = icmp sgt i32 %index, 0
@@ -407,8 +419,15 @@ define void @nodep_via_logical_and_2(ptr %A, i32 %index, i32 %n) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Non vectorizable stores to invariant address were not found in loop.
 ; CHECK-NEXT:      SCEV assumptions:
+; CHECK-NEXT:      Equal predicate: %index == 1
 ; CHECK-EMPTY:
 ; CHECK-NEXT:      Expressions re-written:
+; CHECK-NEXT:      [PSE] %gep.load = getelementptr double, ptr %A, i64 %iv:
+; CHECK-NEXT:        {((8 * (zext i32 (1 + %index) to i64))<nuw><nsw> + %A),+,8}<nw><%loop>
+; CHECK-NEXT:        --> {(16 + %A),+,8}<nw><%loop>
+; CHECK-NEXT:      [PSE] %gep.store = getelementptr double, ptr %A, i64 %index.ext:
+; CHECK-NEXT:        ((8 * (zext i32 %index to i64))<nuw><nsw> + %A)
+; CHECK-NEXT:        --> (8 + %A)
 ;
 entry:
   %pre.0 = icmp sgt i32 %index, 0

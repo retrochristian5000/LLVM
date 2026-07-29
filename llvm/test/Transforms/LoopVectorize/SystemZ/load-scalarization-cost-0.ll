@@ -2,8 +2,6 @@
 ; RUN:   -force-vector-width=2 -debug-only=loop-vectorize \
 ; RUN:   -disable-output < %s 2>&1 | FileCheck %s
 ; REQUIRES: asserts
-;
-; Check that a scalarized load does not get operands scalarization costs added.
 
 define void @fun(ptr %data, i64 %n, i64 %s, ptr %Src) {
 entry:
@@ -24,6 +22,6 @@ for.body:
 for.end:
   ret void
 
-; CHECK: Cost of 2 for VF 2: forced scalar   %mul = mul nsw i64 %iv, %s
-; CHECK: Cost of 2 for VF 2: REPLICATE ir<%ld> = load ir<%bct>
+; CHECK: Cost of 0 for VF 2: forced scalar   %mul = mul nsw i64 %iv, %s
+; CHECK: Cost of 1 for VF 2: WIDEN ir<%ld> = load vp<{{.*}}>
 }

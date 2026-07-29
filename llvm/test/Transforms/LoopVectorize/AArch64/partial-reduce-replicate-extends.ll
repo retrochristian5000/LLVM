@@ -7,20 +7,20 @@ target triple = "aarch64"
 define double @test(i32 %0) {
 ; CHECK-LABEL: define double @test(
 ; CHECK-SAME: i32 [[TMP0:%.*]]) {
-; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:  [[ENTRY:.*]]:
 ; CHECK-NEXT:    br label %[[VECTOR_PH:.*]]
 ; CHECK:       [[VECTOR_PH]]:
+; CHECK-NEXT:    [[REDUX:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[BINOP:%.*]], %[[VECTOR_PH]] ]
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[NEXT_IV:%.*]], %[[VECTOR_PH]] ]
 ; CHECK-NEXT:    [[TMP1:%.*]] = zext i32 [[TMP0]] to i64
-; CHECK-NEXT:    [[BROADCAST_SPLATINSERT:%.*]] = insertelement <2 x i64> poison, i64 [[TMP1]], i64 0
-; CHECK-NEXT:    [[BROADCAST_SPLAT:%.*]] = shufflevector <2 x i64> [[BROADCAST_SPLATINSERT]], <2 x i64> poison, <2 x i32> zeroinitializer
-; CHECK-NEXT:    br label %[[VECTOR_BODY:.*]]
-; CHECK:       [[VECTOR_BODY]]:
-; CHECK-NEXT:    [[TMP2:%.*]] = or <2 x i64> zeroinitializer, [[BROADCAST_SPLAT]]
-; CHECK-NEXT:    br label %[[MIDDLE_BLOCK:.*]]
-; CHECK:       [[MIDDLE_BLOCK]]:
-; CHECK-NEXT:    [[TMP3:%.*]] = call i64 @llvm.vector.reduce.or.v2i64(<2 x i64> [[TMP2]])
-; CHECK-NEXT:    br label %[[EXIT:.*]]
+; CHECK-NEXT:    [[BINOP]] = or i64 [[REDUX]], [[TMP1]]
+; CHECK-NEXT:    [[GEP:%.*]] = getelementptr [8 x i8], ptr null, i64 [[TMP1]]
+; CHECK-NEXT:    [[LOAD:%.*]] = load double, ptr [[GEP]], align 8
+; CHECK-NEXT:    [[NEXT_IV]] = add i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND_NOT:%.*]] = icmp eq i64 [[IV]], 1
+; CHECK-NEXT:    br i1 [[EXITCOND_NOT]], label %[[EXIT:.*]], label %[[VECTOR_PH]]
 ; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    [[TMP3:%.*]] = phi i64 [ [[BINOP]], %[[VECTOR_PH]] ]
 ; CHECK-NEXT:    [[RET:%.*]] = uitofp i64 [[TMP3]] to double
 ; CHECK-NEXT:    ret double [[RET]]
 ;

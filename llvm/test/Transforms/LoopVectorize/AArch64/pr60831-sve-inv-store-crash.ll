@@ -343,6 +343,9 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; CHECK-LABEL: @test_loop2(
 ; CHECK-NEXT:  iter.check:
 ; CHECK-NEXT:    br i1 false, label [[VEC_EPILOG_SCALAR_PH:%.*]], label [[VECTOR_MAIN_LOOP_ITER_CHECK:%.*]]
+; CHECK:       vector.scevcheck:
+; CHECK-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i64 [[N:%.*]], 1
+; CHECK-NEXT:    br i1 [[IDENT_CHECK]], label [[VEC_EPILOG_SCALAR_PH]], label [[VECTOR_MAIN_LOOP_ITER_CHECK1:%.*]]
 ; CHECK:       vector.main.loop.iter.check:
 ; CHECK-NEXT:    br i1 false, label [[VEC_EPILOG_PH:%.*]], label [[VECTOR_PH:%.*]]
 ; CHECK:       vector.ph:
@@ -364,22 +367,22 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; CHECK-NEXT:    [[TMP13:%.*]] = add i64 [[INDEX]], 13
 ; CHECK-NEXT:    [[TMP14:%.*]] = add i64 [[INDEX]], 14
 ; CHECK-NEXT:    [[TMP15:%.*]] = add i64 [[INDEX]], 15
-; CHECK-NEXT:    [[TMP16:%.*]] = sub nsw i64 [[N:%.*]], [[INDEX]]
-; CHECK-NEXT:    [[TMP17:%.*]] = sub nsw i64 [[N]], [[TMP1]]
-; CHECK-NEXT:    [[TMP18:%.*]] = sub nsw i64 [[N]], [[TMP2]]
-; CHECK-NEXT:    [[TMP19:%.*]] = sub nsw i64 [[N]], [[TMP3]]
-; CHECK-NEXT:    [[TMP20:%.*]] = sub nsw i64 [[N]], [[TMP4]]
-; CHECK-NEXT:    [[TMP21:%.*]] = sub nsw i64 [[N]], [[TMP5]]
-; CHECK-NEXT:    [[TMP22:%.*]] = sub nsw i64 [[N]], [[TMP6]]
-; CHECK-NEXT:    [[TMP23:%.*]] = sub nsw i64 [[N]], [[TMP7]]
-; CHECK-NEXT:    [[TMP24:%.*]] = sub nsw i64 [[N]], [[TMP8]]
-; CHECK-NEXT:    [[TMP25:%.*]] = sub nsw i64 [[N]], [[TMP9]]
-; CHECK-NEXT:    [[TMP26:%.*]] = sub nsw i64 [[N]], [[TMP10]]
-; CHECK-NEXT:    [[TMP27:%.*]] = sub nsw i64 [[N]], [[TMP11]]
-; CHECK-NEXT:    [[TMP28:%.*]] = sub nsw i64 [[N]], [[TMP12]]
-; CHECK-NEXT:    [[TMP29:%.*]] = sub nsw i64 [[N]], [[TMP13]]
-; CHECK-NEXT:    [[TMP30:%.*]] = sub nsw i64 [[N]], [[TMP14]]
-; CHECK-NEXT:    [[TMP31:%.*]] = sub nsw i64 [[N]], [[TMP15]]
+; CHECK-NEXT:    [[TMP16:%.*]] = sub nsw i64 1, [[INDEX]]
+; CHECK-NEXT:    [[TMP17:%.*]] = sub nsw i64 1, [[TMP1]]
+; CHECK-NEXT:    [[TMP18:%.*]] = sub nsw i64 1, [[TMP2]]
+; CHECK-NEXT:    [[TMP19:%.*]] = sub nsw i64 1, [[TMP3]]
+; CHECK-NEXT:    [[TMP20:%.*]] = sub nsw i64 1, [[TMP4]]
+; CHECK-NEXT:    [[TMP21:%.*]] = sub nsw i64 1, [[TMP5]]
+; CHECK-NEXT:    [[TMP22:%.*]] = sub nsw i64 1, [[TMP6]]
+; CHECK-NEXT:    [[TMP23:%.*]] = sub nsw i64 1, [[TMP7]]
+; CHECK-NEXT:    [[TMP24:%.*]] = sub nsw i64 1, [[TMP8]]
+; CHECK-NEXT:    [[TMP25:%.*]] = sub nsw i64 1, [[TMP9]]
+; CHECK-NEXT:    [[TMP26:%.*]] = sub nsw i64 1, [[TMP10]]
+; CHECK-NEXT:    [[TMP27:%.*]] = sub nsw i64 1, [[TMP11]]
+; CHECK-NEXT:    [[TMP28:%.*]] = sub nsw i64 1, [[TMP12]]
+; CHECK-NEXT:    [[TMP29:%.*]] = sub nsw i64 1, [[TMP13]]
+; CHECK-NEXT:    [[TMP30:%.*]] = sub nsw i64 1, [[TMP14]]
+; CHECK-NEXT:    [[TMP31:%.*]] = sub nsw i64 1, [[TMP15]]
 ; CHECK-NEXT:    [[TMP32:%.*]] = insertelement <16 x i64> poison, i64 [[TMP16]], i32 0
 ; CHECK-NEXT:    [[TMP33:%.*]] = insertelement <16 x i64> [[TMP32]], i64 [[TMP17]], i32 1
 ; CHECK-NEXT:    [[TMP34:%.*]] = insertelement <16 x i64> [[TMP33]], i64 [[TMP18]], i32 2
@@ -409,7 +412,7 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; CHECK:       vec.epilog.iter.check:
 ; CHECK-NEXT:    br i1 false, label [[VEC_EPILOG_SCALAR_PH]], label [[VEC_EPILOG_PH]], !prof [[PROF10:![0-9]+]]
 ; CHECK:       vec.epilog.ph:
-; CHECK-NEXT:    [[VEC_EPILOG_RESUME_VAL:%.*]] = phi i64 [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK]] ]
+; CHECK-NEXT:    [[VEC_EPILOG_RESUME_VAL:%.*]] = phi i64 [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK1]] ]
 ; CHECK-NEXT:    br label [[VEC_EPILOG_VECTOR_BODY:%.*]]
 ; CHECK:       vec.epilog.vector.body:
 ; CHECK-NEXT:    [[INDEX2:%.*]] = phi i64 [ [[VEC_EPILOG_RESUME_VAL]], [[VEC_EPILOG_PH]] ], [ [[INDEX_NEXT3:%.*]], [[VEC_EPILOG_VECTOR_BODY]] ]
@@ -420,14 +423,14 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; CHECK-NEXT:    [[TMP58:%.*]] = add i64 [[INDEX2]], 5
 ; CHECK-NEXT:    [[TMP59:%.*]] = add i64 [[INDEX2]], 6
 ; CHECK-NEXT:    [[TMP60:%.*]] = add i64 [[INDEX2]], 7
-; CHECK-NEXT:    [[TMP61:%.*]] = sub nsw i64 [[N]], [[INDEX2]]
-; CHECK-NEXT:    [[TMP62:%.*]] = sub nsw i64 [[N]], [[TMP54]]
-; CHECK-NEXT:    [[TMP63:%.*]] = sub nsw i64 [[N]], [[TMP55]]
-; CHECK-NEXT:    [[TMP64:%.*]] = sub nsw i64 [[N]], [[TMP56]]
-; CHECK-NEXT:    [[TMP65:%.*]] = sub nsw i64 [[N]], [[TMP57]]
-; CHECK-NEXT:    [[TMP66:%.*]] = sub nsw i64 [[N]], [[TMP58]]
-; CHECK-NEXT:    [[TMP67:%.*]] = sub nsw i64 [[N]], [[TMP59]]
-; CHECK-NEXT:    [[TMP68:%.*]] = sub nsw i64 [[N]], [[TMP60]]
+; CHECK-NEXT:    [[TMP61:%.*]] = sub nsw i64 1, [[INDEX2]]
+; CHECK-NEXT:    [[TMP62:%.*]] = sub nsw i64 1, [[TMP54]]
+; CHECK-NEXT:    [[TMP63:%.*]] = sub nsw i64 1, [[TMP55]]
+; CHECK-NEXT:    [[TMP64:%.*]] = sub nsw i64 1, [[TMP56]]
+; CHECK-NEXT:    [[TMP65:%.*]] = sub nsw i64 1, [[TMP57]]
+; CHECK-NEXT:    [[TMP66:%.*]] = sub nsw i64 1, [[TMP58]]
+; CHECK-NEXT:    [[TMP67:%.*]] = sub nsw i64 1, [[TMP59]]
+; CHECK-NEXT:    [[TMP68:%.*]] = sub nsw i64 1, [[TMP60]]
 ; CHECK-NEXT:    [[TMP69:%.*]] = insertelement <8 x i64> poison, i64 [[TMP61]], i32 0
 ; CHECK-NEXT:    [[TMP70:%.*]] = insertelement <8 x i64> [[TMP69]], i64 [[TMP62]], i32 1
 ; CHECK-NEXT:    [[TMP71:%.*]] = insertelement <8 x i64> [[TMP70]], i64 [[TMP63]], i32 2
@@ -447,7 +450,7 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; CHECK:       vec.epilog.middle.block:
 ; CHECK-NEXT:    br i1 false, label [[EXIT]], label [[VEC_EPILOG_SCALAR_PH]]
 ; CHECK:       vec.epilog.scalar.ph:
-; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ 1000, [[VEC_EPILOG_MIDDLE_BLOCK]] ], [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[ITER_CHECK:%.*]] ]
+; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ 1000, [[VEC_EPILOG_MIDDLE_BLOCK]] ], [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK]] ], [ 0, [[ITER_CHECK:%.*]] ]
 ; CHECK-NEXT:    br label [[LOOP:%.*]]
 ; CHECK:       loop:
 ; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ [[BC_RESUME_VAL]], [[VEC_EPILOG_SCALAR_PH]] ], [ [[IV_NEXT:%.*]], [[LOOP]] ]
@@ -465,6 +468,9 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2-LABEL: @test_loop2(
 ; IC2-NEXT:  iter.check:
 ; IC2-NEXT:    br i1 false, label [[VEC_EPILOG_SCALAR_PH:%.*]], label [[VECTOR_MAIN_LOOP_ITER_CHECK:%.*]]
+; IC2:       vector.scevcheck:
+; IC2-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i64 [[N:%.*]], 1
+; IC2-NEXT:    br i1 [[IDENT_CHECK]], label [[VEC_EPILOG_SCALAR_PH]], label [[VECTOR_MAIN_LOOP_ITER_CHECK1:%.*]]
 ; IC2:       vector.main.loop.iter.check:
 ; IC2-NEXT:    br i1 false, label [[VEC_EPILOG_PH:%.*]], label [[VECTOR_PH:%.*]]
 ; IC2:       vector.ph:
@@ -502,22 +508,22 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2-NEXT:    [[TMP29:%.*]] = add i64 [[INDEX]], 29
 ; IC2-NEXT:    [[TMP30:%.*]] = add i64 [[INDEX]], 30
 ; IC2-NEXT:    [[TMP31:%.*]] = add i64 [[INDEX]], 31
-; IC2-NEXT:    [[TMP32:%.*]] = sub nsw i64 [[N:%.*]], [[INDEX]]
-; IC2-NEXT:    [[TMP33:%.*]] = sub nsw i64 [[N]], [[TMP1]]
-; IC2-NEXT:    [[TMP34:%.*]] = sub nsw i64 [[N]], [[TMP2]]
-; IC2-NEXT:    [[TMP35:%.*]] = sub nsw i64 [[N]], [[TMP3]]
-; IC2-NEXT:    [[TMP36:%.*]] = sub nsw i64 [[N]], [[TMP4]]
-; IC2-NEXT:    [[TMP37:%.*]] = sub nsw i64 [[N]], [[TMP5]]
-; IC2-NEXT:    [[TMP38:%.*]] = sub nsw i64 [[N]], [[TMP6]]
-; IC2-NEXT:    [[TMP39:%.*]] = sub nsw i64 [[N]], [[TMP7]]
-; IC2-NEXT:    [[TMP40:%.*]] = sub nsw i64 [[N]], [[TMP8]]
-; IC2-NEXT:    [[TMP41:%.*]] = sub nsw i64 [[N]], [[TMP9]]
-; IC2-NEXT:    [[TMP42:%.*]] = sub nsw i64 [[N]], [[TMP10]]
-; IC2-NEXT:    [[TMP43:%.*]] = sub nsw i64 [[N]], [[TMP11]]
-; IC2-NEXT:    [[TMP44:%.*]] = sub nsw i64 [[N]], [[TMP12]]
-; IC2-NEXT:    [[TMP45:%.*]] = sub nsw i64 [[N]], [[TMP13]]
-; IC2-NEXT:    [[TMP46:%.*]] = sub nsw i64 [[N]], [[TMP14]]
-; IC2-NEXT:    [[TMP47:%.*]] = sub nsw i64 [[N]], [[TMP15]]
+; IC2-NEXT:    [[TMP32:%.*]] = sub nsw i64 1, [[INDEX]]
+; IC2-NEXT:    [[TMP33:%.*]] = sub nsw i64 1, [[TMP1]]
+; IC2-NEXT:    [[TMP34:%.*]] = sub nsw i64 1, [[TMP2]]
+; IC2-NEXT:    [[TMP35:%.*]] = sub nsw i64 1, [[TMP3]]
+; IC2-NEXT:    [[TMP36:%.*]] = sub nsw i64 1, [[TMP4]]
+; IC2-NEXT:    [[TMP37:%.*]] = sub nsw i64 1, [[TMP5]]
+; IC2-NEXT:    [[TMP38:%.*]] = sub nsw i64 1, [[TMP6]]
+; IC2-NEXT:    [[TMP39:%.*]] = sub nsw i64 1, [[TMP7]]
+; IC2-NEXT:    [[TMP40:%.*]] = sub nsw i64 1, [[TMP8]]
+; IC2-NEXT:    [[TMP41:%.*]] = sub nsw i64 1, [[TMP9]]
+; IC2-NEXT:    [[TMP42:%.*]] = sub nsw i64 1, [[TMP10]]
+; IC2-NEXT:    [[TMP43:%.*]] = sub nsw i64 1, [[TMP11]]
+; IC2-NEXT:    [[TMP44:%.*]] = sub nsw i64 1, [[TMP12]]
+; IC2-NEXT:    [[TMP45:%.*]] = sub nsw i64 1, [[TMP13]]
+; IC2-NEXT:    [[TMP46:%.*]] = sub nsw i64 1, [[TMP14]]
+; IC2-NEXT:    [[TMP47:%.*]] = sub nsw i64 1, [[TMP15]]
 ; IC2-NEXT:    [[TMP48:%.*]] = insertelement <16 x i64> poison, i64 [[TMP32]], i32 0
 ; IC2-NEXT:    [[TMP49:%.*]] = insertelement <16 x i64> [[TMP48]], i64 [[TMP33]], i32 1
 ; IC2-NEXT:    [[TMP50:%.*]] = insertelement <16 x i64> [[TMP49]], i64 [[TMP34]], i32 2
@@ -534,22 +540,22 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2-NEXT:    [[TMP61:%.*]] = insertelement <16 x i64> [[TMP60]], i64 [[TMP45]], i32 13
 ; IC2-NEXT:    [[TMP62:%.*]] = insertelement <16 x i64> [[TMP61]], i64 [[TMP46]], i32 14
 ; IC2-NEXT:    [[TMP63:%.*]] = insertelement <16 x i64> [[TMP62]], i64 [[TMP47]], i32 15
-; IC2-NEXT:    [[TMP64:%.*]] = sub nsw i64 [[N]], [[TMP16]]
-; IC2-NEXT:    [[TMP65:%.*]] = sub nsw i64 [[N]], [[TMP17]]
-; IC2-NEXT:    [[TMP66:%.*]] = sub nsw i64 [[N]], [[TMP18]]
-; IC2-NEXT:    [[TMP67:%.*]] = sub nsw i64 [[N]], [[TMP19]]
-; IC2-NEXT:    [[TMP68:%.*]] = sub nsw i64 [[N]], [[TMP20]]
-; IC2-NEXT:    [[TMP69:%.*]] = sub nsw i64 [[N]], [[TMP21]]
-; IC2-NEXT:    [[TMP70:%.*]] = sub nsw i64 [[N]], [[TMP22]]
-; IC2-NEXT:    [[TMP71:%.*]] = sub nsw i64 [[N]], [[TMP23]]
-; IC2-NEXT:    [[TMP72:%.*]] = sub nsw i64 [[N]], [[TMP24]]
-; IC2-NEXT:    [[TMP73:%.*]] = sub nsw i64 [[N]], [[TMP25]]
-; IC2-NEXT:    [[TMP74:%.*]] = sub nsw i64 [[N]], [[TMP26]]
-; IC2-NEXT:    [[TMP75:%.*]] = sub nsw i64 [[N]], [[TMP27]]
-; IC2-NEXT:    [[TMP76:%.*]] = sub nsw i64 [[N]], [[TMP28]]
-; IC2-NEXT:    [[TMP77:%.*]] = sub nsw i64 [[N]], [[TMP29]]
-; IC2-NEXT:    [[TMP78:%.*]] = sub nsw i64 [[N]], [[TMP30]]
-; IC2-NEXT:    [[TMP79:%.*]] = sub nsw i64 [[N]], [[TMP31]]
+; IC2-NEXT:    [[TMP64:%.*]] = sub nsw i64 1, [[TMP16]]
+; IC2-NEXT:    [[TMP65:%.*]] = sub nsw i64 1, [[TMP17]]
+; IC2-NEXT:    [[TMP66:%.*]] = sub nsw i64 1, [[TMP18]]
+; IC2-NEXT:    [[TMP67:%.*]] = sub nsw i64 1, [[TMP19]]
+; IC2-NEXT:    [[TMP68:%.*]] = sub nsw i64 1, [[TMP20]]
+; IC2-NEXT:    [[TMP69:%.*]] = sub nsw i64 1, [[TMP21]]
+; IC2-NEXT:    [[TMP70:%.*]] = sub nsw i64 1, [[TMP22]]
+; IC2-NEXT:    [[TMP71:%.*]] = sub nsw i64 1, [[TMP23]]
+; IC2-NEXT:    [[TMP72:%.*]] = sub nsw i64 1, [[TMP24]]
+; IC2-NEXT:    [[TMP73:%.*]] = sub nsw i64 1, [[TMP25]]
+; IC2-NEXT:    [[TMP74:%.*]] = sub nsw i64 1, [[TMP26]]
+; IC2-NEXT:    [[TMP75:%.*]] = sub nsw i64 1, [[TMP27]]
+; IC2-NEXT:    [[TMP76:%.*]] = sub nsw i64 1, [[TMP28]]
+; IC2-NEXT:    [[TMP77:%.*]] = sub nsw i64 1, [[TMP29]]
+; IC2-NEXT:    [[TMP78:%.*]] = sub nsw i64 1, [[TMP30]]
+; IC2-NEXT:    [[TMP79:%.*]] = sub nsw i64 1, [[TMP31]]
 ; IC2-NEXT:    [[TMP80:%.*]] = insertelement <16 x i64> poison, i64 [[TMP64]], i32 0
 ; IC2-NEXT:    [[TMP81:%.*]] = insertelement <16 x i64> [[TMP80]], i64 [[TMP65]], i32 1
 ; IC2-NEXT:    [[TMP82:%.*]] = insertelement <16 x i64> [[TMP81]], i64 [[TMP66]], i32 2
@@ -584,7 +590,7 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2:       vec.epilog.iter.check:
 ; IC2-NEXT:    br i1 false, label [[VEC_EPILOG_SCALAR_PH]], label [[VEC_EPILOG_PH]], !prof [[PROF10:![0-9]+]]
 ; IC2:       vec.epilog.ph:
-; IC2-NEXT:    [[VEC_EPILOG_RESUME_VAL:%.*]] = phi i64 [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK]] ]
+; IC2-NEXT:    [[VEC_EPILOG_RESUME_VAL:%.*]] = phi i64 [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK1]] ]
 ; IC2-NEXT:    br label [[VEC_EPILOG_VECTOR_BODY:%.*]]
 ; IC2:       vec.epilog.vector.body:
 ; IC2-NEXT:    [[INDEX1:%.*]] = phi i64 [ [[VEC_EPILOG_RESUME_VAL]], [[VEC_EPILOG_PH]] ], [ [[INDEX_NEXT2:%.*]], [[VEC_EPILOG_VECTOR_BODY]] ]
@@ -595,14 +601,14 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2-NEXT:    [[TMP110:%.*]] = add i64 [[INDEX1]], 5
 ; IC2-NEXT:    [[TMP111:%.*]] = add i64 [[INDEX1]], 6
 ; IC2-NEXT:    [[TMP112:%.*]] = add i64 [[INDEX1]], 7
-; IC2-NEXT:    [[TMP113:%.*]] = sub nsw i64 [[N]], [[INDEX1]]
-; IC2-NEXT:    [[TMP114:%.*]] = sub nsw i64 [[N]], [[TMP106]]
-; IC2-NEXT:    [[TMP115:%.*]] = sub nsw i64 [[N]], [[TMP107]]
-; IC2-NEXT:    [[TMP116:%.*]] = sub nsw i64 [[N]], [[TMP108]]
-; IC2-NEXT:    [[TMP117:%.*]] = sub nsw i64 [[N]], [[TMP109]]
-; IC2-NEXT:    [[TMP118:%.*]] = sub nsw i64 [[N]], [[TMP110]]
-; IC2-NEXT:    [[TMP119:%.*]] = sub nsw i64 [[N]], [[TMP111]]
-; IC2-NEXT:    [[TMP120:%.*]] = sub nsw i64 [[N]], [[TMP112]]
+; IC2-NEXT:    [[TMP113:%.*]] = sub nsw i64 1, [[INDEX1]]
+; IC2-NEXT:    [[TMP114:%.*]] = sub nsw i64 1, [[TMP106]]
+; IC2-NEXT:    [[TMP115:%.*]] = sub nsw i64 1, [[TMP107]]
+; IC2-NEXT:    [[TMP116:%.*]] = sub nsw i64 1, [[TMP108]]
+; IC2-NEXT:    [[TMP117:%.*]] = sub nsw i64 1, [[TMP109]]
+; IC2-NEXT:    [[TMP118:%.*]] = sub nsw i64 1, [[TMP110]]
+; IC2-NEXT:    [[TMP119:%.*]] = sub nsw i64 1, [[TMP111]]
+; IC2-NEXT:    [[TMP120:%.*]] = sub nsw i64 1, [[TMP112]]
 ; IC2-NEXT:    [[TMP121:%.*]] = insertelement <8 x i64> poison, i64 [[TMP113]], i32 0
 ; IC2-NEXT:    [[TMP122:%.*]] = insertelement <8 x i64> [[TMP121]], i64 [[TMP114]], i32 1
 ; IC2-NEXT:    [[TMP123:%.*]] = insertelement <8 x i64> [[TMP122]], i64 [[TMP115]], i32 2
@@ -622,7 +628,7 @@ define void @test_loop2(i64 %n, ptr %dst) {
 ; IC2:       vec.epilog.middle.block:
 ; IC2-NEXT:    br i1 false, label [[EXIT]], label [[VEC_EPILOG_SCALAR_PH]]
 ; IC2:       vec.epilog.scalar.ph:
-; IC2-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ 1000, [[VEC_EPILOG_MIDDLE_BLOCK]] ], [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[ITER_CHECK:%.*]] ]
+; IC2-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ 1000, [[VEC_EPILOG_MIDDLE_BLOCK]] ], [ 992, [[VEC_EPILOG_ITER_CHECK]] ], [ 0, [[VECTOR_MAIN_LOOP_ITER_CHECK]] ], [ 0, [[ITER_CHECK:%.*]] ]
 ; IC2-NEXT:    br label [[LOOP:%.*]]
 ; IC2:       loop:
 ; IC2-NEXT:    [[IV:%.*]] = phi i64 [ [[BC_RESUME_VAL]], [[VEC_EPILOG_SCALAR_PH]] ], [ [[IV_NEXT:%.*]], [[LOOP]] ]
