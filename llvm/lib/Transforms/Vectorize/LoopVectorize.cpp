@@ -5842,8 +5842,48 @@ bool LoopVectorizationPlanner::isProfitableOneScalarTail(
 
   unsigned EstimatedWidth =
       estimateElementCount(CurrentFactor.Width, Config.getVScaleForTuning());
-  if (TC != (EstimatedWidth * UserIC) + 1)
+  if (TC % (EstimatedWidth * UserIC) != 1)
     return true;
+
+  // On certain Instructions or Intrinsics, where Type Promotion is used
+  // for v2i8, v4i8 and v2i16 types for legalization. These are not
+  // beneficial for Vectorization due to CodeGen of Type Promotion so
+  // the Scalar loop is preffered.
+  for (BasicBlock *BB : OrigLoop->blocks()) {
+    for (Instruction &Inst : *BB) {
+      FixedVectorType *VTy =
+          dyn_cast<FixedVectorType>(toVectorTy(Inst.getType(), EstimatedWidth));
+      if (!VTy)
+        continue;
+
+      bool IsUndesirableType =
+          (VTy->getScalarSizeInBits() == 8 &&
+           (EstimatedWidth * UserIC == 2 || EstimatedWidth * UserIC == 4)) ||
+          (VTy->getScalarSizeInBits() == 16 && EstimatedWidth * UserIC == 2);
+      if (auto Opcode = Inst.getOpcode();
+          Opcode == Instruction::Xor && IsUndesirableType) {
+        LLVM_DEBUG(
+            dbgs()
+            << "LV: Rejecting VF " << CurrentFactor.Width
+            << " for one-scalar-tail low trip count. Vectorizing "
+               "with Type Promotion is unprofitable for Xor operations.\n");
+        return false;
+      }
+      if (auto *II = dyn_cast<IntrinsicInst>(&Inst)) {
+        Intrinsic::ID IID = II->getIntrinsicID();
+        if ((IID == Intrinsic::smin || IID == Intrinsic::smax ||
+             IID == Intrinsic::umin || IID == Intrinsic::umax) &&
+            IsUndesirableType) {
+          LLVM_DEBUG(
+              dbgs()
+              << "LV: Rejecting VF " << CurrentFactor.Width
+              << " for one-scalar-tail low trip count. Vectorizing with "
+                 "Type Promotion is unprofitable for Min/Max intrinsics.\n");
+          return false;
+        }
+      }
+    }
+  }
 
   // VectorCost reflects the cost of the requried vector iteration(s) and the
   // one remaining scalar iteration cost

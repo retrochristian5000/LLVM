@@ -455,18 +455,56 @@ exit:
   ret void
 }
 
-define void @tc3_smin_i16_reject(ptr noalias %a, ptr noalias %b) #0 {
-; CHECK-LABEL: define void @tc3_smin_i16_reject(
+define void @tc5_smax_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc5_smax_i8_reject(
 ; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
-; CHECK-NEXT:  [[SCALAR_PH:.*]]:
+; CHECK-NEXT:  [[ENTRY:.*]]:
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
-; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[SCALAR_PH]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i8, ptr [[B]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP0:%.*]] = load i8, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i8, ptr [[A]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP1:%.*]] = load i8, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[MIN:%.*]] = tail call i8 @llvm.smax.i8(i8 [[TMP0]], i8 [[TMP1]])
+; CHECK-NEXT:    store i8 [[MIN]], ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 5
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
+  %arrayidx = getelementptr inbounds i8, ptr %b, i64 %iv
+  %0 = load i8, ptr %arrayidx, align 1
+  %arrayidx2 = getelementptr inbounds i8, ptr %a, i64 %iv
+  %1 = load i8, ptr %arrayidx2, align 1
+  %max = tail call i8 @llvm.smax.i8(i8 %0, i8 %1)
+  store i8 %max, ptr %arrayidx, align 1
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, 5
+  br i1 %exitcond, label %exit, label %loop
+
+exit:
+  ret void
+}
+
+define void @tc3_umin_i16_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc3_umin_i16_reject(
+; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[ENTRY:.*]]:
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i16, ptr [[B]], i64 [[IV]]
-; CHECK-NEXT:    [[TMP1:%.*]] = load i16, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[TMP0:%.*]] = load i16, ptr [[ARRAYIDX]], align 1
 ; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i16, ptr [[A]], i64 [[IV]]
-; CHECK-NEXT:    [[TMP2:%.*]] = load i16, ptr [[ARRAYIDX2]], align 1
-; CHECK-NEXT:    [[MIN:%.*]] = tail call i16 @llvm.smin.i16(i16 [[TMP1]], i16 [[TMP2]])
+; CHECK-NEXT:    [[TMP1:%.*]] = load i16, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[MIN:%.*]] = tail call i16 @llvm.umin.i16(i16 [[TMP0]], i16 [[TMP1]])
 ; CHECK-NEXT:    store i16 [[MIN]], ptr [[ARRAYIDX]], align 1
 ; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
 ; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 3
@@ -483,8 +521,120 @@ loop:
   %0 = load i16, ptr %arrayidx, align 1
   %arrayidx2 = getelementptr inbounds i16, ptr %a, i64 %iv
   %1 = load i16, ptr %arrayidx2, align 1
-  %min = tail call i16 @llvm.smin.i16(i16 %0, i16 %1)
+  %min = tail call i16 @llvm.umin.i16(i16 %0, i16 %1)
   store i16 %min, ptr %arrayidx, align 1
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, 3
+  br i1 %exitcond, label %exit, label %loop
+
+exit:
+  ret void
+}
+
+define void @tc3_xor_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc3_xor_i8_reject(
+; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[ENTRY:.*]]:
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i8, ptr [[B]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP0:%.*]] = load i8, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i8, ptr [[A]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP1:%.*]] = load i8, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[XOR:%.*]] = xor i8 [[TMP0]], [[TMP1]]
+; CHECK-NEXT:    store i8 [[XOR]], ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 3
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
+  %arrayidx = getelementptr inbounds i8, ptr %b, i64 %iv
+  %0 = load i8, ptr %arrayidx, align 1
+  %arrayidx2 = getelementptr inbounds i8, ptr %a, i64 %iv
+  %1 = load i8, ptr %arrayidx2, align 1
+  %xor = xor i8 %0, %1
+  store i8 %xor, ptr %arrayidx, align 1
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, 3
+  br i1 %exitcond, label %exit, label %loop
+exit:
+  ret void
+}
+
+define void @tc5_xor_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc5_xor_i8_reject(
+; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[SCALAR_PH:.*]]:
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[SCALAR_PH]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i8, ptr [[B]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP4:%.*]] = load i8, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i8, ptr [[A]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP5:%.*]] = load i8, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[XOR:%.*]] = xor i8 [[TMP4]], [[TMP5]]
+; CHECK-NEXT:    store i8 [[XOR]], ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 5
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
+  %arrayidx = getelementptr inbounds i8, ptr %b, i64 %iv
+  %0 = load i8, ptr %arrayidx, align 1
+  %arrayidx2 = getelementptr inbounds i8, ptr %a, i64 %iv
+  %1 = load i8, ptr %arrayidx2, align 1
+  %xor = xor i8 %0, %1
+  store i8 %xor, ptr %arrayidx, align 1
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, 5
+  br i1 %exitcond, label %exit, label %loop
+exit:
+  ret void
+}
+
+define void @tc3_xor_i16_reject(ptr noalias %a, ptr noalias %b) #0 {
+; CHECK-LABEL: define void @tc3_xor_i16_reject(
+; CHECK-SAME: ptr noalias [[A:%.*]], ptr noalias [[B:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[ENTRY:.*]]:
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    [[IV:%.*]] = phi i64 [ 0, %[[ENTRY]] ], [ [[IV_NEXT:%.*]], %[[LOOP]] ]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i16, ptr [[B]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP0:%.*]] = load i16, ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[ARRAYIDX2:%.*]] = getelementptr inbounds i16, ptr [[A]], i64 [[IV]]
+; CHECK-NEXT:    [[TMP1:%.*]] = load i16, ptr [[ARRAYIDX2]], align 1
+; CHECK-NEXT:    [[XOR:%.*]] = xor i16 [[TMP0]], [[TMP1]]
+; CHECK-NEXT:    store i16 [[XOR]], ptr [[ARRAYIDX]], align 1
+; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 1
+; CHECK-NEXT:    [[EXITCOND:%.*]] = icmp eq i64 [[IV_NEXT]], 3
+; CHECK-NEXT:    br i1 [[EXITCOND]], label %[[EXIT:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %loop
+
+loop:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
+  %arrayidx = getelementptr inbounds i16, ptr %b, i64 %iv
+  %0 = load i16, ptr %arrayidx, align 1
+  %arrayidx2 = getelementptr inbounds i16, ptr %a, i64 %iv
+  %1 = load i16, ptr %arrayidx2, align 1
+  %xor = xor i16 %0, %1
+  store i16 %xor, ptr %arrayidx, align 1
   %iv.next = add nuw nsw i64 %iv, 1
   %exitcond = icmp eq i64 %iv.next, 3
   br i1 %exitcond, label %exit, label %loop

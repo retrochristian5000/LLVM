@@ -36,64 +36,6 @@ exit:
   ret void
 }
 
-define void @tc3_smin_i8_reject(ptr noalias %a, ptr noalias %b) #0 {
-; IR-LABEL: define void @tc3_smin_i8_reject(
-; IR-NOT: vector.body
-
-; DBG-LABEL: LV: Checking a loop in 'tc3_smin_i8_reject'
-; DBG: LV: Picking MaxVF=2 with 1 scalar iteration remaining.
-; DBG: LV: Scalar loop costs: 10.
-; DBG: Cost for VF 2: 20
-; DBG: LV: Rejecting VF 2 for one-scalar-tail low trip count: vector cost 30 >= scalar cost 30.
-; DBG-NOT: LV: Selecting VF: 2.
-entry:
-  br label %loop
-
-loop:
-  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
-  %arrayidx = getelementptr inbounds i8, ptr %b, i64 %iv
-  %0 = load i8, ptr %arrayidx, align 1
-  %arrayidx2 = getelementptr inbounds i8, ptr %a, i64 %iv
-  %1 = load i8, ptr %arrayidx2, align 1
-  %min = tail call i8 @llvm.smin.i8(i8 %0, i8 %1)
-  store i8 %min, ptr %arrayidx, align 1
-  %iv.next = add nuw nsw i64 %iv, 1
-  %exitcond = icmp eq i64 %iv.next, 3
-  br i1 %exitcond, label %exit, label %loop
-
-exit:
-  ret void
-}
-
-define void @tc3_smin_i16_reject(ptr noalias %a, ptr noalias %b) #0 {
-; IR-LABEL: define void @tc3_smin_i16_reject(
-; IR-NOT: vector.body
-
-; DBG-LABEL: LV: Checking a loop in 'tc3_smin_i16_reject'
-; DBG: LV: Picking MaxVF=2 with 1 scalar iteration remaining.
-; DBG: LV: Scalar loop costs: 10.
-; DBG: Cost for VF 2: 20
-; DBG: LV: Rejecting VF 2 for one-scalar-tail low trip count: vector cost 30 >= scalar cost 30.
-; DBG-NOT: LV: Selecting VF: 2.
-entry:
-  br label %loop
-
-loop:
-  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]
-  %arrayidx = getelementptr inbounds i16, ptr %b, i64 %iv
-  %0 = load i16, ptr %arrayidx, align 1
-  %arrayidx2 = getelementptr inbounds i16, ptr %a, i64 %iv
-  %1 = load i16, ptr %arrayidx2, align 1
-  %min = tail call i16 @llvm.smin.i16(i16 %0, i16 %1)
-  store i16 %min, ptr %arrayidx, align 1
-  %iv.next = add nuw nsw i64 %iv, 1
-  %exitcond = icmp eq i64 %iv.next, 3
-  br i1 %exitcond, label %exit, label %loop
-
-exit:
-  ret void
-}
-
 define void @tc3_udiv_i8_forced(ptr noalias %a, ptr noalias %b,
                                 ptr noalias %c) #0 {
 ; IR-LABEL: define void @tc3_udiv_i8_forced(
