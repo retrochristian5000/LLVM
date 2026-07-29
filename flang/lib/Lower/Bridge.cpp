@@ -825,9 +825,11 @@ public:
     hlfir::Entity coarray = Fortran::lower::convertExprToHLFIR(
         loc, *this, expr, localSymbols, context);
     auto [dest, cleanup] = hlfir::createTempFromMold(loc, *builder, coarray);
-    if (cleanup)
+    if (cleanup) {
+      auto destBase = dest.getBase();
       context.attachCleanup(
-          [&]() { fir::FreeMemOp::create(*builder, loc, dest.getBase()); });
+          [&]() { fir::FreeMemOp::create(*builder, loc, destBase); });
+    }
 
     // Image number computation
     auto cosubscripts = Fortran::lower::getCosubscripts(*this, loc, coarrayRef);
