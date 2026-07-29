@@ -1503,13 +1503,10 @@ define void @stride_check_known_via_loop_guard(ptr %C, ptr %A, i32 %Acols) {
 ; CHECK-NEXT:    [[ARRAYIDX_US:%.*]] = getelementptr double, ptr [[A]], i32 [[MUL_US]]
 ; CHECK-NEXT:    br label %[[VECTOR_MEMCHECK:.*]]
 ; CHECK:       [[VECTOR_MEMCHECK]]:
-; CHECK-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i32 [[ACOLS]], 1
-; CHECK-NEXT:    br i1 [[IDENT_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_MEMCHECK1:.*]]
-; CHECK:       [[VECTOR_MEMCHECK1]]:
 ; CHECK-NEXT:    [[BOUND0:%.*]] = icmp ult ptr [[C]], [[SCEVGEP1]]
 ; CHECK-NEXT:    [[BOUND1:%.*]] = icmp ult ptr [[A]], [[SCEVGEP]]
 ; CHECK-NEXT:    [[FOUND_CONFLICT:%.*]] = and i1 [[BOUND0]], [[BOUND1]]
-; CHECK-NEXT:    br i1 [[FOUND_CONFLICT]], label %[[SCALAR_PH]], label %[[VECTOR_PH:.*]]
+; CHECK-NEXT:    br i1 [[FOUND_CONFLICT]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
 ; CHECK:       [[VECTOR_PH]]:
 ; CHECK-NEXT:    [[TMP0:%.*]] = load double, ptr [[ARRAYIDX_US]], align 8, !alias.scope [[META69:![0-9]+]]
 ; CHECK-NEXT:    [[BROADCAST_SPLATINSERT:%.*]] = insertelement <4 x double> poison, double [[TMP0]], i64 0
@@ -1525,10 +1522,9 @@ define void @stride_check_known_via_loop_guard(ptr %C, ptr %A, i32 %Acols) {
 ; CHECK:       [[MIDDLE_BLOCK]]:
 ; CHECK-NEXT:    br label %[[OUTER_LATCH]]
 ; CHECK:       [[SCALAR_PH]]:
-; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i32 [ 0, %[[VECTOR_MEMCHECK]] ], [ 0, %[[VECTOR_MEMCHECK1]] ]
 ; CHECK-NEXT:    br label %[[INNER:.*]]
 ; CHECK:       [[INNER]]:
-; CHECK-NEXT:    [[INNER_IV:%.*]] = phi i32 [ [[BC_RESUME_VAL]], %[[SCALAR_PH]] ], [ [[INNER_IV_NEXT:%.*]], %[[INNER]] ]
+; CHECK-NEXT:    [[INNER_IV:%.*]] = phi i32 [ 0, %[[SCALAR_PH]] ], [ [[INNER_IV_NEXT:%.*]], %[[INNER]] ]
 ; CHECK-NEXT:    [[GEP_C:%.*]] = getelementptr inbounds double, ptr [[C]], i32 [[INNER_IV]]
 ; CHECK-NEXT:    [[L:%.*]] = load double, ptr [[ARRAYIDX_US]], align 8
 ; CHECK-NEXT:    store double [[L]], ptr [[GEP_C]], align 8

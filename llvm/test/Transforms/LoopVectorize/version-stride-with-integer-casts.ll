@@ -214,6 +214,7 @@ define void @test_versioned_with_different_uses(i32 %offset, ptr noalias %dst.1,
 ; CHECK-SAME: i32 [[OFFSET:%.*]], ptr noalias [[DST_1:%.*]], ptr [[DST_2:%.*]]) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[OFFSET_EXT:%.*]] = zext i32 [[OFFSET]] to i64
+; CHECK-NEXT:    [[TMP0:%.*]] = sub i32 0, [[OFFSET]]
 ; CHECK-NEXT:    br label [[OUTER_HEADER:%.*]]
 ; CHECK:       outer.header.loopexit:
 ; CHECK-NEXT:    [[IV_2_NEXT_LCSSA:%.*]] = phi i64 [ [[IV_2_NEXT:%.*]], [[INNER_LOOP:%.*]] ]
@@ -225,8 +226,19 @@ define void @test_versioned_with_different_uses(i32 %offset, ptr noalias %dst.1,
 ; CHECK:       inner.loop.preheader:
 ; CHECK-NEXT:    br label [[VECTOR_SCEVCHECK:%.*]]
 ; CHECK:       vector.scevcheck:
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp slt i32 [[OFFSET]], 0
+; CHECK-NEXT:    [[TMP2:%.*]] = select i1 [[TMP1]], i32 [[TMP0]], i32 [[OFFSET]]
+; CHECK-NEXT:    [[MUL:%.*]] = call { i32, i1 } @llvm.umul.with.overflow.i32(i32 [[TMP2]], i32 200)
+; CHECK-NEXT:    [[MUL_RESULT:%.*]] = extractvalue { i32, i1 } [[MUL]], 0
+; CHECK-NEXT:    [[MUL_OVERFLOW:%.*]] = extractvalue { i32, i1 } [[MUL]], 1
+; CHECK-NEXT:    [[TMP13:%.*]] = sub i32 0, [[MUL_RESULT]]
+; CHECK-NEXT:    [[TMP4:%.*]] = icmp slt i32 [[MUL_RESULT]], 0
+; CHECK-NEXT:    [[TMP14:%.*]] = icmp sgt i32 [[TMP13]], 0
+; CHECK-NEXT:    [[TMP16:%.*]] = select i1 [[TMP1]], i1 [[TMP14]], i1 [[TMP4]]
+; CHECK-NEXT:    [[TMP17:%.*]] = or i1 [[TMP16]], [[MUL_OVERFLOW]]
 ; CHECK-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i32 [[OFFSET]], 1
-; CHECK-NEXT:    br i1 [[IDENT_CHECK]], label [[SCALAR_PH:%.*]], label [[VECTOR_PH:%.*]]
+; CHECK-NEXT:    [[TMP18:%.*]] = or i1 [[TMP17]], [[IDENT_CHECK]]
+; CHECK-NEXT:    br i1 [[TMP18]], label [[SCALAR_PH:%.*]], label [[VECTOR_PH:%.*]]
 ; CHECK:       vector.ph:
 ; CHECK-NEXT:    [[IND_END:%.*]] = add i64 [[IV_1]], 200
 ; CHECK-NEXT:    br label [[VECTOR_BODY:%.*]]

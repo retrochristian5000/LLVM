@@ -485,9 +485,6 @@ define void @dead_load_in_block(ptr %dst, ptr %src, i8 %N, i64 %x) #0 {
 ; CHECK-NEXT:    [[TMP3:%.*]] = add i64 [[TMP2]], 1
 ; CHECK-NEXT:    br label %[[VECTOR_MEMCHECK:.*]]
 ; CHECK:       [[VECTOR_MEMCHECK]]:
-; CHECK-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i64 [[X]], 1
-; CHECK-NEXT:    br i1 [[IDENT_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_MEMCHECK1:.*]]
-; CHECK:       [[VECTOR_MEMCHECK1]]:
 ; CHECK-NEXT:    [[UMIN:%.*]] = call i64 @llvm.umin.i64(i64 [[N_EXT]], i64 1)
 ; CHECK-NEXT:    [[TMP7:%.*]] = sub i64 [[N_EXT]], [[UMIN]]
 ; CHECK-NEXT:    [[TMP8:%.*]] = udiv i64 [[TMP7]], 3
@@ -495,11 +492,19 @@ define void @dead_load_in_block(ptr %dst, ptr %src, i8 %N, i64 %x) #0 {
 ; CHECK-NEXT:    [[TMP10:%.*]] = mul i64 [[TMP9]], 12
 ; CHECK-NEXT:    [[TMP11:%.*]] = add i64 [[TMP10]], 4
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[DST]], i64 [[TMP11]]
-; CHECK-NEXT:    [[SCEVGEP3:%.*]] = getelementptr i8, ptr [[SRC]], i64 8
+; CHECK-NEXT:    [[TMP12:%.*]] = shl i64 [[X]], 2
+; CHECK-NEXT:    [[SCEVGEP1:%.*]] = getelementptr i8, ptr [[SRC]], i64 [[TMP12]]
+; CHECK-NEXT:    [[TMP13:%.*]] = add i64 [[TMP12]], 4
+; CHECK-NEXT:    [[SCEVGEP2:%.*]] = getelementptr i8, ptr [[SRC]], i64 [[TMP13]]
+; CHECK-NEXT:    [[SCEVGEP3:%.*]] = getelementptr i8, ptr [[SRC]], i64 4
+; CHECK-NEXT:    [[BOUND0:%.*]] = icmp ult ptr [[DST]], [[SCEVGEP2]]
+; CHECK-NEXT:    [[BOUND1:%.*]] = icmp ult ptr [[SCEVGEP1]], [[SCEVGEP]]
+; CHECK-NEXT:    [[FOUND_CONFLICT:%.*]] = and i1 [[BOUND0]], [[BOUND1]]
 ; CHECK-NEXT:    [[BOUND04:%.*]] = icmp ult ptr [[DST]], [[SCEVGEP3]]
 ; CHECK-NEXT:    [[BOUND15:%.*]] = icmp ult ptr [[SRC]], [[SCEVGEP]]
 ; CHECK-NEXT:    [[FOUND_CONFLICT6:%.*]] = and i1 [[BOUND04]], [[BOUND15]]
-; CHECK-NEXT:    br i1 [[FOUND_CONFLICT6]], label %[[SCALAR_PH]], label %[[VECTOR_PH:.*]]
+; CHECK-NEXT:    [[CONFLICT_RDX:%.*]] = or i1 [[FOUND_CONFLICT]], [[FOUND_CONFLICT6]]
+; CHECK-NEXT:    br i1 [[CONFLICT_RDX]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
 ; CHECK:       [[VECTOR_PH]]:
 ; CHECK-NEXT:    [[TMP24:%.*]] = call <vscale x 4 x i64> @llvm.stepvector.nxv4i64()
 ; CHECK-NEXT:    [[TMP25:%.*]] = mul <vscale x 4 x i64> [[TMP24]], splat (i64 3)
@@ -517,7 +522,7 @@ define void @dead_load_in_block(ptr %dst, ptr %src, i8 %N, i64 %x) #0 {
 ; CHECK-NEXT:    [[AVL_NEXT]] = sub nuw i64 [[AVL]], [[TMP17]]
 ; CHECK-NEXT:    [[VEC_IND_NEXT]] = add <vscale x 4 x i64> [[VEC_IND]], [[BROADCAST_SPLAT]]
 ; CHECK-NEXT:    [[TMP20:%.*]] = icmp eq i64 [[AVL_NEXT]], 0
-; CHECK-NEXT:    br i1 [[TMP20]], label %[[MIDDLE_BLOCK:.*]], label %[[VECTOR_BODY]], !llvm.loop [[LOOP15:![0-9]+]]
+; CHECK-NEXT:    br i1 [[TMP20]], label %[[MIDDLE_BLOCK:.*]], label %[[VECTOR_BODY]], !llvm.loop [[LOOP16:![0-9]+]]
 ; CHECK:       [[MIDDLE_BLOCK]]:
 ; CHECK-NEXT:    br label %[[EXIT:.*]]
 ; CHECK:       [[SCALAR_PH]]:
@@ -536,7 +541,7 @@ define void @dead_load_in_block(ptr %dst, ptr %src, i8 %N, i64 %x) #0 {
 ; CHECK-NEXT:    store i32 0, ptr [[GEP_DST]], align 4
 ; CHECK-NEXT:    [[IV_NEXT]] = add i64 [[IV]], 3
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp ult i64 [[IV]], [[N_EXT]]
-; CHECK-NEXT:    br i1 [[CMP]], label %[[LOOP_HEADER]], label %[[EXIT]], !llvm.loop [[LOOP16:![0-9]+]]
+; CHECK-NEXT:    br i1 [[CMP]], label %[[LOOP_HEADER]], label %[[EXIT]], !llvm.loop [[LOOP17:![0-9]+]]
 ; CHECK:       [[EXIT]]:
 ; CHECK-NEXT:    ret void
 ;
@@ -581,8 +586,9 @@ attributes #0 = { "target-features"="+64bit,+v" }
 ; CHECK: [[META10]] = !{[[META11:![0-9]+]]}
 ; CHECK: [[META11]] = distinct !{[[META11]], [[META12:![0-9]+]]}
 ; CHECK: [[META12]] = distinct !{[[META12]], !"LVerDomain"}
-; CHECK: [[META13]] = !{[[META14:![0-9]+]]}
+; CHECK: [[META13]] = !{[[META14:![0-9]+]], [[META15:![0-9]+]]}
 ; CHECK: [[META14]] = distinct !{[[META14]], [[META12]]}
-; CHECK: [[LOOP15]] = distinct !{[[LOOP15]], [[META1]], [[META2]]}
-; CHECK: [[LOOP16]] = distinct !{[[LOOP16]], [[META1]]}
+; CHECK: [[META15]] = distinct !{[[META15]], [[META12]]}
+; CHECK: [[LOOP16]] = distinct !{[[LOOP16]], [[META1]], [[META2]]}
+; CHECK: [[LOOP17]] = distinct !{[[LOOP17]], [[META1]]}
 ;.

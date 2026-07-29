@@ -3826,48 +3826,17 @@ define void @trunc_stride(ptr noalias %p.out, ptr %p, i64 %stride.i64) {
 ; COMPARE-LAA-MV-NEXT:  [[ENTRY:.*:]]
 ; COMPARE-LAA-MV-NEXT:    br label %[[VECTOR_SCEVCHECK:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_SCEVCHECK]]:
-; COMPARE-LAA-MV-NEXT:    [[TMP8:%.*]] = trunc i64 [[STRIDE_I64]] to i32
-; COMPARE-LAA-MV-NEXT:    [[TMP11:%.*]] = sub i32 0, [[TMP8]]
-; COMPARE-LAA-MV-NEXT:    [[TMP12:%.*]] = icmp slt i32 [[TMP8]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP3:%.*]] = select i1 [[TMP12]], i32 [[TMP11]], i32 [[TMP8]]
-; COMPARE-LAA-MV-NEXT:    [[MUL:%.*]] = call { i32, i1 } @llvm.umul.with.overflow.i32(i32 [[TMP3]], i32 127)
-; COMPARE-LAA-MV-NEXT:    [[MUL_RESULT:%.*]] = extractvalue { i32, i1 } [[MUL]], 0
-; COMPARE-LAA-MV-NEXT:    [[MUL_OVERFLOW:%.*]] = extractvalue { i32, i1 } [[MUL]], 1
-; COMPARE-LAA-MV-NEXT:    [[TMP4:%.*]] = sub i32 0, [[MUL_RESULT]]
-; COMPARE-LAA-MV-NEXT:    [[TMP5:%.*]] = icmp slt i32 [[MUL_RESULT]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP6:%.*]] = icmp sgt i32 [[TMP4]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP7:%.*]] = select i1 [[TMP12]], i1 [[TMP6]], i1 [[TMP5]]
-; COMPARE-LAA-MV-NEXT:    [[IDENT_CHECK:%.*]] = or i1 [[TMP7]], [[MUL_OVERFLOW]]
+; COMPARE-LAA-MV-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i64 [[STRIDE_I64]], 1
 ; COMPARE-LAA-MV-NEXT:    br i1 [[IDENT_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_PH]]:
-; COMPARE-LAA-MV-NEXT:    [[BROADCAST_SPLATINSERT:%.*]] = insertelement <4 x i64> poison, i64 [[STRIDE_I64]], i64 0
-; COMPARE-LAA-MV-NEXT:    [[BROADCAST_SPLAT:%.*]] = shufflevector <4 x i64> [[BROADCAST_SPLATINSERT]], <4 x i64> poison, <4 x i32> zeroinitializer
-; COMPARE-LAA-MV-NEXT:    [[TMP9:%.*]] = trunc <4 x i64> [[BROADCAST_SPLAT]] to <4 x i32>
 ; COMPARE-LAA-MV-NEXT:    br label %[[VECTOR_BODY:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_BODY]]:
-; COMPARE-LAA-MV-NEXT:    [[INDEX1:%.*]] = phi i32 [ 0, %[[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], %[[VECTOR_BODY]] ]
-; COMPARE-LAA-MV-NEXT:    [[VEC_IND:%.*]] = phi <4 x i32> [ <i32 0, i32 1, i32 2, i32 3>, %[[VECTOR_PH]] ], [ [[VEC_IND_NEXT:%.*]], %[[VECTOR_BODY]] ]
-; COMPARE-LAA-MV-NEXT:    [[TMP10:%.*]] = mul <4 x i32> [[VEC_IND]], [[TMP9]]
-; COMPARE-LAA-MV-NEXT:    [[INDEX:%.*]] = extractelement <4 x i32> [[TMP10]], i64 0
+; COMPARE-LAA-MV-NEXT:    [[INDEX:%.*]] = phi i32 [ 0, %[[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], %[[VECTOR_BODY]] ]
 ; COMPARE-LAA-MV-NEXT:    [[TMP0:%.*]] = getelementptr i32, ptr [[P]], i32 [[INDEX]]
-; COMPARE-LAA-MV-NEXT:    [[TMP13:%.*]] = extractelement <4 x i32> [[TMP10]], i64 1
-; COMPARE-LAA-MV-NEXT:    [[TMP14:%.*]] = getelementptr i32, ptr [[P]], i32 [[TMP13]]
-; COMPARE-LAA-MV-NEXT:    [[TMP15:%.*]] = extractelement <4 x i32> [[TMP10]], i64 2
-; COMPARE-LAA-MV-NEXT:    [[TMP16:%.*]] = getelementptr i32, ptr [[P]], i32 [[TMP15]]
-; COMPARE-LAA-MV-NEXT:    [[TMP17:%.*]] = extractelement <4 x i32> [[TMP10]], i64 3
-; COMPARE-LAA-MV-NEXT:    [[TMP18:%.*]] = getelementptr i32, ptr [[P]], i32 [[TMP17]]
-; COMPARE-LAA-MV-NEXT:    [[TMP19:%.*]] = load i32, ptr [[TMP0]], align 8
-; COMPARE-LAA-MV-NEXT:    [[TMP20:%.*]] = load i32, ptr [[TMP14]], align 8
-; COMPARE-LAA-MV-NEXT:    [[TMP21:%.*]] = load i32, ptr [[TMP16]], align 8
-; COMPARE-LAA-MV-NEXT:    [[TMP22:%.*]] = load i32, ptr [[TMP18]], align 8
-; COMPARE-LAA-MV-NEXT:    [[TMP23:%.*]] = insertelement <4 x i32> poison, i32 [[TMP19]], i32 0
-; COMPARE-LAA-MV-NEXT:    [[TMP24:%.*]] = insertelement <4 x i32> [[TMP23]], i32 [[TMP20]], i32 1
-; COMPARE-LAA-MV-NEXT:    [[TMP25:%.*]] = insertelement <4 x i32> [[TMP24]], i32 [[TMP21]], i32 2
-; COMPARE-LAA-MV-NEXT:    [[WIDE_LOAD:%.*]] = insertelement <4 x i32> [[TMP25]], i32 [[TMP22]], i32 3
-; COMPARE-LAA-MV-NEXT:    [[TMP1:%.*]] = getelementptr i32, ptr [[P_OUT]], i32 [[INDEX1]]
+; COMPARE-LAA-MV-NEXT:    [[WIDE_LOAD:%.*]] = load <4 x i32>, ptr [[TMP0]], align 8
+; COMPARE-LAA-MV-NEXT:    [[TMP1:%.*]] = getelementptr i32, ptr [[P_OUT]], i32 [[INDEX]]
 ; COMPARE-LAA-MV-NEXT:    store <4 x i32> [[WIDE_LOAD]], ptr [[TMP1]], align 8
-; COMPARE-LAA-MV-NEXT:    [[INDEX_NEXT]] = add nuw i32 [[INDEX1]], 4
-; COMPARE-LAA-MV-NEXT:    [[VEC_IND_NEXT]] = add nsw <4 x i32> [[VEC_IND]], splat (i32 4)
+; COMPARE-LAA-MV-NEXT:    [[INDEX_NEXT]] = add nuw i32 [[INDEX]], 4
 ; COMPARE-LAA-MV-NEXT:    [[TMP2:%.*]] = icmp eq i32 [[INDEX_NEXT]], 128
 ; COMPARE-LAA-MV-NEXT:    br i1 [[TMP2]], label %[[MIDDLE_BLOCK:.*]], label %[[VECTOR_BODY]], !llvm.loop [[LOOP55:![0-9]+]]
 ; COMPARE-LAA-MV:       [[MIDDLE_BLOCK]]:
@@ -4015,20 +3984,8 @@ define void @trunc_ext_stride(ptr noalias %p.out, ptr %p0, ptr %p1, i32 %stride)
 ; COMPARE-LAA-MV-NEXT:    [[STRIDE_EXT:%.*]] = sext i32 [[STRIDE]] to i64
 ; COMPARE-LAA-MV-NEXT:    br label %[[VECTOR_SCEVCHECK:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_SCEVCHECK]]:
-; COMPARE-LAA-MV-NEXT:    [[TMP9:%.*]] = sub i16 0, [[STRIDE_TRUNC]]
-; COMPARE-LAA-MV-NEXT:    [[TMP10:%.*]] = icmp slt i16 [[STRIDE_TRUNC]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP11:%.*]] = select i1 [[TMP10]], i16 [[TMP9]], i16 [[STRIDE_TRUNC]]
-; COMPARE-LAA-MV-NEXT:    [[MUL:%.*]] = call { i16, i1 } @llvm.umul.with.overflow.i16(i16 [[TMP11]], i16 127)
-; COMPARE-LAA-MV-NEXT:    [[MUL_RESULT:%.*]] = extractvalue { i16, i1 } [[MUL]], 0
-; COMPARE-LAA-MV-NEXT:    [[MUL_OVERFLOW:%.*]] = extractvalue { i16, i1 } [[MUL]], 1
-; COMPARE-LAA-MV-NEXT:    [[TMP12:%.*]] = sub i16 0, [[MUL_RESULT]]
-; COMPARE-LAA-MV-NEXT:    [[TMP13:%.*]] = icmp slt i16 [[MUL_RESULT]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP14:%.*]] = icmp sgt i16 [[TMP12]], 0
-; COMPARE-LAA-MV-NEXT:    [[TMP15:%.*]] = select i1 [[TMP10]], i1 [[TMP14]], i1 [[TMP13]]
-; COMPARE-LAA-MV-NEXT:    [[TMP16:%.*]] = or i1 [[TMP15]], [[MUL_OVERFLOW]]
 ; COMPARE-LAA-MV-NEXT:    [[IDENT_CHECK:%.*]] = icmp ne i32 [[STRIDE]], 1
-; COMPARE-LAA-MV-NEXT:    [[TMP8:%.*]] = or i1 [[TMP16]], [[IDENT_CHECK]]
-; COMPARE-LAA-MV-NEXT:    br i1 [[TMP8]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
+; COMPARE-LAA-MV-NEXT:    br i1 [[IDENT_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_PH]]:
 ; COMPARE-LAA-MV-NEXT:    br label %[[VECTOR_BODY:.*]]
 ; COMPARE-LAA-MV:       [[VECTOR_BODY]]:

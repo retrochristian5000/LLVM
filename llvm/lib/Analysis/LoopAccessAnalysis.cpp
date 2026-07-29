@@ -3035,22 +3035,30 @@ bool LoopAccessInfo::isInvariant(Value *V) const {
 
 /// Get the stride of a pointer access in a loop. Looks for symbolic
 /// strides "a[i*stride]". Returns the symbolic stride, or null otherwise.
-static const SCEVUnknown *getStrideFromPointer(Value *Ptr, ScalarEvolution *SE,
-                                               Loop *Lp) {
+static const SCEV *getStrideFromPointer(Value *Ptr, ScalarEvolution *SE,
+                                        Loop *Lp) {
   assert(Ptr->getType()->isPointerTy() && "Pointer type expected");
+
+  // Get the stride of the GEP, stripping any scaling factors and casts.
   const SCEV *V = SE->removePointerBase(SE->getSCEV(Ptr));
+  match(V, m_scev_Mul(m_SCEVConstant(), m_scev_IntegralCastOrSelf(m_SCEV(V))));
 
-  while (auto *C = dyn_cast<SCEVIntegralCastExpr>(V))
-    V = C->getOperand();
+  // The stride to speculate must be the AddRec's step.
+  if (!match(V, m_scev_AffineAddRec(m_SCEV(), m_SCEV(V), m_SpecificLoop(Lp))))
+    return nullptr;
 
-  match(V, m_scev_AffineAddRec(m_SCEV(), m_SCEV(V), m_SpecificLoop(Lp)));
-  match(V, m_scev_Mul(m_SCEVConstant(), m_SCEV(V)));
+  // It wouldn't make sense to speculate on a loop-variant stride.
+  if (!SE->isLoopInvariant(V, Lp))
+    return nullptr;
 
-  while (auto *C = dyn_cast<SCEVIntegralCastExpr>(V))
-    V = C->getOperand();
+  // Strip an optional scaling factor, and let the caller handle the integral
+  // cast.
+  if (match(V, m_scev_Mul(m_SCEVConstant(),
+                          m_scev_IntegralCastOrSelf(m_SCEVUnknown()))))
+    return cast<SCEVMulExpr>(V)->getOperand(1);
 
-  // It wouldn't make sense to speculate on a loop-varying stride.
-  return SE->isLoopInvariant(V, Lp) ? dyn_cast<SCEVUnknown>(V) : nullptr;
+  // Again, let the caller handle the integral cast.
+  return match(V, m_scev_IntegralCastOrSelf(m_SCEVUnknown())) ? V : nullptr;
 }
 
 void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
@@ -3064,8 +3072,7 @@ void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
   // computation of an interesting IV - but we chose not to as we
   // don't have a cost model here, and broadening the scope exposes
   // far too many unprofitable cases.
-  const SCEVUnknown *StrideExpr =
-      getStrideFromPointer(Ptr, PSE->getSE(), TheLoop);
+  const SCEV *StrideExpr = getStrideFromPointer(Ptr, PSE->getSE(), TheLoop);
   if (!StrideExpr)
     return;
 
@@ -3122,7 +3129,12 @@ void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
   }
   LLVM_DEBUG(dbgs() << "LAA: Found a strided access that we can version.\n");
 
-  SymbolicStrides[Ptr] = StrideExpr;
+  // Strip back off the integer cast, and check that our result is a
+  // SCEVUnknown as we expect.
+  const SCEV *StrideBase = StrideExpr;
+  if (const auto *C = dyn_cast<SCEVIntegralCastExpr>(StrideBase))
+    StrideBase = C->getOperand();
+  SymbolicStrides[Ptr] = cast<SCEVUnknown>(StrideBase);
 }
 
 LoopAccessInfo::LoopAccessInfo(Loop *L, ScalarEvolution *SE,
