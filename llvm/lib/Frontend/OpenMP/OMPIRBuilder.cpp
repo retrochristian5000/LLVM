@@ -1037,7 +1037,7 @@ void OpenMPIRBuilder::finalize(Function *Fn) {
               "OMPIRBuilder finalization \n";
   };
 
-  if (!OffloadInfoManager.empty())
+  if (!Fn && !OffloadInfoManager.empty())
     createOffloadEntriesAndInfoMetadata(ErrorReportFn);
 
   if (Config.EmitLLVMUsedMetaInfo.value_or(false)) {
