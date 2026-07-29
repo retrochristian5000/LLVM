@@ -69,6 +69,7 @@
 ; GCN-O0-NEXT:   function
 ; GCN-O0-NEXT:     machine-function
 ; GCN-O0-NEXT:       reg-usage-propagation
+; GCN-O0-NEXT:       amdgpu-lower-idx-ops
 ; GCN-O0-NEXT:       amdgpu-assign-idx-to-m0
 ; GCN-O0-NEXT:       phi-node-elimination
 ; GCN-O0-NEXT:       si-lower-control-flow
@@ -218,6 +219,7 @@
 ; GCN-O2-NEXT:   function
 ; GCN-O2-NEXT:     machine-function
 ; GCN-O2-NEXT:       reg-usage-propagation
+; GCN-O2-NEXT:       amdgpu-lower-idx-ops
 ; GCN-O2-NEXT:       amdgpu-assign-idx-to-m0
 ; GCN-O2-NEXT:       amdgpu-prepare-agpr-alloc
 ; GCN-O2-NEXT:       detect-dead-lanes
@@ -407,6 +409,7 @@
 ; GCN-O3-NEXT:   function
 ; GCN-O3-NEXT:     machine-function
 ; GCN-O3-NEXT:       reg-usage-propagation
+; GCN-O3-NEXT:       amdgpu-lower-idx-ops
 ; GCN-O3-NEXT:       amdgpu-assign-idx-to-m0
 ; GCN-O3-NEXT:       amdgpu-prepare-agpr-alloc
 ; GCN-O3-NEXT:       detect-dead-lanes
