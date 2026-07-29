@@ -117,6 +117,36 @@ func.func @linalg_effects(
 
 // -----
 
+// CHECK-LABEL: func @fold_extract_slice_of_fill_of_empty
+//   CHECK-NOT:   tensor.extract_slice
+//       CHECK:   %[[EMPTY:.*]] = tensor.empty() : tensor<4096xf32>
+//       CHECK:   %[[FILL:.*]] = linalg.fill ins(%[[CST:.*]] : f32) outs(%[[EMPTY]] : tensor<4096xf32>) -> tensor<4096xf32>
+//       CHECK:   return %[[FILL]] : tensor<4096xf32>
+func.func @fold_extract_slice_of_fill_of_empty(%cst : f32) -> tensor<4096xf32> {
+  %empty = tensor.empty() : tensor<4096x1xf32>
+  %filled = linalg.fill ins(%cst : f32) outs(%empty : tensor<4096x1xf32>) -> tensor<4096x1xf32>
+  %slice = tensor.extract_slice %filled[0, 0] [4096, 1] [1, 1]
+    : tensor<4096x1xf32> to tensor<4096xf32>
+  return %slice : tensor<4096xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @fold_extract_slice_of_fill_of_empty_2d
+//   CHECK-NOT:   tensor.extract_slice
+//       CHECK:   %[[EMPTY:.*]] = tensor.empty() : tensor<32x48xf32>
+//       CHECK:   %[[FILL:.*]] = linalg.fill ins(%[[CST:.*]] : f32) outs(%[[EMPTY]] : tensor<32x48xf32>) -> tensor<32x48xf32>
+//       CHECK:   return %[[FILL]] : tensor<32x48xf32>
+func.func @fold_extract_slice_of_fill_of_empty_2d(%cst : f32) -> tensor<32x48xf32> {
+  %empty = tensor.empty() : tensor<64x96xf32>
+  %filled = linalg.fill ins(%cst : f32) outs(%empty : tensor<64x96xf32>) -> tensor<64x96xf32>
+  %slice = tensor.extract_slice %filled[0, 0] [32, 48] [1, 1]
+    : tensor<64x96xf32> to tensor<32x48xf32>
+  return %slice : tensor<32x48xf32>
+}
+
+// -----
+
 #map = affine_map<(d0, d1, d2) -> (d0, d1, d2)>
 func.func @remove_no_op(%arg0 : tensor<?x?x?xf32>, %arg1 : tensor<?x?x?xf32>)
   -> (tensor<?x?x?xf32>, tensor<?x?x?xf32>) {
