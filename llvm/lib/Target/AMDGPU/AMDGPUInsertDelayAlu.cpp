@@ -125,7 +125,8 @@ public:
 
     DelayInfo() = default;
 
-    DelayInfo(DelayType Type, unsigned Cycles) {
+    DelayInfo(DelayType Type, unsigned Cycles, bool FFProd = false) {
+      IsFFProducer = FFProd;
       switch (Type) {
       default:
         llvm_unreachable("unexpected type");
@@ -642,9 +643,8 @@ public:
 
           unsigned Latency = SchedModel->computeOperandLatency(
               &MI, Op.getOperandNo(), nullptr, 0);
-          DelayInfo Info(Type, Latency);
-
-          Info.IsFFProducer = isFastForwardProducer(MI, Op, VccReg, ExecReg);
+          DelayInfo Info(Type, Latency,
+                         isFastForwardProducer(MI, Op, VccReg, ExecReg));
           for (MCRegUnit Unit : TRI->regunits(Reg))
             State[Unit] = Info;
         }
