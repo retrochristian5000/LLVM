@@ -823,15 +823,22 @@ ABIArgInfo ZOSXPLinkABIInfo::classifyArgumentType(QualType Ty, bool IsNamedArg,
     return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                    RAA == CGCXXABI::RAA_DirectInMemory);
 
-  // The XPLINK64 ABI does not mandate any widening of integer arguments;
+  // The XPLINK64 ABI does not mandate any widening of named integer arguments;
   // arguments are passed at their natural width with no sign- or zero-extension
   // guarantee.  Only return values are required to be widened (per the z/OS
   // Language Environment Vendor Interfaces spec).  Other compilers (e.g. xlc)
   // leave the upper bits of an argument register unspecified, so emitting
-  // signext/zeroext on parameters would produce incorrect code when
+  // signext/zeroext on named parameters would produce incorrect code when
   // interoperating with xlc.
-  if (isPromotableIntegerTypeForABI(Ty))
-    return ABIArgInfo::getDirect(CGT.ConvertType(Ty));
+  //
+  // However, variadic arguments are different: the callee has no prototype for
+  // them and reads a full 64-bit GPR, so the upper bits must be clean.
+  // Extend variadic integer arguments to 64 bits.
+  if (isPromotableIntegerTypeForABI(Ty)) {
+    if (IsNamedArg)
+      return ABIArgInfo::getDirect(CGT.ConvertType(Ty));
+    return ABIArgInfo::getExtend(Ty, CGT.ConvertType(Ty));
+  }
 
   // For non-C calling conventions, compound types passed by address copy.
   if ((CallConv != llvm::CallingConv::C) && isCompoundType(Ty))
