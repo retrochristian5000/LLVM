@@ -14,6 +14,7 @@
 #include "lldb/Host/ProcessRunLock.h"
 #include "lldb/Target/StackID.h"
 #include "lldb/Target/SyntheticFrameProvider.h"
+#include "lldb/Target/TargetAPILock.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
@@ -569,7 +570,7 @@ struct StoppedExecutionContext : ExecutionContext {
                           lldb::ProcessSP &process_sp,
                           lldb::ThreadSP &thread_sp,
                           lldb::StackFrameSP &frame_sp,
-                          std::unique_lock<std::recursive_mutex> api_lock,
+                          std::unique_lock<TargetAPILock> api_lock,
                           ProcessRunLock::ProcessRunLocker stop_locker)
       : m_api_lock(std::move(api_lock)), m_stop_locker(std::move(stop_locker)) {
     assert(target_sp);
@@ -595,10 +596,10 @@ struct StoppedExecutionContext : ExecutionContext {
   /// Clears this context, unlocking the ProcessRunLock and returning the
   /// locked API lock, allowing callers to resume the process. Similar to
   /// a move operation, this object is no longer usable.
-  [[nodiscard]] std::unique_lock<std::recursive_mutex> AllowResume();
+  [[nodiscard]] std::unique_lock<TargetAPILock> AllowResume();
 
 private:
-  std::unique_lock<std::recursive_mutex> m_api_lock;
+  std::unique_lock<TargetAPILock> m_api_lock;
   ProcessRunLock::ProcessRunLocker m_stop_locker;
 };
 

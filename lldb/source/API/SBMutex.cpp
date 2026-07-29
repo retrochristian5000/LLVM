@@ -16,8 +16,21 @@
 using namespace lldb;
 using namespace lldb_private;
 
-SBMutex::SBMutex() : m_opaque_sp(std::make_shared<std::recursive_mutex>()) {
+namespace {
+/// Backing storage for a standalone (not Target-derived) SBMutex: owns the
+/// std::recursive_mutex that the TargetAPILock member wraps, so both share
+/// one control block and one lifetime.
+struct StandaloneAPILock {
+  std::recursive_mutex mutex;
+  TargetAPILock lock{mutex};
+};
+} // namespace
+
+SBMutex::SBMutex() {
   LLDB_INSTRUMENT_VA(this);
+
+  auto owner = std::make_shared<StandaloneAPILock>();
+  m_opaque_sp = std::shared_ptr<TargetAPILock>(owner, &owner->lock);
 }
 
 SBMutex::SBMutex(const SBMutex &rhs) : m_opaque_sp(rhs.m_opaque_sp) {
@@ -32,8 +45,8 @@ const SBMutex &SBMutex::operator=(const SBMutex &rhs) {
 }
 
 SBMutex::SBMutex(lldb::TargetSP target_sp)
-    : m_opaque_sp(std::shared_ptr<std::recursive_mutex>(
-          target_sp, &target_sp->GetAPIMutex())) {
+    : m_opaque_sp(std::shared_ptr<TargetAPILock>(target_sp,
+                                                 &target_sp->GetAPIMutex())) {
   LLDB_INSTRUMENT_VA(this, target_sp);
 }
 

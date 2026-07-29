@@ -87,8 +87,7 @@ addr_t SBBreakpointLocation::GetLoadAddress() {
   BreakpointLocationSP loc_sp = GetSP();
 
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     ret_addr = loc_sp->GetLoadAddress();
   }
 
@@ -100,8 +99,7 @@ void SBBreakpointLocation::SetEnabled(bool enabled) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     llvm::consumeError(loc_sp->SetEnabled(enabled));
   }
 }
@@ -111,8 +109,7 @@ bool SBBreakpointLocation::IsEnabled() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->IsEnabled();
   } else
     return false;
@@ -123,8 +120,7 @@ uint32_t SBBreakpointLocation::GetHitCount() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->GetHitCount();
   } else
     return 0;
@@ -135,8 +131,7 @@ uint32_t SBBreakpointLocation::GetIgnoreCount() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->GetIgnoreCount();
   } else
     return 0;
@@ -147,8 +142,7 @@ void SBBreakpointLocation::SetIgnoreCount(uint32_t n) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetIgnoreCount(n);
   }
 }
@@ -158,8 +152,7 @@ void SBBreakpointLocation::SetCondition(const char *condition) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     // Treat a nullptr as clearing the condition
     if (!condition)
       loc_sp->SetCondition(StopCondition());
@@ -175,8 +168,7 @@ const char *SBBreakpointLocation::GetCondition() {
   if (!loc_sp)
     return nullptr;
 
-  std::lock_guard<std::recursive_mutex> guard(
-      loc_sp->GetTarget().GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
   StopCondition cond = loc_sp->GetCondition();
   if (!cond)
     return nullptr;
@@ -188,8 +180,7 @@ void SBBreakpointLocation::SetAutoContinue(bool auto_continue) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetAutoContinue(auto_continue);
   }
 }
@@ -199,8 +190,7 @@ bool SBBreakpointLocation::GetAutoContinue() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->IsAutoContinue();
   }
   return false;
@@ -213,8 +203,7 @@ void SBBreakpointLocation::SetCallback(SBBreakpointHitCallback callback,
   BreakpointLocationSP loc_sp = GetSP();
 
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     BatonSP baton_sp(new SBBreakpointCallbackBaton(callback, baton));
     loc_sp->SetCallback(SBBreakpointCallbackBaton::PrivateBreakpointHitCallback,
                         baton_sp, false);
@@ -235,8 +224,7 @@ SBError SBBreakpointLocation::SetScriptCallbackFunction(
 
   if (loc_sp) {
     Status error;
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     BreakpointOptions &bp_options = loc_sp->GetLocationOptions();
     error = loc_sp->GetBreakpoint()
         .GetTarget()
@@ -261,8 +249,7 @@ SBBreakpointLocation::SetScriptCallbackBody(const char *callback_body_text) {
 
   SBError sb_error;
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     BreakpointOptions &bp_options = loc_sp->GetLocationOptions();
     Status error =
         loc_sp->GetBreakpoint()
@@ -287,8 +274,7 @@ void SBBreakpointLocation::SetCommandLineCommands(SBStringList &commands) {
   if (commands.GetSize() == 0)
     return;
 
-  std::lock_guard<std::recursive_mutex> guard(
-      loc_sp->GetTarget().GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
   std::unique_ptr<BreakpointOptions::CommandData> cmd_data_up(
       new BreakpointOptions::CommandData(*commands, eScriptLanguageNone));
 
@@ -314,8 +300,7 @@ void SBBreakpointLocation::SetThreadID(lldb::tid_t thread_id) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetThreadID(thread_id);
   }
 }
@@ -326,8 +311,7 @@ lldb::tid_t SBBreakpointLocation::GetThreadID() {
   lldb::tid_t tid = LLDB_INVALID_THREAD_ID;
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->GetThreadID();
   }
   return tid;
@@ -338,8 +322,7 @@ void SBBreakpointLocation::SetThreadIndex(uint32_t index) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetThreadIndex(index);
   }
 }
@@ -350,8 +333,7 @@ uint32_t SBBreakpointLocation::GetThreadIndex() const {
   uint32_t thread_idx = UINT32_MAX;
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->GetThreadIndex();
   }
   return thread_idx;
@@ -362,8 +344,7 @@ void SBBreakpointLocation::SetThreadName(const char *thread_name) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetThreadName(thread_name);
   }
 }
@@ -375,8 +356,7 @@ const char *SBBreakpointLocation::GetThreadName() const {
   if (!loc_sp)
     return nullptr;
 
-  std::lock_guard<std::recursive_mutex> guard(
-      loc_sp->GetTarget().GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
   return ConstString(loc_sp->GetThreadName()).GetCString();
 }
 
@@ -385,8 +365,7 @@ void SBBreakpointLocation::SetQueueName(const char *queue_name) {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->SetQueueName(queue_name);
   }
 }
@@ -398,8 +377,7 @@ const char *SBBreakpointLocation::GetQueueName() const {
   if (!loc_sp)
     return nullptr;
 
-  std::lock_guard<std::recursive_mutex> guard(
-      loc_sp->GetTarget().GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
   return ConstString(loc_sp->GetQueueName()).GetCString();
 }
 
@@ -408,8 +386,7 @@ bool SBBreakpointLocation::IsResolved() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->IsResolved();
   }
   return false;
@@ -429,8 +406,7 @@ bool SBBreakpointLocation::GetDescription(SBStream &description,
   BreakpointLocationSP loc_sp = GetSP();
 
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     loc_sp->GetDescription(&strm, level);
     strm.EOL();
   } else
@@ -444,8 +420,7 @@ break_id_t SBBreakpointLocation::GetID() {
 
   BreakpointLocationSP loc_sp = GetSP();
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     return loc_sp->GetID();
   } else
     return LLDB_INVALID_BREAK_ID;
@@ -458,8 +433,7 @@ SBBreakpoint SBBreakpointLocation::GetBreakpoint() {
 
   SBBreakpoint sb_bp;
   if (loc_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
-        loc_sp->GetTarget().GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(loc_sp->GetTarget().GetAPIMutex());
     sb_bp = loc_sp->GetBreakpoint().shared_from_this();
   }
 

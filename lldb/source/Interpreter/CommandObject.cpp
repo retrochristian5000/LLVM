@@ -235,8 +235,7 @@ bool CommandObject::CheckRequirements(CommandReturnObject &result) {
 
     if (flags & eCommandTryTargetAPILock) {
       if (target && !target->IsDummyTarget())
-        m_api_locker =
-            std::unique_lock<std::recursive_mutex>(target->GetAPIMutex());
+        m_api_locker = std::unique_lock<TargetAPILock>(target->GetAPIMutex());
     }
   }
 

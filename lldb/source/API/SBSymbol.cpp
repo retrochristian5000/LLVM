@@ -127,9 +127,9 @@ SBInstructionList SBSymbol::GetInstructions(SBTarget target,
   SBInstructionList sb_instructions;
   if (m_opaque_ptr) {
     TargetSP target_sp(target.GetSP());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     if (target_sp && m_opaque_ptr->ValueIsAddress()) {
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
       const Address &symbol_addr = m_opaque_ptr->GetAddressRef();
       ModuleSP module_sp = symbol_addr.GetModule();
       if (module_sp) {

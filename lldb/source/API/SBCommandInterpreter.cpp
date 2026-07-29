@@ -385,7 +385,7 @@ SBProcess SBCommandInterpreter::GetProcess() {
   if (IsValid()) {
     TargetSP target_sp(m_opaque_ptr->GetSelectedTarget());
     if (target_sp) {
-      std::lock_guard<std::recursive_mutex> guard(target_sp->GetAPIMutex());
+      std::lock_guard<TargetAPILock> guard(target_sp->GetAPIMutex());
       process_sp = target_sp->GetProcessSP();
       sb_process.SetSP(process_sp);
     }
@@ -472,9 +472,9 @@ void SBCommandInterpreter::SourceInitFileInGlobalDirectory(
   result.Clear();
   if (IsValid()) {
     TargetSP target_sp(m_opaque_ptr->GetSelectedTarget());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     if (target_sp)
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
     m_opaque_ptr->SourceInitFileGlobal(result.ref());
   } else {
     result->AppendError("SBCommandInterpreter is not valid");
@@ -495,9 +495,9 @@ void SBCommandInterpreter::SourceInitFileInHomeDirectory(
   result.Clear();
   if (IsValid()) {
     TargetSP target_sp(m_opaque_ptr->GetSelectedTarget());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     if (target_sp)
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
     m_opaque_ptr->SourceInitFileHome(result.ref(), is_repl);
   } else {
     result->AppendError("SBCommandInterpreter is not valid");
@@ -511,9 +511,9 @@ void SBCommandInterpreter::SourceInitFileInCurrentWorkingDirectory(
   result.Clear();
   if (IsValid()) {
     TargetSP target_sp(m_opaque_ptr->GetSelectedTarget());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     if (target_sp)
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
     m_opaque_ptr->SourceInitFileCwd(result.ref());
   } else {
     result->AppendError("SBCommandInterpreter is not valid");

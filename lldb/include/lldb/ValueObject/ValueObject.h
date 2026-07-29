@@ -1290,7 +1290,7 @@ public:
   lldb::ValueObjectSP GetRootSP() { return m_valobj_sp; }
 
   lldb::ValueObjectSP GetSP(Process::StopLocker &stop_locker,
-                            std::unique_lock<std::recursive_mutex> &lock,
+                            std::unique_lock<TargetAPILock> &lock,
                             Status &error);
 
   void SetUseDynamic(lldb::DynamicValueType use_dynamic) {
@@ -1342,7 +1342,7 @@ public:
 
 private:
   Process::StopLocker m_stop_locker;
-  std::unique_lock<std::recursive_mutex> m_lock;
+  std::unique_lock<TargetAPILock> m_lock;
   Status m_lock_error;
 };
 
