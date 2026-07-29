@@ -5222,9 +5222,14 @@ void computeKnownFPClass(const Value *V, const APInt &DemandedElts,
   if (Depth == MaxAnalysisRecursionDepth)
     return;
 
+  // True only for ops where NSZ may relax the result zero sign.
+  bool AllowNSZResultRelaxation = false;
   const unsigned Opc = Op->getOpcode();
   switch (Opc) {
   case Instruction::FNeg: {
+    // fneg(fabs(...)) always produces -0 for zero inputs.
+    AllowNSZResultRelaxation =
+        !match(Op->getOperand(0), m_Intrinsic<Intrinsic::fabs>(m_Value()));
     computeKnownFPClass(Op->getOperand(0), DemandedElts, InterestedClasses,
                         Known, Q, Depth + 1);
     Known.fneg();
@@ -5774,6 +5779,7 @@ void computeKnownFPClass(const Value *V, const APInt &DemandedElts,
   }
   case Instruction::FAdd:
   case Instruction::FSub: {
+    AllowNSZResultRelaxation = true;
     KnownFPClass KnownLHS, KnownRHS;
     bool WantNegative =
         Op->getOpcode() == Instruction::FAdd &&
@@ -5830,6 +5836,7 @@ void computeKnownFPClass(const Value *V, const APInt &DemandedElts,
     break;
   }
   case Instruction::FMul: {
+    AllowNSZResultRelaxation = true;
     const Function *F = cast<Instruction>(Op)->getFunction();
     DenormalMode Mode =
         F ? F->getDenormalMode(
@@ -5878,6 +5885,7 @@ void computeKnownFPClass(const Value *V, const APInt &DemandedElts,
   }
   case Instruction::FDiv:
   case Instruction::FRem: {
+    AllowNSZResultRelaxation = true;
     const bool WantNan = (InterestedClasses & fcNan) != fcNone;
 
     if (Op->getOpcode() == Instruction::FRem)
@@ -6275,6 +6283,30 @@ void computeKnownFPClass(const Value *V, const APInt &DemandedElts,
   }
   default:
     break;
+  }
+
+  // With no-signed-zeros semantics, +0 and -0 are interchangeable.
+  // If only one sign of logical zero is possible in the result, the other
+  // sign must also be considered possible. Apply this selectively because
+  // some ops preserve or explicitly determine the zero sign.
+  if (const auto *FPOp = dyn_cast_or_null<FPMathOperator>(Op)) {
+    if (FPOp->hasNoSignedZeros() && AllowNSZResultRelaxation) {
+      const auto *I = dyn_cast<Instruction>(Op);
+      const Function *F = I ? I->getFunction() : nullptr;
+      const fltSemantics &FltSem =
+          Op->getType()->getScalarType()->getFltSemantics();
+      DenormalMode Mode =
+          F ? F->getDenormalMode(FltSem) : DenormalMode::getDynamic();
+      bool NeverPosZero = Known.isKnownNeverLogicalPosZero(Mode);
+      bool NeverNegZero = Known.isKnownNeverLogicalNegZero(Mode);
+      if (NeverPosZero != NeverNegZero) {
+        if (NeverPosZero)
+          Known.KnownFPClasses |= fcPosZero;
+        if (NeverNegZero)
+          Known.KnownFPClasses |= fcNegZero;
+        Known.SignBit = std::nullopt;
+      }
+    }
   }
 }
 
