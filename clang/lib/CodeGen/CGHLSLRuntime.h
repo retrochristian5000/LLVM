@@ -378,9 +378,10 @@ private:
   unsigned DXILInputSemanticIndex = 0;
   unsigned DXILOutputSemanticIndex = 0;
 
-  // Accumulated while lowering an entry point's input semantics and consumed
-  // when constructing its signature metadata.
+  // Accumulated while lowering an entry point's semantics and consumed when
+  // constructing its signature metadata.
   llvm::SmallVector<llvm::hlsl::SemanticSignatureElement> InputSignature;
+  llvm::SmallVector<llvm::hlsl::SemanticSignatureElement> OutputSignature;
 };
 
 } // namespace CodeGen
