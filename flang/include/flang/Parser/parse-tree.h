@@ -1539,7 +1539,7 @@ struct DataStmtValue {
 //        array-element | scalar-structure-component | data-implied-do
 struct DataIDoObject {
   UNION_CLASS_BOILERPLATE(DataIDoObject);
-  std::variant<Scalar<common::Indirection<Designator>>,
+  std::variant<common::Indirection<Designator>,
       common::Indirection<DataImpliedDo>>
       u;
 };
