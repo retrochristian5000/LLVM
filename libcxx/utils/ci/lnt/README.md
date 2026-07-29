@@ -53,6 +53,16 @@ each commit. Finally, `dispatch-benchmarks` interprets this plan and actually di
 the Github workflows based on a budget, taking into account currently running workflows
 and previously failed runs, if any (to avoid requesting runs that fail indefinitely).
 
+In production, this pipeline is run by the `libcxx-benchmark-cron.yml` workflow, which runs
+it for each machine defined in `machines.json` on a schedule.
+
+## Configuring the benchmark machines
+
+`machines.json` describes the machines we benchmark on. It is the single source of truth
+for both the workflow that runs the benchmarks (`libcxx-benchmark-commit.yml`) and the cron
+that requests those runs (`libcxx-benchmark-cron.yml`). Each entry contains variables used
+by the various workflows and the LNT machine name that the results will be reported under.
+
 ## Running benchmarks locally
 
 On GitHub, the `libcxx-benchmark-commit.yml` workflow is used to run benchmarks and report
