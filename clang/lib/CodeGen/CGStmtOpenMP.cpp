@@ -66,6 +66,15 @@ static bool canEmitGPUFusedDistSchedule(const CodeGenModule &CGM,
          !S.getSingleClause<OMPOrderedClause>();
 }
 
+static bool canEmitGPUNoLoopKernel(CodeGenModule &CGM,
+                                   const OMPLoopDirective &S) {
+  const auto *D = dyn_cast<OMPTargetTeamsDistributeParallelForDirective>(&S);
+  return CGM.getLangOpts().OpenMPIRBuilder && S.getLoopsNumber() == 1 &&
+         CGM.getOpenMPRuntime().canPromoteToNoLoop(S) &&
+         !S.getSingleClause<OMPScheduleClause>() &&
+         !S.getSingleClause<OMPDistScheduleClause>() && !(D && D->hasCancel());
+}
+
 namespace {
 /// Lexical scope for OpenMP executable constructs, that handles correct codegen
 /// for captured expressions.
@@ -3707,6 +3716,28 @@ emitInnerParallelForWhenCombined(CodeGenFunction &CGF,
         HasCancel = D->hasCancel();
     }
     CodeGenFunction::OMPCancelStackRAII CancelRegion(CGF, EKind, HasCancel);
+
+    CodeGenModule &CGM = CGF.CGM;
+    if (canEmitGPUNoLoopKernel(CGM, S)) {
+      const Stmt *Inner = S.getRawStmt();
+      llvm::CanonicalLoopInfo *CLI =
+          CGF.EmitOMPCollapsedCanonicalLoopNest(Inner, 1);
+      llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
+          CGF.AllocaInsertPt->getParent(), CGF.AllocaInsertPt->getIterator());
+
+      llvm::OpenMPIRBuilder &OMPBuilder =
+          CGM.getOpenMPRuntime().getOMPBuilder();
+      cantFail(OMPBuilder.applyWorkshareLoop(
+          CGF.Builder.getCurrentDebugLocation(), CLI, AllocaIP,
+          /*NeedsBarrier=*/!S.getSingleClause<OMPNowaitClause>(),
+          llvm::omp::OMP_SCHEDULE_Default, /*ChunkSize=*/nullptr,
+          /*HasSimdModifier=*/false, /*HasMonotonicModifier=*/false,
+          /*HasNonmonotonicModifier=*/false, /*HasOrderedClause=*/false,
+          llvm::omp::WorksharingLoopType::DistributeForStaticLoop,
+          /*NoLoop=*/true));
+      return;
+    }
+
     CGF.EmitOMPWorksharingLoop(S, S.getPrevEnsureUpperBound(),
                                emitDistributeParallelForInnerBounds,
                                emitDistributeParallelForDispatchBounds);
@@ -6309,9 +6340,11 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
       const unsigned IVSize = getContext().getTypeSize(IVExpr->getType());
       const bool IVSigned = IVExpr->getType()->hasSignedIntegerRepresentation();
 
-      // GPU fused schedule: omit the outer distribute loop and let the inner
-      // worksharing loop schedule the flattened team/thread iteration space.
-      if (canEmitGPUFusedDistSchedule(CGM, S, S.getDirectiveKind())) {
+      // omit the outer distribute loop and let the inner worksharing loop
+      // schedule the flattened team/thread iteration space, necessary for
+      // GPU fused schedule and no-loop optimization
+      if (canEmitGPUFusedDistSchedule(CGM, S, S.getDirectiveKind()) ||
+          canEmitGPUNoLoopKernel(CGM, S)) {
         JumpDest LoopExit =
             getJumpDestInCurrentScope(createBasicBlock("omp.loop.exit"));
         CodeGenLoop(*this, S, LoopExit);
