@@ -613,7 +613,7 @@ VPInstruction::VPInstruction(unsigned Opcode, ArrayRef<VPValue *> Operands,
       VPIRMetadata(MD), Opcode(Opcode), Name(Name.str()) {
   assert(flagsValidForOpcode(getOpcode()) &&
          "Set flags not supported for the provided opcode");
-  assert(hasRequiredFlagsForOpcode(getOpcode()) &&
+  assert(hasRequiredFlagsForOpcode(getOpcode(), getScalarType()) &&
          "Opcode requires specific flags to be set");
   assert((getNumOperandsForOpcode() == -1u ||
           getNumOperandsForOpcode() == getNumOperands() ||
@@ -1571,7 +1571,7 @@ void VPInstruction::execute(VPTransformState &State) {
   IRBuilderBase::FastMathFlagGuard FMFGuard(State.Builder);
   assert(flagsValidForOpcode(getOpcode()) &&
          "Set flags not supported for the provided opcode");
-  assert(hasRequiredFlagsForOpcode(getOpcode()) &&
+  assert(hasRequiredFlagsForOpcode(getOpcode(), getScalarType()) &&
          "Opcode requires specific flags to be set");
   State.Builder.setFastMathFlags(getFastMathFlagsOrNone());
   Value *GeneratedValue = generate(State);
@@ -2494,7 +2494,7 @@ VPIRFlags::FastMathFlagsTy::FastMathFlagsTy(const FastMathFlags &FMF) {
   ApproxFunc = FMF.approxFunc();
 }
 
-VPIRFlags VPIRFlags::getDefaultFlags(unsigned Opcode) {
+VPIRFlags VPIRFlags::getDefaultFlags(unsigned Opcode, Type *ResultTy) {
   switch (Opcode) {
   case Instruction::Add:
   case Instruction::Sub:
@@ -2527,6 +2527,14 @@ VPIRFlags VPIRFlags::getDefaultFlags(unsigned Opcode) {
   case Instruction::FPExt:
   case Instruction::FPTrunc:
     return FastMathFlags();
+  case Instruction::Select:
+  case Instruction::PHI:
+  case Instruction::Call:
+    // Selects, phis and calls only have fast-math flags if they produce a
+    // floating-point value.
+    if (FPMathOperator::isSupportedFloatingPointType(ResultTy))
+      return FastMathFlags();
+    return VPIRFlags();
   case Instruction::ICmp:
   case Instruction::FCmp:
   case VPInstruction::ComputeReductionResult:
@@ -2578,7 +2586,8 @@ bool VPIRFlags::flagsValidForOpcode(unsigned Opcode) const {
   llvm_unreachable("Unknown OperationType enum");
 }
 
-bool VPIRFlags::hasRequiredFlagsForOpcode(unsigned Opcode) const {
+bool VPIRFlags::hasRequiredFlagsForOpcode(unsigned Opcode,
+                                          Type *ResultTy) const {
   // Handle opcodes without default flags.
   if (Opcode == Instruction::ICmp)
     return OpType == OperationType::Cmp;
@@ -2587,7 +2596,7 @@ bool VPIRFlags::hasRequiredFlagsForOpcode(unsigned Opcode) const {
   if (Opcode == VPInstruction::ComputeReductionResult)
     return OpType == OperationType::ReductionOp;
 
-  OperationType Required = getDefaultFlags(Opcode).OpType;
+  OperationType Required = getDefaultFlags(Opcode, ResultTy).OpType;
   return Required == OperationType::Other || Required == OpType;
 }
 #endif
