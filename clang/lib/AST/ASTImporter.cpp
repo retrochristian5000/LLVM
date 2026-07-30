@@ -2182,6 +2182,15 @@ ExpectedType clang::ASTNodeImporter::VisitPipeType(const clang::PipeType *T) {
     return ToCtx.getWritePipeType(*ToElementTypeOrErr);
 }
 
+ExpectedType clang::ASTNodeImporter::VisitWebAssemblyTableType(
+    const clang::WebAssemblyTableType *T) {
+  ExpectedType ToElementTypeOrErr = import(T->getElementType());
+  if (!ToElementTypeOrErr)
+    return ToElementTypeOrErr.takeError();
+
+  return Importer.getToContext().getWebAssemblyTableType(*ToElementTypeOrErr);
+}
+
 //----------------------------------------------------------------------------
 // Import Declarations
 //----------------------------------------------------------------------------
