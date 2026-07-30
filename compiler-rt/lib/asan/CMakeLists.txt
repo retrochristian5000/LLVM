@@ -188,6 +188,16 @@ if(COMPILER_RT_ASAN_ENABLE_EXCEPTIONS AND COMPILER_RT_HAS_FEXCEPTIONS_FLAG)
   list(APPEND ASAN_CXX_CFLAGS -fexceptions)
   list(REMOVE_ITEM ASAN_DYNAMIC_CXX_CFLAGS -fno-exceptions)
   list(APPEND ASAN_DYNAMIC_CXX_CFLAGS -fexceptions)
+  # The throwing operator new throws std::bad_alloc. Under -fno-rtti clang emits a
+  # private type_info copy a user `catch` can't match on Mach-O. ELF avoids this
+  # only via linker coalescing of the weak copies, which is not guaranteed
+  # (e.g. defeated by `-Bsymbolic`). Build with -frtti to use libc++abi's copy.
+  if(COMPILER_RT_HAS_FRTTI_FLAG)
+    list(REMOVE_ITEM ASAN_CXX_CFLAGS -fno-rtti)
+    list(APPEND ASAN_CXX_CFLAGS -frtti)
+    list(REMOVE_ITEM ASAN_DYNAMIC_CXX_CFLAGS -fno-rtti)
+    list(APPEND ASAN_DYNAMIC_CXX_CFLAGS -frtti)
+  endif()
   if(TARGET cxx-headers OR HAVE_LIBCXX)
     list(APPEND ASAN_CXX_CFLAGS ${COMPILER_RT_CXX_CFLAGS})
     list(APPEND ASAN_DYNAMIC_CXX_CFLAGS ${COMPILER_RT_CXX_CFLAGS})
