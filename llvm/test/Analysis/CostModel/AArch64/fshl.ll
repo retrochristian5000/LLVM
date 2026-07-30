@@ -286,7 +286,7 @@ entry:
 
 define <2 x i128> @fshl_v2i128_3rd_arg_var(<2 x i128> %a, <2 x i128> %b, <2 x i128> %c) {
 ; CHECK-LABEL: 'fshl_v2i128_3rd_arg_var'
-; CHECK-NEXT:  Cost Model: Found costs of RThru:36 CodeSize:17 Lat:21 SizeLat:21 for: %r = tail call <2 x i128> @llvm.fshl.v2i128(<2 x i128> %a, <2 x i128> %b, <2 x i128> %c)
+; CHECK-NEXT:  Cost Model: Found costs of RThru:44 CodeSize:21 Lat:29 SizeLat:29 for: %r = tail call <2 x i128> @llvm.fshl.v2i128(<2 x i128> %a, <2 x i128> %b, <2 x i128> %c)
 ; CHECK-NEXT:  Cost Model: Found costs of RThru:0 CodeSize:1 Lat:1 SizeLat:1 for: ret <2 x i128> %r
 ;
 entry:
