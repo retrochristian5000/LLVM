@@ -231,6 +231,14 @@ void GDBRemoteCommunicationServerLLGS::RegisterPacketHandlers() {
           eServerPacketType_jAcceleratorPluginBreakpointHit,
       &GDBRemoteCommunicationServerLLGS::
           Handle_jAcceleratorPluginBreakpointHit);
+  RegisterMemberFunctionHandler(
+      StringExtractorGDBRemote::
+          eServerPacketType_jAcceleratorPluginGetDynamicLoaderLibraryInfo,
+      &GDBRemoteCommunicationServerLLGS::
+          Handle_jAcceleratorPluginGetDynamicLoaderLibraryInfo);
+  RegisterMemberFunctionHandler(
+      StringExtractorGDBRemote::eServerPacketType_jLLDBSettings,
+      &GDBRemoteCommunicationServerLLGS::Handle_jLLDBSettings);
 
   RegisterMemberFunctionHandler(StringExtractorGDBRemote::eServerPacketType_g,
                                 &GDBRemoteCommunicationServerLLGS::Handle_g);
@@ -4640,4 +4648,60 @@ GDBRemoteCommunicationServerLLGS::Handle_jAcceleratorPluginBreakpointHit(
   }
   return SendErrorResponse(
       Status::FromErrorString("unknown accelerator plugin name"));
+}
+
+GDBRemoteCommunication::PacketResult GDBRemoteCommunicationServerLLGS::
+    Handle_jAcceleratorPluginGetDynamicLoaderLibraryInfo(
+        StringExtractorGDBRemote &packet) {
+  packet.ConsumeFront("jAcceleratorPluginGetDynamicLoaderLibraryInfo:");
+  llvm::Expected<AcceleratorDynamicLoaderArgs> args =
+      llvm::json::parse<AcceleratorDynamicLoaderArgs>(
+          packet.Peek(), "AcceleratorDynamicLoaderArgs");
+  if (!args)
+    return SendErrorResponse(args.takeError());
+
+  // On the CPU connection, forward to the named accelerator plugin.
+  if (!m_accelerator_plugins.empty()) {
+    for (std::unique_ptr<lldb_server::LLDBServerAcceleratorPlugin> &plugin_up :
+         m_accelerator_plugins) {
+      if (plugin_up->GetPluginName() == args->plugin_name) {
+        std::optional<AcceleratorDynamicLoaderResponse> response =
+            plugin_up->GetDynamicLoaderLibraryInfos(*args);
+        if (response) {
+          StreamGDBRemote stream;
+          stream.PutAsJSON(*response, /*hex_ascii=*/false);
+          return SendPacketNoLock(stream.GetString());
+        }
+        return SendErrorResponse(
+            Status::FromErrorString("no dynamic loader info available"));
+      }
+    }
+    return SendErrorResponse(
+        Status::FromErrorString("unknown accelerator plugin name"));
+  }
+
+  // On the GPU connection, ask the process directly.
+  if (!m_current_process)
+    return SendErrorResponse(Status::FromErrorString("no current process"));
+  std::optional<AcceleratorDynamicLoaderResponse> response =
+      m_current_process->GetAcceleratorDynamicLoaderLibraryInfos(*args);
+  if (!response)
+    return SendErrorResponse(
+        Status::FromErrorString("dynamic loader library info not supported"));
+  StreamGDBRemote stream;
+  stream.PutAsJSON(*response, /*hex_ascii=*/false);
+  return SendPacketNoLock(stream.GetString());
+}
+
+GDBRemoteCommunication::PacketResult
+GDBRemoteCommunicationServerLLGS::Handle_jLLDBSettings(
+    StringExtractorGDBRemote &packet) {
+  if (!m_current_process)
+    return SendErrorResponse(Status::FromErrorString("no current process"));
+  std::optional<LLDBSettings> settings = m_current_process->GetLLDBSettings();
+  if (!settings)
+    return SendUnimplementedResponse("jLLDBSettings");
+  StreamGDBRemote stream;
+  stream.PutAsJSON(*settings, /*hex_ascii=*/false);
+  return SendPacketNoLock(stream.GetString());
 }
