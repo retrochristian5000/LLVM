@@ -14,7 +14,3 @@
 #define LANGUAGE cuda
 
 #include "../../kernel/src/LanguageRuntime.cpp"
-
-extern "C" {
-void __cudaRegisterFatBinaryEnd(void *) {}
-}

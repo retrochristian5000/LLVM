@@ -15,10 +15,3 @@
 #define LANGUAGE hip
 
 #include "../../kernel/src/LanguageRuntime.cpp"
-
-extern "C" hipError_t hipLaunchKernel(const char *KernelID, dim3 GridDim,
-                                      dim3 BlockDim, void **KernelArgsPtr,
-                                      size_t DynamicSharedMem, void *Stream) {
-  return convertResult(__llvmLaunchKernelImpl(
-      KernelID, GridDim, BlockDim, KernelArgsPtr, DynamicSharedMem, Stream));
-}

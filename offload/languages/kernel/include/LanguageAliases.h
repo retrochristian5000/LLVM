@@ -23,8 +23,6 @@
 
 MAKE_ALIAS(__, void, RegisterFunction, const char *, const char *, char *,
            const char *, int, uint3 *, uint3 *, dim3 *, dim3 *, int *)
-MAKE_ALIAS(__, const char *, RegisterFatBinary, const char *)
-MAKE_ALIAS(__, void, UnregisterFatBinary, void *)
 MAKE_ALIAS(__, void, RegisterVar, void **, char *, char *, const char *, int,
            int, int, int)
 MAKE_ALIAS(__, void, RegisterManagedVar, void **, char *, char *, const char *,
