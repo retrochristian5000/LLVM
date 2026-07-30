@@ -587,14 +587,17 @@ public:
             // ignore this operand.
             if (MI.getOpcode() == AMDGPU::V_WRITELANE_B32 && Op.isTied())
               continue;
-            // Suppress the delay for VCC operands when both the
-            // producer and consumer are in the hardware fast-forward set.
+
             Register Reg = Op.getReg();
             unsigned OperandNo = MI.getOperandNo(&Op);
+            // Skip operands that are not part of the instruction definition
             if (OperandNo >= MI.getDesc().getNumOperands() &&
-                !MI.getDesc().hasImplicitUseOfPhysReg(Reg))
+                !MI.getDesc().hasImplicitUseOfPhysReg(
+                    Reg == VccReg ? AMDGPU::VCC : Reg))
               continue;
 
+            // Suppress the delay for VCC/EXEC/SGPR operands when both the
+            // producer and consumer are in the hardware fast-forward set.
             if (isFastForwardConsumer(MI, Op, VccReg, ExecReg, OperandNo) &&
                 llvm::all_of(TRI->regunits(Reg), [&](MCRegUnit Unit) {
                   auto It = State.find(Unit);
