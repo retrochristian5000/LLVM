@@ -81,6 +81,9 @@ static bool hasSingleValue(const ValueLatticeElement &Val) {
       Val.getConstantRange().isSingleElement())
     // Integer constants are single element ranges
     return true;
+  if (Val.isConstantFPRange() && Val.getConstantFPRange().isSingleElement())
+    // Floating point constants are single element ranges
+    return true;
   if (Val.isConstant())
     // Non integer constants
     return true;
@@ -2029,6 +2032,11 @@ Constant *LazyValueInfo::getConstant(Value *V, Instruction *CxtI) {
     if (const APInt *SingleVal = CR.getSingleElement())
       return ConstantInt::get(V->getType(), *SingleVal);
   }
+  if (Result.isConstantFPRange()) {
+    const ConstantFPRange &CR = Result.getConstantFPRange();
+    if (const APFloat *SingleVal = CR.getSingleElement())
+      return ConstantFP::get(V->getType(), *SingleVal);
+  }
   return nullptr;
 }
 
@@ -2060,6 +2068,11 @@ Constant *LazyValueInfo::getConstantOnEdge(Value *V, BasicBlock *FromBB,
     if (const APInt *SingleVal = CR.getSingleElement())
       return ConstantInt::get(V->getType(), *SingleVal);
   }
+  if (Result.isConstantFPRange()) {
+    const ConstantFPRange &CR = Result.getConstantFPRange();
+    if (const APFloat *SingleVal = CR.getSingleElement())
+      return ConstantFP::get(V->getType(), *SingleVal);
+  }
   return nullptr;
 }
 
@@ -2087,6 +2100,15 @@ static Constant *getPredicateResult(CmpInst::Predicate Pred, Constant *C,
     if (CR.icmp(Pred, RHS))
       return ConstantInt::getTrue(ResTy);
     if (CR.icmp(CmpInst::getInversePredicate(Pred), RHS))
+      return ConstantInt::getFalse(ResTy);
+    return nullptr;
+  }
+  if (Val.isConstantFPRange()) {
+    const ConstantFPRange &CR = Val.getConstantFPRange();
+    ConstantFPRange RHS = C->toConstantFPRange();
+    if (CR.fcmp(Pred, RHS))
+      return ConstantInt::getTrue(ResTy);
+    if (CR.fcmp(CmpInst::getInversePredicate(Pred), RHS))
       return ConstantInt::getFalse(ResTy);
     return nullptr;
   }
