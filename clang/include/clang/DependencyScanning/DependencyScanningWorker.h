@@ -79,6 +79,8 @@ public:
     return TracingFS.get();
   }
 
+  DependencyScanningService &getService() const { return Service; }
+
 private:
   /// The parent dependency scanning service.
   DependencyScanningService &Service;
