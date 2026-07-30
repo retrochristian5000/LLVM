@@ -766,6 +766,10 @@ cir::FuncOp CIRGenFunction::generateCode(clang::GlobalDecl gd, cir::FuncOp fn,
   }
 
   eraseEmptyAndUnusedBlocks(fn);
+
+  if (fnRetAlloca && fnRetAlloca->use_empty())
+    fnRetAlloca->getDefiningOp()->erase();
+
   return fn;
 }
 
