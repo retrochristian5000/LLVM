@@ -1030,6 +1030,13 @@ public:
   bool requiresWaitOnWorkgroupReleaseFence(bool TgSplit) const {
     return getGeneration() >= GFX10 || TgSplit;
   }
+
+  // \returns true if ISel should select the native i64 min/max instructions
+  // (V_MIN/MAX_{I|U}64). False in CoExec-friendly mode, where they are expanded
+  // to v_cmp + v_cndmask.
+  bool useMinMaxI64Insts() const {
+    return hasMinMaxI64Insts() && !HasCoExecFriendlyISelMode;
+  }
 };
 
 class GCNUserSGPRUsageInfo {
