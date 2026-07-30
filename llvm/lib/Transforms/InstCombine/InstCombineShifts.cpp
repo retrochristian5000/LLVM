@@ -1630,20 +1630,24 @@ Instruction *InstCombinerImpl::visitLShr(BinaryOperator &I) {
     }
 
     const APInt *MulC;
-    if (match(Op0, m_NUWMul(m_Value(X), m_APInt(MulC)))) {
-      if (BitWidth > 2 && (*MulC - 1).isPowerOf2() &&
-          MulC->logBase2() == ShAmtC) {
-        // Look for a "splat" mul pattern - it replicates bits across each half
-        // of a value, so a right shift simplifies back to just X:
-        // lshr i[2N] (mul nuw X, (2^N)+1), N --> X
-        if (ShAmtC * 2 == BitWidth)
-          return replaceInstUsesWith(I, X);
+    if (match(Op0, m_NUWMul(m_Value(X), m_APInt(MulC))) && BitWidth > 2 &&
+        (*MulC - 1).isPowerOf2() && MulC->logBase2() == ShAmtC &&
+        ShAmtC * 2 == BitWidth)
+      // lshr i[2N] (mul nuw X, (2^N)+1), N --> X
+      return replaceInstUsesWith(I, X);
 
-        // lshr (mul nuw (X, 2^N + 1)), N -> add nuw (X, lshr(X, N))
-        if (Op0->hasOneUse()) {
-          auto *NewAdd = BinaryOperator::CreateNUWAdd(
-              X, Builder.CreateLShr(X, ConstantInt::get(Ty, ShAmtC), "",
-                                    I.isExact()));
+    if (match(Op0, m_OneUse(m_NUWMul(m_Value(X), m_APInt(MulC)))) &&
+        BitWidth > 2 && MulC->logBase2() == ShAmtC && ShAmtC < BitWidth - 1) {
+      APInt M_API = *MulC - APInt::getOneBitSet(BitWidth, ShAmtC);
+
+      if (M_API.isPowerOf2()) {
+        unsigned M = M_API.logBase2();
+
+        if (M <= ShAmtC) {
+          Value *ShiftedX = Builder.CreateLShr(
+              X, ConstantInt::get(Ty, ShAmtC - M), "", I.isExact());
+
+          auto *NewAdd = BinaryOperator::CreateNUWAdd(X, ShiftedX);
           NewAdd->setHasNoSignedWrap(
               cast<OverflowingBinaryOperator>(Op0)->hasNoSignedWrap());
           return NewAdd;
@@ -1903,17 +1907,20 @@ Instruction *InstCombinerImpl::visitAShr(BinaryOperator &I) {
 
     const APInt *MulC;
     if (match(Op0, m_OneUse(m_NSWMul(m_Value(X), m_APInt(MulC)))) &&
-        (BitWidth > 2 && (*MulC - 1).isPowerOf2() &&
-         MulC->logBase2() == ShAmt &&
-         (ShAmt < BitWidth - 1))) /* Minus 1 for the sign bit */ {
-
-      // ashr (mul nsw (X, 2^N + 1)), N -> add nsw (X, ashr(X, N))
-      auto *NewAdd = BinaryOperator::CreateNSWAdd(
-          X,
-          Builder.CreateAShr(X, ConstantInt::get(Ty, ShAmt), "", I.isExact()));
-      NewAdd->setHasNoUnsignedWrap(
-          cast<OverflowingBinaryOperator>(Op0)->hasNoUnsignedWrap());
-      return NewAdd;
+        BitWidth > 2 && MulC->logBase2() == ShAmt && (ShAmt < BitWidth - 1)) {
+      APInt M_API = *MulC - APInt::getOneBitSet(BitWidth, ShAmt);
+      if (M_API.isPowerOf2()) {
+        unsigned M = M_API.logBase2();
+        // ashr (mul nsw (X, 2^N + 2^M)), N -> add nsw (X, ashr(X, N - M))
+        Value *ShiftedX =
+            M == 0 ? X
+                   : Builder.CreateAShr(X, ConstantInt::get(Ty, ShAmt - M), "",
+                                        I.isExact());
+        auto *NewAdd = BinaryOperator::CreateNSWAdd(X, ShiftedX);
+        NewAdd->setHasNoUnsignedWrap(
+            cast<OverflowingBinaryOperator>(Op0)->hasNoUnsignedWrap());
+        return NewAdd;
+      }
     }
   }
 
