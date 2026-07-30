@@ -6627,8 +6627,12 @@ void RewriteInstance::rewriteFile() {
                  << Section.getOutputSize() << "\n at offset "
                  << Section.getOutputFileOffset() << " with content size "
                  << Section.getOutputContents().size() << '\n';
+
+    uint64_t SavedPos = OS.tell();
     OS.seek(Section.getOutputFileOffset());
     Section.write(OS);
+    SavedPos = std::max(SavedPos, OS.tell());
+    OS.seek(SavedPos);
   }
 
   for (BinarySection &Section : BC->allocatableSections())
@@ -6699,6 +6703,7 @@ void RewriteInstance::rewriteFile() {
 }
 
 void RewriteInstance::writeEHFrameHeader() {
+  uint64_t SavedPos = Out->os().tell();
   BinarySection *NewEHFrameSection =
       getSection(getNewSecPrefix() + getEHFrameSectionName());
 
@@ -6805,6 +6810,9 @@ void RewriteInstance::writeEHFrameHeader() {
 
   LLVM_DEBUG(dbgs() << "BOLT-DEBUG: size of .eh_frame after merge is "
                     << NewEHFrameSection->getOutputSize() << '\n');
+
+  SavedPos = std::max(SavedPos, Out->os().tell());
+  Out->os().seek(SavedPos);
 }
 
 uint64_t RewriteInstance::getNewValueForSymbol(const StringRef Name) {
