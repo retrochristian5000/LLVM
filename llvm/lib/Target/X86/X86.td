@@ -792,8 +792,11 @@ def TuningFastGather
                        [], InlineIgnore>;
 
 // Use AMD Zen-tuned cost tables for masked gather/scatter intrinsics in the
-// Enables per-shape gather/scatter cost tables on AMD znver4 and znver5
-// (set in ZN4Tuning, inherited by ZN5Tuning).
+// X86 TargetTransformInfo cost model. Refines the flat overhead used by other
+// AVX-512 targets with per-element-type/per-VL costs measured on znver4 and
+// znver5. Inherited automatically by every znver4+ CPU via ZN4Tuning; not
+// applied to pre-AVX-512 Zen parts (znver1..3), which take the scalarise
+// path for masked gather anyway.
 def TuningPreferGSCostTable
     : SubtargetFeature<"prefer-gs-cost-table",
                        "HasPreferGSCostTable", "true",

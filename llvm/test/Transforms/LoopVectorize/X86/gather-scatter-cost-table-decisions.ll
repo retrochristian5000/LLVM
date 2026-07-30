@@ -1,22 +1,17 @@
-; End-to-end loop-vectorize decisions driven by the AMD Zen per-shape
-; gather/scatter cost tables (TuningPreferGSCostTable, set on znver4+).
+; End-to-end loop-vectorize decisions driven by the per-shape gather/scatter
+; cost tables (TuningPreferGSCostTable, set on znver4+). The companion
+; cost-model test masked-gather-scatter-cost-table.ll pins the individual cost
+; numbers; this test pins the resulting vectorizer decisions so cost-model
+; refactors that re-enable harmful gathers (or suppress profitable ones) are
+; caught here.
 ;
-; The companion cost-model test
-;   llvm/test/Analysis/CostModel/X86/masked-gather-scatter-amd-zen.ll
-; pins individual cost numbers; this test pins the resulting vectorizer
-; decisions so future cost-model refactors that accidentally re-enable
-; harmful gathers (or suppress profitable ones) are caught here.
-;
-; The three cases below correspond to:
-;   1. f64 indirect-load reduction -- gather IS chosen on znver5
-;      (the lbm-style win the cost table exists to enable).
-;   2. i64 indirect-load reduction -- gather is NOT chosen on znver5;
-;      the i64 entry was measured separately and deliberately set above
-;      the break-even so vpgatherqq is suppressed for harmful patterns
-;      (cf. PR #198850 / libquantum regression).
-;   3. Unit-stride load -- the vectorizer must emit a plain wide load
-;      (not @llvm.masked.gather) regardless of cost-table values.
-;      Regression guard for issue #91370.
+; The three cases below:
+;   1. f64 indirect-load reduction -- gather IS chosen on znver5.
+;   2. i64 indirect-load reduction -- gather is NOT chosen on znver5 (the i64
+;      entry is set above the break-even to suppress vpgatherqq for harmful
+;      patterns, cf. PR llvm#198850).
+;   3. Unit-stride load -- must stay a plain wide load, not a gather.
+;      Regression guard for issue llvm#91370.
 ;
 ; RUN: opt < %s -S -passes=loop-vectorize -mtriple=x86_64-unknown-linux-gnu -mcpu=znver5 | FileCheck %s
 

@@ -275,6 +275,9 @@ private:
 
   int getGatherOverhead(Type *SrcVTy) const;
   int getScatterOverhead(Type *SrcVTy) const;
+  std::optional<unsigned>
+  getModeledGSInstrCost(bool IsLoad, Type *SrcVTy,
+                        TTI::TargetCostKind CostKind) const;
 
   /// @}
 };
