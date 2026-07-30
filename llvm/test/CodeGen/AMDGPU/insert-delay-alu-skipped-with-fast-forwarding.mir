@@ -13,11 +13,6 @@
 #                           V_CNDMASK_B32_e64
 # Consumers (implicit e32): V_ADDC_U32_e32, V_SUBB_U32_e32, V_SUBBREV_U32_e32,
 #                           V_CNDMASK_B32_e32
-#
-# NOTE: The vcc_lo -> V_DIV_FMAS negative case (no fast-forward) is
-# commented out below: the pass misses that dependency because V_DIV_FMAS reads vcc
-# as an *implicit* operand and the pass only scans explicit_uses().  That is a
-# separate pre-existing gap; re-enable the test case once it is fixed.
 
 # Case 1a: V_ADD_CO_U32_e64 (producer) -> V_ADDC_U32_e64 (consumer, explicit).
 # No s_delay_alu expected after fix.
@@ -167,13 +162,15 @@ body: |
     $vgpr2 = V_CNDMASK_B32_e32 $vgpr3, $vgpr4, implicit $vcc, implicit $exec
 ...
 
-# DISABLED: See NOTE at the top of the file.
-# carry-out (vcc_lo) -> V_DIV_FMAS_F32 negative case
-#
-# ---
-# name: carry_to_div_fmas_no_fastforward
-# body: |
-#   bb.0:
-#     $vgpr0, $vcc_lo = V_ADD_CO_U32_e64 $vgpr0, $vgpr1, 0, implicit $exec
-#     $vgpr2 = V_DIV_FMAS_F32_e64 0, $vgpr2, 0, $vgpr3, 0, $vgpr4, 0, 0, implicit $mode, implicit $vcc, implicit $exec
-# ...
+# Case 4a: carry-out (vcc_lo) -> V_DIV_FMAS_F32 negative case (delay expected)
+---
+name: carry_to_div_fmas_no_fastforward
+body: |
+  bb.0:
+    ; CHECK-LABEL: name: carry_to_div_fmas_no_fastforward
+    ; CHECK: $vgpr0, $vcc_lo = V_ADD_CO_U32_e64 $vgpr0, $vgpr1, 0, implicit $exec
+    ; CHECK-NEXT: S_DELAY_ALU .id0_VALU_DEP_1
+    ; CHECK-NEXT: $vgpr2 = V_DIV_FMAS_F32_e64 0, $vgpr2, 0, $vgpr3, 0, $vgpr4, 0, 0, implicit $mode, implicit $vcc_lo, implicit $exec
+    $vgpr0, $vcc_lo = V_ADD_CO_U32_e64 $vgpr0, $vgpr1, 0, implicit $exec
+    $vgpr2 = V_DIV_FMAS_F32_e64 0, $vgpr2, 0, $vgpr3, 0, $vgpr4, 0, 0, implicit $mode, implicit $vcc, implicit $exec
+...
