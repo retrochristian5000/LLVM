@@ -365,6 +365,7 @@ features cannot lower the translation-unit ABI level;
 - Fixed a bug where `__func__`, `__PRETTY_FUNCTION__` and `__FUNCTION__` were not resolving to the proper function when inside a lambda return type (#GH211811)
 - Fixed USR generation for declarations whose signature mentions a class-type
   non-type template parameter. (#GH212351)
+- Fixed a crash when checking scalar type with excess braces. (#GH69213, #GH137845, #GH198767, #GH207566, #GH106180)
 
 #### Bug Fixes to Compiler Builtins
 
