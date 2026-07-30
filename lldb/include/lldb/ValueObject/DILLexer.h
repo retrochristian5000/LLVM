@@ -26,11 +26,13 @@ class Token {
 public:
   enum Kind {
     amp,
+    ampamp,
     arrow,
     colon,
     coloncolon,
     eof,
     equal,
+    exclaim,
     float_constant,
     greatergreater,
     identifier,
@@ -44,6 +46,7 @@ public:
     minusequal,
     percent,
     period,
+    pipepipe,
     plus,
     plusequal,
     r_paren,
