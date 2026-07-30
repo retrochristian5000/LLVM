@@ -40,6 +40,7 @@ Instrumentor
 InstrRefDebugInfo
 RemoveDIsDebugInfo
 KeyInstructionsDebugInfo
+StronglyTypedDIExpressionDebugInfo
 InstrProfileFormat
 InstCombineContributorGuide
 WritingAnLLVMBackend
@@ -232,6 +233,10 @@ yaml2obj
 
   This document explains how the debug info feature Key Instructions is
   implemented in LLVM.
+
+- {doc}`StronglyTypedDIExpressionDebugInfo`
+
+  A design document for a rework of the `DIExpression` API.
 
 - {doc}`InstrProfileFormat`
 
