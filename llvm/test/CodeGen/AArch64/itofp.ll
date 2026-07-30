@@ -4763,30 +4763,20 @@ entry:
 define <8 x float> @stofp_v8i8_v8f32(<8 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: stofp_v8i8_v8f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    zip1 v1.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshll v1.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v2.4s, v0.4h, #0
-; CHECK-NOFP16-SD-NEXT:    scvtf v0.4s, v1.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v2.4s
+; CHECK-NOFP16-SD-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v1.4s, v0.8h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v0.4s, v0.4h, #0
+; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v1.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v0.4s, v0.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: stofp_v8i8_v8f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    zip1 v1.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshll v1.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v2.4s, v0.4h, #0
-; CHECK-FP16-SD-NEXT:    scvtf v0.4s, v1.4s
-; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v2.4s
+; CHECK-FP16-SD-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v1.4s, v0.8h, #0
+; CHECK-FP16-SD-NEXT:    sshll v0.4s, v0.4h, #0
+; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v1.4s
+; CHECK-FP16-SD-NEXT:    scvtf v0.4s, v0.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: stofp_v8i8_v8f32:
@@ -4814,26 +4804,28 @@ entry:
 define <8 x float> @utofp_v8i8_v8f32(<8 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: utofp_v8i8_v8f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    zip1 v1.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    mov d1, v0.d[1]
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
 ; CHECK-NOFP16-SD-NEXT:    bic v0.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
 ; CHECK-NOFP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v2.4s, v0.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v1.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v2.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v1.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: utofp_v8i8_v8f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    zip1 v1.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    mov d1, v0.d[1]
+; CHECK-FP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
 ; CHECK-FP16-SD-NEXT:    bic v0.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
 ; CHECK-FP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v2.4s, v0.4h, #0
-; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v1.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v2.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v1.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: utofp_v8i8_v8f32:
@@ -4861,52 +4853,30 @@ entry:
 define <16 x float> @stofp_v16i8_v16f32(<16 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: stofp_v16i8_v16f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    mov d1, v0.d[1]
-; CHECK-NOFP16-SD-NEXT:    zip1 v2.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v3.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    shl v2.4h, v2.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v2.4h, v2.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v3.4h, v3.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshll v2.4s, v2.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshr v3.4h, v3.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
+; CHECK-NOFP16-SD-NEXT:    sshll v1.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v0.8h, v0.16b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v2.4s, v1.4h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v3.4s, v0.8h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v1.4s, v1.8h, #0
 ; CHECK-NOFP16-SD-NEXT:    sshll v4.4s, v0.4h, #0
 ; CHECK-NOFP16-SD-NEXT:    scvtf v0.4s, v2.4s
-; CHECK-NOFP16-SD-NEXT:    sshll v3.4s, v3.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v5.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v4.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v2.4s, v3.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v3.4s, v5.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v3.4s, v3.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v1.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v2.4s, v4.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: stofp_v16i8_v16f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    mov d1, v0.d[1]
-; CHECK-FP16-SD-NEXT:    zip1 v2.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v3.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    shl v2.4h, v2.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v2.4h, v2.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v3.4h, v3.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshll v2.4s, v2.4h, #0
-; CHECK-FP16-SD-NEXT:    sshr v3.4h, v3.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
+; CHECK-FP16-SD-NEXT:    sshll v1.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v0.8h, v0.16b, #0
+; CHECK-FP16-SD-NEXT:    sshll v2.4s, v1.4h, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v3.4s, v0.8h, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v1.4s, v1.8h, #0
 ; CHECK-FP16-SD-NEXT:    sshll v4.4s, v0.4h, #0
 ; CHECK-FP16-SD-NEXT:    scvtf v0.4s, v2.4s
-; CHECK-FP16-SD-NEXT:    sshll v3.4s, v3.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v5.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v4.4s
-; CHECK-FP16-SD-NEXT:    scvtf v2.4s, v3.4s
-; CHECK-FP16-SD-NEXT:    scvtf v3.4s, v5.4s
+; CHECK-FP16-SD-NEXT:    scvtf v3.4s, v3.4s
+; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v1.4s
+; CHECK-FP16-SD-NEXT:    scvtf v2.4s, v4.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: stofp_v16i8_v16f32:
@@ -4944,44 +4914,46 @@ entry:
 define <16 x float> @utofp_v16i8_v16f32(<16 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: utofp_v16i8_v16f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    mov d1, v0.d[1]
-; CHECK-NOFP16-SD-NEXT:    zip1 v2.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v3.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    bic v2.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    ushll2 v1.8h, v0.16b, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    mov d2, v1.d[1]
+; CHECK-NOFP16-SD-NEXT:    mov d3, v0.d[1]
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d1 killed $d1 killed $q1
 ; CHECK-NOFP16-SD-NEXT:    bic v0.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    ushll v2.4s, v2.4h, #0
-; CHECK-NOFP16-SD-NEXT:    bic v3.4h, #255, lsl #8
 ; CHECK-NOFP16-SD-NEXT:    bic v1.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    ushll v4.4s, v0.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v2.4s
-; CHECK-NOFP16-SD-NEXT:    ushll v3.4s, v3.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v5.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v4.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v2.4s, v3.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v3.4s, v5.4s
+; CHECK-NOFP16-SD-NEXT:    bic v2.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    bic v3.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v4.4s, v2.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v5.4s, v3.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v2.4s, v1.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v3.4s, v4.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v5.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: utofp_v16i8_v16f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    mov d1, v0.d[1]
-; CHECK-FP16-SD-NEXT:    zip1 v2.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v3.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    bic v2.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    ushll2 v1.8h, v0.16b, #0
+; CHECK-FP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    mov d2, v1.d[1]
+; CHECK-FP16-SD-NEXT:    mov d3, v0.d[1]
+; CHECK-FP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
+; CHECK-FP16-SD-NEXT:    // kill: def $d1 killed $d1 killed $q1
 ; CHECK-FP16-SD-NEXT:    bic v0.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    ushll v2.4s, v2.4h, #0
-; CHECK-FP16-SD-NEXT:    bic v3.4h, #255, lsl #8
 ; CHECK-FP16-SD-NEXT:    bic v1.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    ushll v4.4s, v0.4h, #0
-; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v2.4s
-; CHECK-FP16-SD-NEXT:    ushll v3.4s, v3.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v5.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v4.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v2.4s, v3.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v3.4s, v5.4s
+; CHECK-FP16-SD-NEXT:    bic v2.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    bic v3.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v4.4s, v2.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v5.4s, v3.4h, #0
+; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v2.4s, v1.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v3.4s, v4.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v5.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: utofp_v16i8_v16f32:
@@ -5019,94 +4991,50 @@ entry:
 define <32 x float> @stofp_v32i8_v32f32(<32 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: stofp_v32i8_v32f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    mov d2, v0.d[1]
-; CHECK-NOFP16-SD-NEXT:    mov d3, v1.d[1]
-; CHECK-NOFP16-SD-NEXT:    zip1 v4.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    shl v4.4h, v4.4h, #8
-; CHECK-NOFP16-SD-NEXT:    zip1 v5.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v6.8b, v2.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v2.8b, v2.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v7.8b, v3.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v3.8b, v3.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v4.4h, v4.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v5.4h, v5.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v6.4h, v6.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v2.4h, v2.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v7.4h, v7.4h, #8
-; CHECK-NOFP16-SD-NEXT:    shl v3.4h, v3.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshll v4.4s, v4.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshr v5.4h, v5.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v6.4h, v6.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v2.4h, v2.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v7.4h, v7.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshr v3.4h, v3.4h, #8
-; CHECK-NOFP16-SD-NEXT:    sshll v16.4s, v0.4h, #0
-; CHECK-NOFP16-SD-NEXT:    scvtf v0.4s, v4.4s
-; CHECK-NOFP16-SD-NEXT:    sshll v5.4s, v5.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v6.4s, v6.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v17.4s, v2.4h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v2.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v0.8h, v0.16b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v3.8h, v1.8b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v1.8h, v1.16b, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v4.4s, v2.8h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v2.4s, v2.4h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v5.4s, v0.8h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v6.4s, v0.4h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll v7.4s, v3.4h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v16.4s, v1.8h, #0
+; CHECK-NOFP16-SD-NEXT:    sshll2 v17.4s, v3.8h, #0
 ; CHECK-NOFP16-SD-NEXT:    sshll v18.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v7.4s, v7.4h, #0
-; CHECK-NOFP16-SD-NEXT:    sshll v19.4s, v3.4h, #0
-; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v16.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v1.4s, v4.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v0.4s, v2.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v3.4s, v5.4s
 ; CHECK-NOFP16-SD-NEXT:    scvtf v2.4s, v6.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v3.4s, v17.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v4.4s, v5.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v5.4s, v18.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v6.4s, v7.4s
-; CHECK-NOFP16-SD-NEXT:    scvtf v7.4s, v19.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v4.4s, v7.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v7.4s, v16.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v5.4s, v17.4s
+; CHECK-NOFP16-SD-NEXT:    scvtf v6.4s, v18.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: stofp_v32i8_v32f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    mov d2, v0.d[1]
-; CHECK-FP16-SD-NEXT:    mov d3, v1.d[1]
-; CHECK-FP16-SD-NEXT:    zip1 v4.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    shl v4.4h, v4.4h, #8
-; CHECK-FP16-SD-NEXT:    zip1 v5.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v6.8b, v2.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v2.8b, v2.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v7.8b, v3.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v3.8b, v3.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v4.4h, v4.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v5.4h, v5.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v6.4h, v6.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v2.4h, v2.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v1.4h, v1.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v7.4h, v7.4h, #8
-; CHECK-FP16-SD-NEXT:    shl v3.4h, v3.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-FP16-SD-NEXT:    sshll v4.4s, v4.4h, #0
-; CHECK-FP16-SD-NEXT:    sshr v5.4h, v5.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v6.4h, v6.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v2.4h, v2.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v1.4h, v1.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v7.4h, v7.4h, #8
-; CHECK-FP16-SD-NEXT:    sshr v3.4h, v3.4h, #8
-; CHECK-FP16-SD-NEXT:    sshll v16.4s, v0.4h, #0
-; CHECK-FP16-SD-NEXT:    scvtf v0.4s, v4.4s
-; CHECK-FP16-SD-NEXT:    sshll v5.4s, v5.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v6.4s, v6.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v17.4s, v2.4h, #0
+; CHECK-FP16-SD-NEXT:    sshll v2.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v0.8h, v0.16b, #0
+; CHECK-FP16-SD-NEXT:    sshll v3.8h, v1.8b, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v1.8h, v1.16b, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v4.4s, v2.8h, #0
+; CHECK-FP16-SD-NEXT:    sshll v2.4s, v2.4h, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v5.4s, v0.8h, #0
+; CHECK-FP16-SD-NEXT:    sshll v6.4s, v0.4h, #0
+; CHECK-FP16-SD-NEXT:    sshll v7.4s, v3.4h, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v16.4s, v1.8h, #0
+; CHECK-FP16-SD-NEXT:    sshll2 v17.4s, v3.8h, #0
 ; CHECK-FP16-SD-NEXT:    sshll v18.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v7.4s, v7.4h, #0
-; CHECK-FP16-SD-NEXT:    sshll v19.4s, v3.4h, #0
-; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v16.4s
+; CHECK-FP16-SD-NEXT:    scvtf v1.4s, v4.4s
+; CHECK-FP16-SD-NEXT:    scvtf v0.4s, v2.4s
+; CHECK-FP16-SD-NEXT:    scvtf v3.4s, v5.4s
 ; CHECK-FP16-SD-NEXT:    scvtf v2.4s, v6.4s
-; CHECK-FP16-SD-NEXT:    scvtf v3.4s, v17.4s
-; CHECK-FP16-SD-NEXT:    scvtf v4.4s, v5.4s
-; CHECK-FP16-SD-NEXT:    scvtf v5.4s, v18.4s
-; CHECK-FP16-SD-NEXT:    scvtf v6.4s, v7.4s
-; CHECK-FP16-SD-NEXT:    scvtf v7.4s, v19.4s
+; CHECK-FP16-SD-NEXT:    scvtf v4.4s, v7.4s
+; CHECK-FP16-SD-NEXT:    scvtf v7.4s, v16.4s
+; CHECK-FP16-SD-NEXT:    scvtf v5.4s, v17.4s
+; CHECK-FP16-SD-NEXT:    scvtf v6.4s, v18.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: stofp_v32i8_v32f32:
@@ -5164,78 +5092,82 @@ entry:
 define <32 x float> @utofp_v32i8_v32f32(<32 x i8> %a) {
 ; CHECK-NOFP16-SD-LABEL: utofp_v32i8_v32f32:
 ; CHECK-NOFP16-SD:       // %bb.0: // %entry
-; CHECK-NOFP16-SD-NEXT:    mov d2, v0.d[1]
-; CHECK-NOFP16-SD-NEXT:    mov d3, v1.d[1]
-; CHECK-NOFP16-SD-NEXT:    zip1 v4.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    bic v4.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    zip1 v5.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v6.8b, v2.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v2.8b, v2.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip1 v7.8b, v3.8b, v0.8b
-; CHECK-NOFP16-SD-NEXT:    zip2 v3.8b, v3.8b, v0.8b
+; CHECK-NOFP16-SD-NEXT:    ushll2 v2.8h, v0.16b, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-NOFP16-SD-NEXT:    ushll2 v3.8h, v1.16b, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v1.8h, v1.8b, #0
+; CHECK-NOFP16-SD-NEXT:    mov d4, v2.d[1]
+; CHECK-NOFP16-SD-NEXT:    mov d5, v0.d[1]
+; CHECK-NOFP16-SD-NEXT:    mov d6, v3.d[1]
+; CHECK-NOFP16-SD-NEXT:    mov d7, v1.d[1]
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d2 killed $d2 killed $q2
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d3 killed $d3 killed $q3
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
+; CHECK-NOFP16-SD-NEXT:    // kill: def $d1 killed $d1 killed $q1
+; CHECK-NOFP16-SD-NEXT:    bic v2.4h, #255, lsl #8
 ; CHECK-NOFP16-SD-NEXT:    bic v0.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    ushll v4.4s, v4.4h, #0
+; CHECK-NOFP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    bic v3.4h, #255, lsl #8
+; CHECK-NOFP16-SD-NEXT:    bic v4.4h, #255, lsl #8
 ; CHECK-NOFP16-SD-NEXT:    bic v5.4h, #255, lsl #8
 ; CHECK-NOFP16-SD-NEXT:    bic v6.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    bic v2.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    bic v1.4h, #255, lsl #8
 ; CHECK-NOFP16-SD-NEXT:    bic v7.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    bic v3.4h, #255, lsl #8
-; CHECK-NOFP16-SD-NEXT:    ushll v16.4s, v0.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v4.4s
+; CHECK-NOFP16-SD-NEXT:    ushll v2.4s, v2.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v17.4s, v3.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v16.4s, v4.4h, #0
 ; CHECK-NOFP16-SD-NEXT:    ushll v5.4s, v5.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v6.4s, v6.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v17.4s, v2.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v18.4s, v1.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v7.4s, v7.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ushll v19.4s, v3.4h, #0
-; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v16.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v4.4s, v5.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v2.4s, v6.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v3.4s, v17.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v5.4s, v18.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v6.4s, v7.4s
-; CHECK-NOFP16-SD-NEXT:    ucvtf v7.4s, v19.4s
+; CHECK-NOFP16-SD-NEXT:    ushll v18.4s, v6.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ushll v19.4s, v7.4h, #0
+; CHECK-NOFP16-SD-NEXT:    ucvtf v2.4s, v2.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v4.4s, v1.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v6.4s, v17.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v3.4s, v16.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v1.4s, v5.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v7.4s, v18.4s
+; CHECK-NOFP16-SD-NEXT:    ucvtf v5.4s, v19.4s
 ; CHECK-NOFP16-SD-NEXT:    ret
 ;
 ; CHECK-FP16-SD-LABEL: utofp_v32i8_v32f32:
 ; CHECK-FP16-SD:       // %bb.0: // %entry
-; CHECK-FP16-SD-NEXT:    mov d2, v0.d[1]
-; CHECK-FP16-SD-NEXT:    mov d3, v1.d[1]
-; CHECK-FP16-SD-NEXT:    zip1 v4.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    bic v4.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    zip1 v5.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v6.8b, v2.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v2.8b, v2.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v1.8b, v1.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip1 v7.8b, v3.8b, v0.8b
-; CHECK-FP16-SD-NEXT:    zip2 v3.8b, v3.8b, v0.8b
+; CHECK-FP16-SD-NEXT:    ushll2 v2.8h, v0.16b, #0
+; CHECK-FP16-SD-NEXT:    ushll v0.8h, v0.8b, #0
+; CHECK-FP16-SD-NEXT:    ushll2 v3.8h, v1.16b, #0
+; CHECK-FP16-SD-NEXT:    ushll v1.8h, v1.8b, #0
+; CHECK-FP16-SD-NEXT:    mov d4, v2.d[1]
+; CHECK-FP16-SD-NEXT:    mov d5, v0.d[1]
+; CHECK-FP16-SD-NEXT:    mov d6, v3.d[1]
+; CHECK-FP16-SD-NEXT:    mov d7, v1.d[1]
+; CHECK-FP16-SD-NEXT:    // kill: def $d2 killed $d2 killed $q2
+; CHECK-FP16-SD-NEXT:    // kill: def $d3 killed $d3 killed $q3
+; CHECK-FP16-SD-NEXT:    // kill: def $d0 killed $d0 killed $q0
+; CHECK-FP16-SD-NEXT:    // kill: def $d1 killed $d1 killed $q1
+; CHECK-FP16-SD-NEXT:    bic v2.4h, #255, lsl #8
 ; CHECK-FP16-SD-NEXT:    bic v0.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    ushll v4.4s, v4.4h, #0
+; CHECK-FP16-SD-NEXT:    bic v1.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    bic v3.4h, #255, lsl #8
+; CHECK-FP16-SD-NEXT:    bic v4.4h, #255, lsl #8
 ; CHECK-FP16-SD-NEXT:    bic v5.4h, #255, lsl #8
 ; CHECK-FP16-SD-NEXT:    bic v6.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    bic v2.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    bic v1.4h, #255, lsl #8
 ; CHECK-FP16-SD-NEXT:    bic v7.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    bic v3.4h, #255, lsl #8
-; CHECK-FP16-SD-NEXT:    ushll v16.4s, v0.4h, #0
-; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v4.4s
+; CHECK-FP16-SD-NEXT:    ushll v2.4s, v2.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v0.4s, v0.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v1.4s, v1.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v17.4s, v3.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v16.4s, v4.4h, #0
 ; CHECK-FP16-SD-NEXT:    ushll v5.4s, v5.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v6.4s, v6.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v17.4s, v2.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v18.4s, v1.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v7.4s, v7.4h, #0
-; CHECK-FP16-SD-NEXT:    ushll v19.4s, v3.4h, #0
-; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v16.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v4.4s, v5.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v2.4s, v6.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v3.4s, v17.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v5.4s, v18.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v6.4s, v7.4s
-; CHECK-FP16-SD-NEXT:    ucvtf v7.4s, v19.4s
+; CHECK-FP16-SD-NEXT:    ushll v18.4s, v6.4h, #0
+; CHECK-FP16-SD-NEXT:    ushll v19.4s, v7.4h, #0
+; CHECK-FP16-SD-NEXT:    ucvtf v2.4s, v2.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v0.4s, v0.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v4.4s, v1.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v6.4s, v17.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v3.4s, v16.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v1.4s, v5.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v7.4s, v18.4s
+; CHECK-FP16-SD-NEXT:    ucvtf v5.4s, v19.4s
 ; CHECK-FP16-SD-NEXT:    ret
 ;
 ; CHECK-NOFP16-GI-LABEL: utofp_v32i8_v32f32:
