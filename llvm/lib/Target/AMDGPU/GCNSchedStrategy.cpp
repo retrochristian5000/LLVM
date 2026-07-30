@@ -2327,6 +2327,12 @@ bool RewriteMFMAFormStage::hasUseRequiringVGPR(
         continue;
       if (TII->isMAI(*UseMI) && RewriteSet.contains(UseMI))
         continue;
+      // Check if the user operand accepts AGPR.
+      unsigned OpIdx = UseMO->getOperandNo();
+      const TargetRegisterClass *OpRC =
+          TII->getRegClass(UseMI->getDesc(), OpIdx);
+      if (!OpRC || SRI->isAGPRClass(OpRC) || SRI->isVectorSuperClass(OpRC))
+        continue;
       return true;
     }
   }
@@ -2361,12 +2367,6 @@ bool RewriteMFMAFormStage::isRewriteCandidate(MachineInstr *MI) const {
     return false;
   if (AMDGPU::getMFMASrcCVDstAGPROp(MI->getOpcode()) == -1)
     return false;
-  // Reject candidates whose users force an unavoidable bridge copy.
-  Register DstReg = MI->getOperand(0).getReg();
-  for (const MachineOperand &Use : DAG.MRI.use_nodbg_operands(DstReg)) {
-    if (!TII->isMAI(*Use.getParent()) && !Use.getParent()->isCopy())
-      return false;
-  }
   return true;
 }
 
@@ -2418,6 +2418,10 @@ bool RewriteMFMAFormStage::initHeuristics(
           if (!Src2NeedsVGPR &&
               isReachingDefAGPRForm(RD, RewriteSet, CandSrc2Regs, *TII))
             continue;
+          // When Src2NeedsVGPR, still skip candidate MAI reaching defs — they
+          // will produce AGPR and don't need bridge copies.
+          if (Src2NeedsVGPR && TII->isMAI(*RD) && RewriteSet.contains(RD))
+            continue;
           CopyForDef.insert(RD);
         }
       }
@@ -2433,9 +2437,16 @@ bool RewriteMFMAFormStage::initHeuristics(
         if (TII->isMAI(*UserMI) && RewriteSet.contains(UserMI))
           continue;
 
-        // For any user of the result of the MFMA which is not an MFMA, we
-        // insert a copy. For a given register, we will only insert one copy
-        // per user block.
+        // Check if the user operand accepts AGPR — no copy needed.
+        unsigned OpIdx = RUOp->getOperandNo();
+        const TargetRegisterClass *OpRC =
+            TII->getRegClass(UserMI->getDesc(), OpIdx);
+        if (!OpRC || SRI->isAGPRClass(OpRC) || SRI->isVectorSuperClass(OpRC))
+          continue;
+
+        // For any user of the result of the MFMA which cannot accept AGPR,
+        // we insert a copy. For a given register, we will only insert one
+        // copy per user block.
         CopyForUse[UserMI->getParent()].insert(RUOp->getReg());
 
         if (TII->isMAI(*UserMI))
@@ -2683,11 +2694,18 @@ bool RewriteMFMAFormStage::rewrite(
         if (!Src2NeedsVGPR &&
             isReachingDefAGPRForm(RD, RewriteCandsSet, RewriteSrc2Regs, *TII))
           continue;
+        // When Src2NeedsVGPR, still skip candidate MAI reaching defs — they
+        // will produce AGPR and don't need bridge copies.
+        if (Src2NeedsVGPR && TII->isMAI(*RD) && RewriteCandsSet.contains(RD))
+          continue;
 
         Src2DefsReplace.insert(RD);
       }
 
-      if (!Src2DefsReplace.empty()) {
+      // Create RedefMap if there are reaching defs that need bridge copies,
+      // OR if the src2 register has VGPR-requiring uses (so the original
+      // register must stay VGPR even if all reaching defs are MAI).
+      if (!Src2DefsReplace.empty() || Src2NeedsVGPR) {
         auto RI = RedefMap.find(Src2Reg);
         if (RI != RedefMap.end()) {
           MappedReg = RI->second;
@@ -2755,7 +2773,17 @@ bool RewriteMFMAFormStage::rewrite(
       if (TII->isMAI(*UserMI) && RewriteCandsSet.contains(UserMI))
         continue;
 
-      // If there is a non mai reaching use, then we need a copy.
+      // Check if the user operand accepts AGPR — no copy needed, but still
+      // track the operand for register rename when RedefMap applies.
+      unsigned OpIdx = RUOp->getOperandNo();
+      const TargetRegisterClass *OpRC =
+          TII->getRegClass(UserMI->getDesc(), OpIdx);
+      if (!OpRC || SRI->isAGPRClass(OpRC) || SRI->isVectorSuperClass(OpRC)) {
+        ReplaceMap[DstReg].insert(RUOp);
+        continue;
+      }
+
+      // If the user cannot accept AGPR, we need a copy.
       if (find(DstReachingUseCopies, RUOp) == DstReachingUseCopies.end())
         DstReachingUseCopies.push_back(RUOp);
 
