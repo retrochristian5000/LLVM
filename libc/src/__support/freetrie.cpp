@@ -61,4 +61,12 @@ void FreeTrie::replace_node(Node *node, Node *new_node) {
     node->upper->parent = new_node;
 }
 
+BlockRef FreeTrie::pop_any() {
+  if (!root)
+    return BlockRef();
+  Node *node = root;
+  remove(node);
+  return node->block();
+}
+
 } // namespace LIBC_NAMESPACE_DECL
