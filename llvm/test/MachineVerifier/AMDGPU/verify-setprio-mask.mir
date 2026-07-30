@@ -1,0 +1,37 @@
+# RUN: not --crash llc -mtriple=amdgpu9.08 -run-pass=none -filetype=null %s 2>&1 | FileCheck %s
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 16
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 32
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 64
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 128
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 256
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 512
+
+# CHECK: *** Bad machine code: S_SETPRIO mask contains invalid memory operation bits ***
+# CHECK: - instruction: S_SETPRIO 1, 2048
+
+---
+name:            test_invalid_masks
+body:             |
+  bb.0:
+    S_SETPRIO 1, 16 ; vmem
+    S_SETPRIO 1, 32 ; vmem-read
+    S_SETPRIO 1, 64 ; vmem-write
+    S_SETPRIO 1, 128 ; ds
+    S_SETPRIO 1, 256 ; ds-read
+    S_SETPRIO 1, 512 ; ds-write
+    S_SETPRIO 1, 2048 ; ldsdma
+
+    S_ENDPGM 0
+...
