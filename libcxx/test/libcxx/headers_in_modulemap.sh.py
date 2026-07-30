@@ -1,10 +1,12 @@
-# RUN: %{python} %s %{libcxx-dir}/utils
+# RUN: %{python} %s %{libcxx-dir}/utils %{include-dir}
 
+import pathlib
 import sys
 sys.path.append(sys.argv[1])
-from libcxx.header_information import all_headers, libcxx_include
+from libcxx.header_information import all_headers
 
-with open(libcxx_include / "module.modulemap.in") as f:
+include = pathlib.Path(sys.argv[2])
+with open(include / "module.modulemap") as f:
     modulemap = f.read()
 
 isHeaderMissing = False
