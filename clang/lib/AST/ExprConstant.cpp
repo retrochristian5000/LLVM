@@ -15748,8 +15748,7 @@ bool ArrayExprEvaluator::VisitCXXParenListOrInitListExpr(
         Value = SL->getCodeUnit(I);
         if (DestTy->isIntegerType()) {
           Result.getArrayInitializedElt(ArrayIndex) = APValue(Value);
-        } else {
-          assert(DestTy->isFloatingType() && "unexpected type");
+        } else if (DestTy->isRealFloatingType()) {
           const FPOptions FPO =
               Init->getFPFeaturesInEffect(Info.Ctx.getLangOpts());
           APFloat FValue(0.0);
@@ -15757,6 +15756,8 @@ bool ArrayExprEvaluator::VisitCXXParenListOrInitListExpr(
                                     DestTy, FValue))
             return false;
           Result.getArrayInitializedElt(ArrayIndex) = APValue(FValue);
+        } else {
+          return false;
         }
         ArrayIndex++;
       }
