@@ -4689,7 +4689,7 @@ class TopLevelStmtDecl : public Decl, public DeclContext {
   virtual void anchor();
 
 public:
-  static TopLevelStmtDecl *Create(ASTContext &C, Stmt *Statement);
+  static TopLevelStmtDecl *Create(ASTContext &C, DeclContext *DC, Stmt *Statement);
   static TopLevelStmtDecl *CreateDeserialized(ASTContext &C, GlobalDeclID ID);
 
   SourceRange getSourceRange() const override LLVM_READONLY;
