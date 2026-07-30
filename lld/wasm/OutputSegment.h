@@ -11,6 +11,7 @@
 
 #include "InputChunks.h"
 #include "lld/Common/ErrorHandler.h"
+#include "llvm/BinaryFormat/Wasm.h"
 #include "llvm/Object/Wasm.h"
 
 namespace lld::wasm {
@@ -46,6 +47,16 @@ public:
 
   // Segment header
   std::string header;
+
+  /// Returns whether this is destined to become a passive data segment in the
+  /// final output.
+  bool isPassive() const {
+    return (initFlags & llvm::wasm::WASM_DATA_SEGMENT_IS_PASSIVE) != 0;
+  }
+
+  /// Returns whether this is destined to become a active data segment in the
+  /// final output.
+  bool isActive() const { return !isPassive(); }
 };
 
 } // namespace lld::wasm
