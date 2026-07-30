@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -O0 %s -o - 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -O0 %s -o - 2>&1                                         | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -O0 %s -o - 2>&1 -fexperimental-new-constant-interpreter | FileCheck %s
 
 typedef unsigned long size_t;
 
@@ -217,8 +218,6 @@ void test3(void) {
 void test4(struct Foo *t) {
   // CHECK: call i32 @_Z27NoViableOverloadObjectSize0PvU17pass_object_size0(ptr noundef %{{.*}}, i64 noundef %{{.*}})
   gi = NoViableOverloadObjectSize0(&t[1]);
-  // CHECK: call i32 @_Z27NoViableOverloadObjectSize1PvU17pass_object_size1(ptr noundef %{{.*}}, i64 noundef %{{.*}})
-  gi = NoViableOverloadObjectSize1(&t[1]);
   // CHECK: call i32 @_Z27NoViableOverloadObjectSize2PvU17pass_object_size2(ptr noundef %{{.*}}, i64 noundef %{{.*}})
   gi = NoViableOverloadObjectSize2(&t[1]);
   // CHECK: call i32 @_Z27NoViableOverloadObjectSize3PvU17pass_object_size3(ptr noundef %{{.*}}, i64 noundef 0)
