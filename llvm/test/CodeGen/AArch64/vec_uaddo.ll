@@ -173,15 +173,12 @@ define <8 x i32> @uaddo_v8i16(<8 x i16> %a0, <8 x i16> %a1, ptr %p2) nounwind {
 ; CHECK-NEXT:    add v2.8h, v0.8h, v1.8h
 ; CHECK-NEXT:    cmhi v0.8h, v0.8h, v2.8h
 ; CHECK-NEXT:    str q2, [x0]
-; CHECK-NEXT:    xtn v0.8b, v0.8h
-; CHECK-NEXT:    zip1 v1.8b, v0.8b, v0.8b
-; CHECK-NEXT:    zip2 v0.8b, v0.8b, v0.8b
-; CHECK-NEXT:    ushll v1.4s, v1.4h, #0
+; CHECK-NEXT:    ushll2 v1.4s, v0.8h, #0
 ; CHECK-NEXT:    ushll v0.4s, v0.4h, #0
 ; CHECK-NEXT:    shl v1.4s, v1.4s, #31
-; CHECK-NEXT:    shl v3.4s, v0.4s, #31
-; CHECK-NEXT:    cmlt v0.4s, v1.4s, #0
-; CHECK-NEXT:    cmlt v1.4s, v3.4s, #0
+; CHECK-NEXT:    shl v0.4s, v0.4s, #31
+; CHECK-NEXT:    cmlt v1.4s, v1.4s, #0
+; CHECK-NEXT:    cmlt v0.4s, v0.4s, #0
 ; CHECK-NEXT:    ret
   %t = call {<8 x i16>, <8 x i1>} @llvm.uadd.with.overflow.v8i16(<8 x i16> %a0, <8 x i16> %a1)
   %val = extractvalue {<8 x i16>, <8 x i1>} %t, 0

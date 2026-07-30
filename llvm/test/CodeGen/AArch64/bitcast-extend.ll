@@ -98,20 +98,12 @@ define <4 x i64> @z_i32_v4i64(i32 %x) {
 }
 
 define <4 x i16> @s_i32_v4i16(i32 %x) {
-; CHECK-SD-LABEL: s_i32_v4i16:
-; CHECK-SD:       // %bb.0:
-; CHECK-SD-NEXT:    fmov s0, w0
-; CHECK-SD-NEXT:    zip1 v0.8b, v0.8b, v0.8b
-; CHECK-SD-NEXT:    shl v0.4h, v0.4h, #8
-; CHECK-SD-NEXT:    sshr v0.4h, v0.4h, #8
-; CHECK-SD-NEXT:    ret
-;
-; CHECK-GI-LABEL: s_i32_v4i16:
-; CHECK-GI:       // %bb.0:
-; CHECK-GI-NEXT:    fmov s0, w0
-; CHECK-GI-NEXT:    sshll v0.8h, v0.8b, #0
-; CHECK-GI-NEXT:    // kill: def $d0 killed $d0 killed $q0
-; CHECK-GI-NEXT:    ret
+; CHECK-LABEL: s_i32_v4i16:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    fmov s0, w0
+; CHECK-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NEXT:    // kill: def $d0 killed $d0 killed $q0
+; CHECK-NEXT:    ret
   %b = bitcast i32 %x to <4 x i8>
   %e = sext <4 x i8> %b to <4 x i16>
   ret <4 x i16> %e
