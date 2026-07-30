@@ -562,6 +562,38 @@ multiclass CP_ASYNC_BULK_S2G_INTR<bit has_ch> {
 defm CP_ASYNC_BULK_S2G    : CP_ASYNC_BULK_S2G_INTR<has_ch = 0>;
 defm CP_ASYNC_BULK_S2G_CH : CP_ASYNC_BULK_S2G_INTR<has_ch = 1>;
 
+def CpReduceAsyncBulkFlags : Operand<i32> {
+  let PrintMethod = "printCpReduceAsyncBulk";
+}
+
+// TMA Async Bulk Reduction from Shared CTA to Global memory
+multiclass CP_ASYNC_BULK_REDUCE_S2G_INTR<string type, bit noftz_add> {
+  defvar RedOp = !if(noftz_add, "redop_noftz", "redop");
+  defvar Base =
+      "cp.reduce.async.bulk${scope:scope}.global.shared::cta.bulk_group";
+
+  def "" : NVPTXInst<(outs),
+      (ins ADDR:$dst, ADDR:$src, B32:$size,
+           CpReduceAsyncBulkFlags:$scope, CpReduceAsyncBulkFlags:$red_op),
+      Base # "${red_op:" # RedOp # "}." # type # " [$dst], [$src], $size;">,
+      Requires<[hasPTX<80>, hasSM<90>]>;
+
+  def _CH : NVPTXInst<(outs),
+      (ins ADDR:$dst, ADDR:$src, B32:$size, B64:$ch,
+           CpReduceAsyncBulkFlags:$scope, CpReduceAsyncBulkFlags:$red_op),
+      Base # ".L2::cache_hint${red_op:" # RedOp # "}." # type #
+          " [$dst], [$src], $size, $ch;">,
+      Requires<[hasPTX<80>, hasSM<90>]>;
+}
+
+foreach type = ["f16", "bf16"] in
+  defm CP_ASYNC_BULK_REDUCE_S2G_ # !toupper(type) :
+      CP_ASYNC_BULK_REDUCE_S2G_INTR<type, noftz_add = 1>;
+
+foreach type = ["b32", "u32", "s32", "b64", "u64", "s64", "f32", "f64"] in
+  defm CP_ASYNC_BULK_REDUCE_S2G_ # !toupper(type) :
+      CP_ASYNC_BULK_REDUCE_S2G_INTR<type, noftz_add = 0>;
+
 multiclass CP_ASYNC_BULK_G2S_INTR<bit has_ch> {
   defvar Intr = int_nvvm_cp_async_bulk_global_to_shared_cluster;
 
@@ -852,10 +884,6 @@ foreach dim = 1...5 in {
 defm TMA_S2G_TILE_SCATTER4_2D : TMA_TENSOR_S2G_INTR<5, "tile_scatter4",
                                 [callSubtarget<"hasTMABlackwellSupport">]>;
 
-def TMAReductionFlags : Operand<i32> {
-  let PrintMethod = "printTmaReductionMode";
-}
-
 // TMA Copy from Shared to Global memory with Reduction
 multiclass CP_ASYNC_BULK_TENSOR_REDUCE_INTR<int dim, bit shared32, string mode> {
   defvar dims_dag = TMA_DIMS_UTIL<dim>.ins_dag;
@@ -870,12 +898,12 @@ multiclass CP_ASYNC_BULK_TENSOR_REDUCE_INTR<int dim, bit shared32, string mode> 
   defvar suffix = "." # mode_asm_str # ".bulk_group";
 
   def "" : NVPTXInst<(outs),
-            !con((ins rc:$src, B64:$tmap), dims_dag, (ins TMAReductionFlags:$red_op)),
-            !strconcat(prefix, "${red_op}", suffix, asm_str, ";")>,
+            !con((ins rc:$src, B64:$tmap), dims_dag, (ins CpReduceAsyncBulkFlags:$red_op)),
+            !strconcat(prefix, "${red_op:redop}", suffix, asm_str, ";")>,
             Requires<[hasPTX<80>, hasSM<90>]>;
   def _CH : NVPTXInst<(outs),
-                  !con((ins rc:$src, B64:$tmap), dims_dag, (ins B64:$ch, TMAReductionFlags:$red_op)),
-                  !strconcat(prefix, "${red_op}", suffix, ".L2::cache_hint", asm_str, ", $ch;")>,
+                  !con((ins rc:$src, B64:$tmap), dims_dag, (ins B64:$ch, CpReduceAsyncBulkFlags:$red_op)),
+                  !strconcat(prefix, "${red_op:redop}", suffix, ".L2::cache_hint", asm_str, ", $ch;")>,
                   Requires<[hasPTX<80>, hasSM<90>]>;
 }
 

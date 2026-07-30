@@ -37,6 +37,16 @@ static bool hasParamSubqualifiers(const MCSubtargetInfo &STI) {
   return STI.hasFeature(NVPTX::PTX83);
 }
 
+static bool hasPTXFeatureAtLeast(const MCSubtargetInfo &STI,
+                                 unsigned FirstPTXFeature) {
+  // NVPTX.td emits PTX features in version order before SM features.
+  const FeatureBitset &Features = STI.getFeatureBits();
+  for (unsigned Feature = FirstPTXFeature; Feature < NVPTX::SM20; ++Feature)
+    if (Features[Feature])
+      return true;
+  return false;
+}
+
 NVPTXInstPrinter::NVPTXInstPrinter(const MCAsmInfo &MAI, const MCInstrInfo &MII,
                                    const MCRegisterInfo &MRI)
     : MCInstPrinter(MAI, MII, MRI) {}
@@ -485,40 +495,88 @@ void NVPTXInstPrinter::printPrmtMode(const MCInst *MI, int OpNum,
   }
 }
 
-void NVPTXInstPrinter::printTmaReductionMode(const MCInst *MI, int OpNum,
-                                             const MCSubtargetInfo &,
-                                             raw_ostream &O) {
-  const MCOperand &MO = MI->getOperand(OpNum);
-  using RedTy = nvvm::TMAReductionOp;
-
-  switch (static_cast<RedTy>(MO.getImm())) {
-  case RedTy::ADD:
-    O << ".add";
-    return;
-  case RedTy::MIN:
-    O << ".min";
-    return;
-  case RedTy::MAX:
-    O << ".max";
-    return;
-  case RedTy::INC:
-    O << ".inc";
-    return;
-  case RedTy::DEC:
-    O << ".dec";
-    return;
-  case RedTy::AND:
+static void printReductionOp(int64_t Imm, bool NoftzAdd, raw_ostream &O) {
+  switch (static_cast<nvvm::ReductionOp>(Imm)) {
+  case nvvm::ReductionOp::AND:
     O << ".and";
     return;
-  case RedTy::OR:
+  case nvvm::ReductionOp::OR:
     O << ".or";
     return;
-  case RedTy::XOR:
+  case nvvm::ReductionOp::XOR:
     O << ".xor";
     return;
+  case nvvm::ReductionOp::ADD:
+    O << (NoftzAdd ? ".add.noftz" : ".add");
+    return;
+  case nvvm::ReductionOp::INC:
+    O << ".inc";
+    return;
+  case nvvm::ReductionOp::DEC:
+    O << ".dec";
+    return;
+  case nvvm::ReductionOp::MIN:
+    O << ".min";
+    return;
+  case nvvm::ReductionOp::MAX:
+    O << ".max";
+    return;
   }
-  llvm_unreachable(
-      "Invalid Reduction Op in printCpAsyncBulkTensorReductionMode");
+  llvm_unreachable("Invalid reduction op");
+}
+
+static void printMMScope(nvvm::MMScope Scope, raw_ostream &O) {
+  switch (Scope) {
+  case nvvm::MMScope::GPU:
+    O << ".gpu";
+    return;
+  case nvvm::MMScope::CTA:
+    O << ".cta";
+    return;
+  case nvvm::MMScope::SYSTEM:
+    O << ".sys";
+    return;
+  case nvvm::MMScope::CLUSTER:
+    O << ".cluster";
+    return;
+  }
+  report_fatal_error("Invalid memory scope");
+}
+
+void NVPTXInstPrinter::printCpReduceAsyncBulk(const MCInst *MI, int OpNum,
+                                              const MCSubtargetInfo &STI,
+                                              raw_ostream &O,
+                                              StringRef Modifier) {
+  int64_t Imm = MI->getOperand(OpNum).getImm();
+
+  if (Modifier == "redop") {
+    printReductionOp(Imm, /*NoftzAdd=*/false, O);
+    return;
+  }
+
+  if (Modifier == "redop_noftz") {
+    printReductionOp(Imm, /*NoftzAdd=*/true, O);
+    return;
+  }
+
+  if (Modifier == "scope") {
+    nvvm::MMScope Scope = static_cast<nvvm::MMScope>(Imm);
+    bool HasSemScope = hasPTXFeatureAtLeast(STI, NVPTX::PTX93);
+    if (!HasSemScope) {
+      if (Scope == nvvm::MMScope::SYSTEM)
+        return;
+      report_fatal_error(
+          "cp.reduce.async.bulk sem.scope requires PTX ISA 9.3 or higher");
+    }
+
+    O << ".relaxed";
+    printMMScope(Scope, O);
+    return;
+  }
+
+  report_fatal_error(formatv(
+      "NVPTX cp.reduce.async.bulk modifier printer does not support \"{}\".",
+      Modifier));
 }
 
 void NVPTXInstPrinter::printCTAGroup(const MCInst *MI, int OpNum,
