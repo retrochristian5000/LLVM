@@ -2984,6 +2984,7 @@ DEF_TRAVERSE_STMT(CXXPseudoDestructorExpr, {
 })
 
 DEF_TRAVERSE_STMT(CXXThisExpr, {})
+DEF_TRAVERSE_STMT(CThisExpr, {})
 DEF_TRAVERSE_STMT(CXXThrowExpr, {})
 DEF_TRAVERSE_STMT(UserDefinedLiteral, {})
 DEF_TRAVERSE_STMT(DesignatedInitExpr, {})
