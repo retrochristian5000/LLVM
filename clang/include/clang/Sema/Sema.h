@@ -8663,7 +8663,7 @@ public:
       SourceLocation StartLoc, SourceRange Range,
       AllocationFunctionScope NewScope, AllocationFunctionScope DeleteScope,
       QualType AllocType, bool IsArray, ImplicitAllocationParameters &IAP,
-      MultiExprArg PlaceArgs, FunctionDecl *&OperatorNew,
+      ArrayRef<Expr *> PlaceArgs, FunctionDecl *&OperatorNew,
       FunctionDecl *&OperatorDelete, bool Diagnose = true);
 
   /// DeclareGlobalNewDelete - Declare the global forms of operator new and
@@ -10377,7 +10377,7 @@ public:
   void DiagnoseUseOfDeletedFunction(SourceLocation Loc, SourceRange Range,
                                     DeclarationName Name,
                                     OverloadCandidateSet &CandidateSet,
-                                    FunctionDecl *Fn, MultiExprArg Args,
+                                    FunctionDecl *Fn, ArrayRef<Expr *> Args,
                                     bool IsMember = false);
 
   ExprResult InitializeExplicitObjectArgument(Sema &S, Expr *Obj,
