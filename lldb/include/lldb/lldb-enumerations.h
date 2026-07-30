@@ -267,7 +267,11 @@ enum ScriptedExtension {
   eScriptedExtensionScriptedHook,
   eScriptedExtensionScriptedThread,
   eScriptedExtensionScriptedFrame,
-  kLastScriptedExtension = eScriptedExtensionScriptedFrame
+  eScriptedExtensionScriptedStackFrameRecognizer,
+  eScriptedExtensionScriptedCommand,
+  eScriptedExtensionParsedCommand,
+  eScriptedExtensionScriptedStringSummary,
+  kLastScriptedExtension = eScriptedExtensionScriptedStringSummary
 };
 
 /// Register numbering types.
@@ -922,6 +926,7 @@ enum SectionType {
   eSectionTypeLLDBFormatters,
   eSectionTypeSwiftModules,
   eSectionTypeWasmName,
+  eSectionTypeWasmGlobal,
 };
 
 FLAGS_ENUM(EmulateInstructionOptions){
