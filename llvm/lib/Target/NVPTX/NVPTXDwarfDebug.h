@@ -17,9 +17,15 @@
 #define LLVM_LIB_TARGET_NVPTX_NVPTXDWARFDEBUG_H
 
 #include "../../CodeGen/AsmPrinter/DwarfCompileUnit.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace llvm {
+class DIFile;
+class Module;
 
 /// NVPTX-specific DwarfDebug implementation.
 ///
@@ -60,6 +66,27 @@ protected:
   void recordTargetSourceLine(const DebugLoc &DL, unsigned Flags) override;
   bool shouldAttachCompileUnitRanges() const override;
   bool shouldEmitDwarfPubSections() const override { return false; }
+
+public:
+  /// Build the .nv_intermediate_source_section PTX text from \p M module
+  /// metadata. Returns the section as a string so the caller can emit it
+  /// after .file directives have been flushed (empty if there is nothing to
+  /// emit).
+  std::string buildIntermediateSourceSection(Module &M);
+
+private:
+  /// Emit secondary .loc_intermediate directives for the intermediate-IR
+  /// layers carried on a DebugLoc's irlayers operand.
+  void recordIntermediateLoc(const DebugLoc &DL, unsigned Flags);
+
+  /// Per intermediate DIFile: its DWARF file number and layer kind, populated
+  /// during intermediate .loc emission and consumed when building the source
+  /// section. MapVector keeps iteration deterministic.
+  struct IntermediateFileInfo {
+    unsigned FileNum = 0;
+    StringRef Kind;
+  };
+  MapVector<const DIFile *, IntermediateFileInfo> IntermediateFiles;
 };
 
 } // end namespace llvm

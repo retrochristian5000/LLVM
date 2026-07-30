@@ -19,11 +19,14 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Support/NVPTXAddrSpace.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
@@ -188,6 +191,92 @@ void NVPTXDwarfDebug::recordTargetSourceLine(const DebugLoc &DL,
     if (EnhancedLineinfo)
       EmittedInlinedAtLocs.insert(Current);
   }
+
+  recordIntermediateLoc(DL, Flags);
+}
+
+void NVPTXDwarfDebug::recordIntermediateLoc(const DebugLoc &DL,
+                                            unsigned Flags) {
+  // Intermediate-IR layers live on the frame that was outermost when the tile
+  // snapshot was taken; after later inlining that frame can sit anywhere in the
+  // inlined-at chain. Walk outward from the head and use the first (innermost)
+  // frame that carries layers: it is the most specific intermediate origin for
+  // this PC -- the instruction actually being executed -- and for layer-less
+  // inlined code it is the nearest enclosing frame (continuous coverage).
+  const DILocation *Loc = DL.get();
+  while (Loc && !Loc->getRawIRLayers())
+    Loc = Loc->getInlinedAt();
+  if (!Loc)
+    return;
+  DILayerLocList *Layers = Loc->getIRLayers();
+  if (!Layers)
+    return;
+  // Emit a secondary .loc_intermediate DWARF directive for each intermediate-IR
+  // layer. Each DILayerLoc carries its file/line/column directly (no scope and
+  // no discriminator).
+  const unsigned CUID = Asm->OutStreamer->getContext().getDwarfCompileUnitID();
+  for (unsigned I = 0, E = Layers->getNumLayers(); I != E; ++I) {
+    // The verifier guarantees each entry is a non-null DILayerLoc whose file is
+    // a non-null DIFile carrying a checksum, so no null checks are needed here.
+    const DILayerLoc *L = Layers->getLayer(I);
+    const unsigned Line = L->getLine();
+    const DIFile *OrigFile = L->getFile();
+    // Skip the DWARF "no line" sentinel (line 0 is valid IR, not a verifier
+    // invariant).
+    if (!Line)
+      continue;
+    // Secondary .file name: a file that carries source uses its checksum digest
+    // (a stable per-content token that pairs with the .code_block's .source
+    // blob); a source-less file has nothing to content-address, so it uses its
+    // filename instead.
+    const StringRef SecondaryFilename = OrigFile->getSource()
+                                            ? OrigFile->getChecksum()->Value
+                                            : OrigFile->getFilename();
+    DIFile *SecondaryFile = DIFile::get(Loc->getContext(), SecondaryFilename,
+                                        OrigFile->getDirectory());
+    const unsigned FileNo = static_cast<DwarfCompileUnit &>(*getUnits()[CUID])
+                                .getOrCreateSourceID(SecondaryFile);
+    const unsigned Col = L->getColumn();
+    Asm->OutStreamer->emitDwarfLocDirective(
+        FileNo, Line, Col, Flags, 0, /*Discriminator=*/0,
+        OrigFile->getFilename(), "", ".loc_intermediate");
+    // First encounter wins: a given intermediate file's number and kind are
+    // invariant (getOrCreateSourceID is memoized; kind uniformity is a verifier
+    // invariant), so re-inserting on every layered instruction is wasted work.
+    IntermediateFiles.insert({OrigFile, {FileNo, L->getKind()}});
+  }
+}
+
+std::string NVPTXDwarfDebug::buildIntermediateSourceSection(Module &M) {
+  if (IntermediateFiles.empty())
+    return {};
+
+  // Build the body first so an empty section header/footer isn't emitted when
+  // no file produced a .code_block (e.g. every intermediate file lacks source).
+  // MapVector iterates in first-reference (insertion) order, which is ascending
+  // .file-number order -- deterministic for a given compilation and consistent
+  // with the emitted .file directives, so no sort is needed.
+  std::string Body;
+  raw_string_ostream BodyOS(Body);
+  for (const auto &[F, Info] : IntermediateFiles) {
+    // Source now lives on DIFile.source; a null source omits the .code_block.
+    std::optional<StringRef> Source = F->getSource();
+    if (!Source)
+      continue;
+    BodyOS << "  .code_block {\n";
+    BodyOS << "    .ir_name: \"" << Info.Kind << "\"\n";
+    BodyOS << "    .sourceFileName: " << Info.FileNum << "\n";
+    BodyOS << "    .source: <<< " << *Source << " >>>\n";
+    BodyOS << "  }\n";
+  }
+
+  if (Body.empty())
+    return {};
+
+  std::string Buf;
+  raw_string_ostream OS(Buf);
+  OS << ".nv_intermediate_source_section {\n" << Body << "}";
+  return Buf;
 }
 
 /// NVPTX-specific debug info initialization.
