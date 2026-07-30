@@ -2744,8 +2744,36 @@ void LoopVectorizationCostModel::collectLoopUniforms(ElementCount VF) {
     if (Legal->hasUncountableEarlyExit() && TheLoop->getLoopLatch() != E)
       continue;
     auto *Cmp = dyn_cast<Instruction>(E->getTerminator()->getOperand(0));
-    if (Cmp && TheLoop->contains(Cmp) && Cmp->hasOneUse())
-      AddToWorklistIfAllowed(Cmp);
+    if (!Cmp || !TheLoop->contains(Cmp) || !Cmp->hasOneUse())
+      continue;
+
+    // If we have an exit condition that is actually two conditions (one counted
+    // and the other uncounted) combined via an or, only add the counted
+    // comparison as a uniform value.
+    if (Legal->hasUncountableExitWithSideEffects() &&
+        TheLoop->getLoopLatch() == E) {
+      Value *Counted, *IVInc;
+      using namespace llvm::PatternMatch;
+      auto m_Uncounted = []() {
+        return m_c_ICmp(m_Load(m_Value()), m_Value());
+      };
+      auto m_Counted = [](auto &&Counted, auto &&IVInc) {
+        return m_Value(
+            Counted,
+            m_c_ICmp(m_Value(IVInc, m_Add(m_Value(), m_Value())), m_Value()));
+      };
+      if (match(Cmp, m_c_LogicalOr(m_Uncounted(), m_Counted(Counted, IVInc)))) {
+        const SCEV *S = PSE.getSE()->getSCEV(IVInc);
+        if (match(S, m_scev_AffineAddRec(m_SCEV(), m_scev_One(),
+                                         m_SpecificLoop(TheLoop)))) {
+          AddToWorklistIfAllowed(cast<Instruction>(Counted));
+          continue;
+        }
+      }
+    }
+
+    // Normal exit comparisons are uniform.
+    AddToWorklistIfAllowed(Cmp);
   }
 
   auto PrevVF = VF.divideCoefficientBy(2);

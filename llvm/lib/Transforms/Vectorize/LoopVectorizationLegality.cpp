@@ -22,6 +22,7 @@
 #include "llvm/Analysis/MustExecute.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/ScalarEvolutionPatternMatch.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -1667,16 +1668,32 @@ bool LoopVectorizationLegality::isVectorizableEarlyExitLoop() {
   }
 
   // The latch block must have a countable exit.
-  if (isa<SCEVCouldNotCompute>(
-          PSE.getSE()->getPredicatedExitCount(TheLoop, LatchBB, &Predicates))) {
+  if (isa<SCEVCouldNotCompute>(PSE.getSE()->getPredicatedExitCount(
+          TheLoop, LatchBB, &Predicates, ScalarEvolution::SymbolicMaximum))) {
     reportVectorizationFailure(
         "Cannot determine exact exit count for latch block",
         "Cannot vectorize early exit loop",
         "UnknownLatchExitCountEarlyExitLoop", ORE, TheLoop);
     return false;
   }
-  assert(llvm::is_contained(CountableExitingBlocks, LatchBB) &&
-         "Latch block not found in list of countable exits!");
+
+  if (!is_contained(CountableExitingBlocks, LatchBB)) {
+    // If not a separate counted exit in the latch, then check for a combined
+    // countable and uncountable exit.
+    BasicBlock *TrueBB, *FalseBB;
+    if (!match(LatchBB->getTerminator(),
+               m_Br(m_c_LogicalOr(
+                        m_Value(),
+                        m_c_ICmp(m_c_Add(m_Specific(getPrimaryInduction()),
+                                         m_Value()),
+                                 m_Value())),
+                    TrueBB, FalseBB))) {
+      reportVectorizationFailure(
+          "Latch block does not have a countable exit condition",
+          "NoCountableConditionInLatchBlock", ORE, TheLoop);
+      return false;
+    }
+  }
 
   // Check to see if there are instructions that could potentially generate
   // exceptions or have side-effects.
@@ -1754,6 +1771,13 @@ bool LoopVectorizationLegality::isVectorizableEarlyExitLoop() {
     }
   }
 
+  // We're only handling combined exit conditions via masking at present, which
+  // is used for loops with side effects.
+  // TODO: Support readonly loops with combined exit conditions.
+  // TODO: Decouple style from the presence of side effects.
+  if (!llvm::is_contained(CountableExitingBlocks, LatchBB) && !HasSideEffects)
+    return false;
+
   [[maybe_unused]] const SCEV *SymbolicMaxBTC =
       PSE.getSymbolicMaxBackedgeTakenCount();
   // Since we have an exact exit count for the latch and the early exit
@@ -1780,23 +1804,49 @@ bool LoopVectorizationLegality::canUncountableExitConditionLoadBeMoved(
   auto *Br = cast<CondBrInst>(ExitingBlock->getTerminator());
 
   using namespace llvm::PatternMatch;
-  Instruction *L = nullptr;
-  Value *Ptr = nullptr;
-  Value *R = nullptr;
-  // The exit-condition load can appear on either side of the icmp.
+  using namespace llvm::SCEVPatternMatch;
+  Value *Ptr, *L, *R, *IVInc = nullptr;
+  // We want to match either an uncounted condition (loaded value compared
+  // against a loop invariant value) or the combination (via logical or) of
+  // an uncounted condition with a counted condition (integer comparison of
+  // an induction variable for which we can identify an add recurrence within
+  // this loop).
+  auto m_Uncounted = [](auto &&Ptr, auto &&L, auto &&R) {
+    return m_OneUse(
+        m_c_ICmp(m_OneUse(m_Value(L, m_Load(m_Value(Ptr)))), m_Value(R)));
+  };
+  auto m_Counted = [](auto &&IVInc) {
+    return m_c_ICmp(m_Value(IVInc, m_Add(m_Value(), m_Value())), m_Value());
+  };
+
   if (!match(Br->getCondition(),
-             m_OneUse(m_c_ICmp(m_OneUse(m_Instruction(L, m_Load(m_Value(Ptr)))),
-                               m_Value(R))))) {
+             m_CombineOr(m_Uncounted(Ptr, L, R),
+                         m_OneUse(m_LogicalOr(m_Uncounted(Ptr, L, R),
+                                              m_Counted(IVInc)))))) {
     reportVectorizationFailure(
         "Early exit loop with store but no supported condition load",
         "NoConditionLoadForEarlyExitLoop", ORE, TheLoop);
     return false;
   }
 
+  // Bail if the uncountable exit load is compared against a non-invariant
+  // value.
+  // TODO: Remove this restriction.
   if (!TheLoop->isLoopInvariant(R)) {
     reportVectorizationFailure(
         "Early exit loop with store but no supported condition load",
         "NoConditionLoadForEarlyExitLoop", ORE, TheLoop);
+    return false;
+  }
+
+  // If we have a combined exit, make sure the counted portion is a SCEVAddRec
+  // with a step of 1 within this loop.
+  if (IVInc && !match(PSE.getSE()->getSCEV(IVInc),
+                      m_scev_AffineAddRec(m_SCEV(), m_scev_One(),
+                                          m_SpecificLoop(TheLoop)))) {
+    reportVectorizationFailure(
+        "Uncountable exit loop with unsupported combined condition",
+        "UnsupportedCombinedUncountableCondition", ORE, TheLoop);
     return false;
   }
 
@@ -1912,24 +1962,17 @@ bool LoopVectorizationLegality::canVectorize(bool UseVPlanNativePath) {
       return false;
   }
 
-  if (isa<SCEVCouldNotCompute>(PSE.getBackedgeTakenCount())) {
-    if (TheLoop->getExitingBlock()) {
+  if (isa<SCEVCouldNotCompute>(PSE.getBackedgeTakenCount()) &&
+      !isVectorizableEarlyExitLoop()) {
+    assert(UncountableExitType == UncountableExitTrait::None &&
+           "Must be false without vectorizable early-exit loop");
+    if (TheLoop->getExitingBlock())
       reportVectorizationFailure("Cannot vectorize uncountable loop",
                                  "UnsupportedUncountableLoop", ORE, TheLoop);
-      if (DoExtraAnalysis)
-        Result = false;
-      else
-        return false;
-    } else {
-      if (!isVectorizableEarlyExitLoop()) {
-        assert(UncountableExitType == UncountableExitTrait::None &&
-               "Must be false without vectorizable early-exit loop");
-        if (DoExtraAnalysis)
-          Result = false;
-        else
-          return false;
-      }
-    }
+    if (DoExtraAnalysis)
+      Result = false;
+    else
+      return false;
   }
 
   // Go over each instruction and look at memory deps.

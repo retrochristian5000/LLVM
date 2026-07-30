@@ -3279,6 +3279,61 @@ bool VPlanTransforms::handleUncountableEarlyExits(
     });
   }
 
+  // Retrieve the latch branch and its condition; this is expected to be either
+  // a counted condition, or a combination of counted and uncounted conditions.
+  auto *LatchExitingBranch = cast<VPInstruction>(LatchVPBB->getTerminator());
+  assert(LatchExitingBranch->getOpcode() == VPInstruction::BranchOnCond &&
+         "Unexpected terminator");
+  VPValue *IsLatchExitTaken = LatchExitingBranch->getOperand(0);
+  VPInstruction *OldCombinedBranchCondition = nullptr;
+
+  // If we didn't find any uncounted exits with exit paths not involving the
+  // middle block, perhaps the exit was combined in the latch.
+  if (Exits.empty() && Plan.getExitBlocks().size() == 1) {
+    // TODO: Make this work with other styles.
+    if (Style != UncountableExitStyle::MaskedHandleExitInScalarLoop)
+      return false;
+
+    // TODO: Relax assumptions to cover more loops.
+    VPValue *Uncounted = nullptr;
+    VPValue *Counted = nullptr;
+    VPValue *IVInc = nullptr;
+
+    // Check the latch branch condition for counted and uncounted conditions.
+    auto m_Uncounted = [](auto &&Cond) {
+      return m_VPValue(
+          Cond,
+          m_Cmp(m_VPInstruction<Instruction::Load>(m_VPValue()), m_LiveIn()));
+    };
+    auto m_Counted = [](auto &&Cond, auto &&IVInc) {
+      return m_VPValue(
+          Cond, m_c_ICmp(m_VPValue(IVInc, m_Add(m_VPValue(), m_VPValue())),
+                         m_LiveIn()));
+    };
+
+    if (!match(IsLatchExitTaken,
+               m_OneUse(m_c_LogicalOr(m_Uncounted(Uncounted),
+                                      m_Counted(Counted, IVInc)))))
+      return false;
+
+    // Make sure we've found a valid AddRec value for the counted condition.
+    if (!isa<SCEVAddRecExpr>(
+            vputils::getSCEVExprForVPValue(IVInc, PSE, TheLoop)))
+      return false;
+
+    auto *CondToEarlyExit =
+        LatchBuilder.createNaryOp(VPInstruction::MaskedCond, Uncounted);
+
+    // Synthesize an early exit using the uncounted portion of the combined
+    // condition.
+    Exits.push_back({LatchVPBB, Plan.getExitBlocks().front(), CondToEarlyExit});
+
+    // Override the latch branch to use the counted condition only, and save
+    // the previous combined condition so we can delete it.
+    OldCombinedBranchCondition = cast<VPInstruction>(IsLatchExitTaken);
+    IsLatchExitTaken = Counted;
+  }
+
   assert(!Exits.empty() && "must have at least one early exit");
   // Sort exits by RPO order to get correct program order. RPO gives a
   // topological ordering of the CFG, ensuring upstream exits are checked
@@ -3316,12 +3371,12 @@ bool VPlanTransforms::handleUncountableEarlyExits(
   // BranchOnCond with a BranchOnTwoConds. The original BranchOnCond's condition
   // is used as the latch-exit condition; canonical IV recipes have not been
   // introduced yet, so there is no BranchOnCount to derive the condition from.
-  auto *LatchExitingBranch = cast<VPInstruction>(LatchVPBB->getTerminator());
-  assert(LatchExitingBranch->getOpcode() == VPInstruction::BranchOnCond &&
-         "Unexpected terminator");
-  VPValue *IsLatchExitTaken = LatchExitingBranch->getOperand(0);
   DebugLoc LatchDL = LatchExitingBranch->getDebugLoc();
   LatchExitingBranch->eraseFromParent();
+  // If the scalar exit condition was combined, we have just split it up for
+  // the BranchOnTwoConds. Remove the original combine operation.
+  if (OldCombinedBranchCondition)
+    OldCombinedBranchCondition->eraseFromParent();
   LatchBuilder.setInsertPoint(LatchVPBB);
   LatchBuilder.createNaryOp(VPInstruction::BranchOnTwoConds,
                             {IsAnyExitTaken, IsLatchExitTaken}, LatchDL);
