@@ -1883,8 +1883,9 @@ xegpu::DistributeLayoutAttr xegpu::setupLoadGatherAnchorLayout(
 
   const auto *uArchInstruction = dyn_cast<xegpu::uArch::LoadGatherInstruction>(
       uArch->getInstruction(xegpu::uArch::InstructionKind::LoadGather));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  int maxChunkSize = std::min(uArchInstruction->getMaxLaneAccessSizeElements(
+                                  resVecTy.getElementTypeBitWidth()),
+                              contigChunkSize);
 
   return setupGenericLoadAnchorLayout(layoutKind, context, consumerLayout,
                                       maxChunkSize, resShape, subgroupSize);
@@ -1904,8 +1905,9 @@ xegpu::setupLoadMatrixAnchorLayout(xegpu::LayoutKind layoutKind,
 
   const auto *uArchInstruction = dyn_cast<xegpu::uArch::LoadGatherInstruction>(
       uArch->getInstruction(xegpu::uArch::InstructionKind::LoadGather));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  int maxChunkSize = std::min(uArchInstruction->getMaxLaneAccessSizeElements(
+                                  resVecTy.getElementTypeBitWidth()),
+                              contigChunkSize);
   return setupGenericLoadAnchorLayout(layoutKind, context, consumerLayout,
                                       maxChunkSize, resShape, subgroupSize);
 }
@@ -1964,8 +1966,9 @@ xegpu::setupStoreScatterAnchorLayout(xegpu::LayoutKind layoutKind,
   const auto *uArchInstruction =
       dyn_cast<xegpu::uArch::StoreScatterInstruction>(
           uArch->getInstruction(xegpu::uArch::InstructionKind::StoreScatter));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  int maxChunkSize = std::min(uArchInstruction->getMaxLaneAccessSizeElements(
+                                  srcVecTy.getElementTypeBitWidth()),
+                              contigChunkSize);
   return setupGenericStoreAnchorLayout(layoutKind, context, maxChunkSize,
                                        srcShape, subgroupSize, numSg);
 }
@@ -1982,8 +1985,9 @@ xegpu::DistributeLayoutAttr xegpu::setupStoreMatrixAnchorLayout(
   const auto *uArchInstruction =
       dyn_cast<xegpu::uArch::StoreScatterInstruction>(
           uArch->getInstruction(xegpu::uArch::InstructionKind::StoreScatter));
-  int maxChunkSize =
-      std::min(uArchInstruction->getMaxLaneAccessSizeBytes(), contigChunkSize);
+  int maxChunkSize = std::min(uArchInstruction->getMaxLaneAccessSizeElements(
+                                  srcVecTy.getElementTypeBitWidth()),
+                              contigChunkSize);
 
   return setupGenericStoreAnchorLayout(layoutKind, context, maxChunkSize,
                                        srcShape, subgroupSize, numSg);
@@ -2002,7 +2006,7 @@ xegpu::DistributeLayoutAttr xegpu::setupStoreMatrixAnchorLayout(
 ///   - Otherwise a standard scatter-style factorization is computed via
 ///     `computeScatterIOLaneLayoutAndData`, bounded by `maxChunkSize` — the
 ///     per-lane load width reported by the uArch's LoadGather instruction
-///     (`getMaxLaneAccessSizeBytes`).
+///     (`getMaxLaneAccessSizeElements`).
 ///
 std::optional<xegpu::DistributeLayoutAttr>
 xegpu::completeScatterLoadLaneLayoutFromInstData(
@@ -2022,7 +2026,8 @@ xegpu::completeScatterLoadLaneLayoutFromInstData(
 
   // Reuse the load-side setup with inst_data as the destination shape.
   auto *context = specifiedLayout.getContext();
-  int maxChunkSize = uArchInstruction->getMaxLaneAccessSizeBytes();
+  int maxChunkSize = uArchInstruction->getMaxLaneAccessSizeElements(
+      getElementTypeOrSelf(elemTy).getIntOrFloatBitWidth());
   if (consumerLayout) {
     auto consumerLaneLayout = consumerLayout.getEffectiveLaneLayoutAsInt();
     auto consumerLaneData = consumerLayout.getEffectiveLaneDataAsInt();
@@ -2060,7 +2065,8 @@ xegpu::completeScatterStoreLaneLayoutFromInstData(
 
   // Reuse the store-side setup with inst_data as the source shape.
   auto *context = specifiedLayout.getContext();
-  int maxChunkSize = uArchInstruction->getMaxLaneAccessSizeBytes();
+  int maxChunkSize = uArchInstruction->getMaxLaneAccessSizeElements(
+      getElementTypeOrSelf(elemTy).getIntOrFloatBitWidth());
   auto [defLaneLayout, defLaneData] = computeScatterIOLaneLayoutAndData(
       specifiedInstData, subgroupSize, maxChunkSize);
   if (!isValidLaneLayout(specifiedInstData, defLaneLayout, defLaneData))
