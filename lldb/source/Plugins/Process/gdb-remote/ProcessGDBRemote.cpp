@@ -1216,6 +1216,10 @@ void ProcessGDBRemote::LoadStubBinaries() {
   }
 }
 
+void ProcessGDBRemote::DoResolveAddressSpaces() {
+  m_address_spaces = m_gdb_comm.GetAddressSpaces();
+}
+
 void ProcessGDBRemote::MaybeLoadExecutableModule() {
   ModuleSP module_sp = GetTarget().GetExecutableModule();
   if (!module_sp)
@@ -2902,9 +2906,17 @@ void ProcessGDBRemote::WillPublicStop() {
 }
 
 // Process Memory
-size_t ProcessGDBRemote::DoReadMemory(addr_t addr, void *buf, size_t size,
-                                      Status &error) {
+size_t ProcessGDBRemote::DoReadMemory(const ProcessAddress &process_addr,
+                                      void *buf, size_t size, Status &error) {
   using xPacketState = GDBRemoteCommunicationClient::xPacketState;
+
+  lldb::addr_t addr = process_addr.GetValue();
+  uint64_t addr_space = process_addr.GetAddressSpace();
+  if (addr_space != LLDB_DEFAULT_ADDRESS_SPACE_ID &&
+      !m_gdb_comm.GetAddressSpacesSupported()) {
+    error = Status::FromErrorString("address spaces are not supported");
+    return 0;
+  }
 
   GetMaxMemorySize();
   xPacketState x_state = m_gdb_comm.GetxPacketState();
@@ -2920,11 +2932,20 @@ size_t ProcessGDBRemote::DoReadMemory(addr_t addr, void *buf, size_t size,
     size = max_memory_size;
   }
 
-  char packet[64];
+  // A non-default address space rides on an optional ";address_space:<id>;"
+  // suffix on the standard m/x packet (see the "address-spaces" feature).
+  char packet[128];
   int packet_len;
-  packet_len = ::snprintf(packet, sizeof(packet), "%c%" PRIx64 ",%" PRIx64,
-                          x_state != xPacketState::Unimplemented ? 'x' : 'm',
-                          (uint64_t)addr, (uint64_t)size);
+  if (addr_space != LLDB_DEFAULT_ADDRESS_SPACE_ID)
+    packet_len =
+        ::snprintf(packet, sizeof(packet),
+                   "%c%" PRIx64 ",%" PRIx64 ";address_space:%" PRIu64 ";",
+                   x_state != xPacketState::Unimplemented ? 'x' : 'm',
+                   (uint64_t)addr, (uint64_t)size, addr_space);
+  else
+    packet_len = ::snprintf(packet, sizeof(packet), "%c%" PRIx64 ",%" PRIx64,
+                            x_state != xPacketState::Unimplemented ? 'x' : 'm',
+                            (uint64_t)addr, (uint64_t)size);
   assert(packet_len + 1 < (int)sizeof(packet));
   UNUSED_IF_ASSERT_DISABLED(packet_len);
   StringExtractorGDBRemote response;

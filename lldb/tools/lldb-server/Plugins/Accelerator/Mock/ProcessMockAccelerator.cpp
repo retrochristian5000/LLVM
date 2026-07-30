@@ -59,8 +59,11 @@ Status ProcessMockAccelerator::Signal(int signo) {
 
 Status ProcessMockAccelerator::Kill() { return Status(); }
 
-Status ProcessMockAccelerator::ReadMemory(lldb::addr_t addr, void *buf,
-                                          size_t size, size_t &bytes_read) {
+Status ProcessMockAccelerator::ReadMemory(const ProcessAddress &process_addr,
+                                          void *buf, size_t size,
+                                          size_t &bytes_read) {
+  lldb::addr_t addr = process_addr.GetValue();
+  (void)addr;
   bytes_read = 0;
   return Status::FromErrorString("unimplemented");
 }

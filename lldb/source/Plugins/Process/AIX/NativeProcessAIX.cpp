@@ -238,8 +238,11 @@ Status NativeProcessAIX::Kill() {
   return error;
 }
 
-Status NativeProcessAIX::ReadMemory(lldb::addr_t addr, void *buf, size_t size,
+Status NativeProcessAIX::ReadMemory(const ProcessAddress &process_addr,
+                                    void *buf, size_t size,
                                     size_t &bytes_read) {
+  lldb::addr_t addr = process_addr.GetValue();
+  (void)addr;
   return Status("unsupported");
 }
 

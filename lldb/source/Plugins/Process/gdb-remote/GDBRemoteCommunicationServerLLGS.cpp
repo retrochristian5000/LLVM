@@ -163,6 +163,9 @@ void GDBRemoteCommunicationServerLLGS::RegisterPacketHandlers() {
       StringExtractorGDBRemote::eServerPacketType_jThreadsInfo,
       &GDBRemoteCommunicationServerLLGS::Handle_jThreadsInfo);
   RegisterMemberFunctionHandler(
+      StringExtractorGDBRemote::eServerPacketType_jAddressSpacesInfo,
+      &GDBRemoteCommunicationServerLLGS::Handle_jAddressSpacesInfo);
+  RegisterMemberFunctionHandler(
       StringExtractorGDBRemote::eServerPacketType_qWatchpointSupportInfo,
       &GDBRemoteCommunicationServerLLGS::Handle_qWatchpointSupportInfo);
   RegisterMemberFunctionHandler(
@@ -2669,6 +2672,17 @@ GDBRemoteCommunicationServerLLGS::Handle_memory_read(
     return SendOKResponse();
   }
 
+  // Optional ";address_space:<hex>;" suffix (see the "address-spaces" feature).
+  uint64_t address_space = 0;
+  if (m_address_space_suffix_supported && packet.GetBytesLeft() > 0 &&
+      packet.GetChar() == ';') {
+    llvm::StringRef name, value;
+    while (packet.GetNameColonValue(name, value)) {
+      if (name == "address_space" && value.getAsInteger(0, address_space))
+        return SendIllFormedResponse(packet, "invalid address_space suffix");
+    }
+  }
+
   // Allocate the response buffer.
   std::string buf(byte_count, '\0');
   if (buf.empty())
@@ -2677,11 +2691,12 @@ GDBRemoteCommunicationServerLLGS::Handle_memory_read(
   // Retrieve the process memory.
   size_t bytes_read = 0;
   Status error = m_current_process->ReadMemoryWithoutTrap(
-      read_addr, &buf[0], byte_count, bytes_read);
-  LLDB_LOG(
-      log,
-      "ReadMemoryWithoutTrap({0}) read {1} of {2} requested bytes (error: {3})",
-      read_addr, byte_count, bytes_read, error);
+      ProcessAddress(read_addr, address_space), &buf[0], byte_count,
+      bytes_read);
+  LLDB_LOG(log,
+           "read {1} of {2} requested bytes at {0:x} in address_space {4} "
+           "(error: {3})",
+           read_addr, byte_count, bytes_read, error, address_space);
   if (bytes_read == 0)
     return SendErrorResponse(0x08);
 
@@ -3914,6 +3929,28 @@ GDBRemoteCommunicationServerLLGS::Handle_jThreadsInfo(
 }
 
 GDBRemoteCommunication::PacketResult
+GDBRemoteCommunicationServerLLGS::Handle_jAddressSpacesInfo(
+    StringExtractorGDBRemote &packet) {
+  Log *log = GetLog(LLDBLog::Process);
+
+  // Ensure we have a process.
+  if (!m_current_process ||
+      (m_current_process->GetID() == LLDB_INVALID_PROCESS_ID)) {
+    LLDB_LOG(log, "failed, no process available");
+    return SendErrorResponse(Status::FromErrorString("invalid process"));
+  }
+
+  std::vector<AddressSpaceInfo> address_spaces =
+      m_current_process->GetAddressSpaces();
+  if (address_spaces.empty())
+    return SendUnimplementedResponse(packet.GetStringRef().data());
+
+  StreamGDBRemote response;
+  response.PutAsJSONArray(address_spaces, /*hex_ascii=*/false);
+  return SendPacketNoLock(response.GetString());
+}
+
+GDBRemoteCommunication::PacketResult
 GDBRemoteCommunicationServerLLGS::Handle_qWatchpointSupportInfo(
     StringExtractorGDBRemote &packet) {
   // Fail if we don't have a current process.
@@ -4500,6 +4537,10 @@ std::vector<std::string> GDBRemoteCommunicationServerLLGS::HandleFeatures(
     ret.push_back("memory-tagging+");
   if (bool(plugin_features & Extension::savecore))
     ret.push_back("qSaveCore+");
+  if (bool(plugin_features & Extension::address_spaces)) {
+    ret.push_back("address-spaces+");
+    m_address_space_suffix_supported = true;
+  }
   if (!m_accelerator_plugins.empty())
     ret.push_back("accelerator-plugins+");
 

@@ -199,6 +199,15 @@ public:
 
   size_t ReadMemory(addr_t addr, void *buf, size_t size, lldb::SBError &error);
 
+  /// Read memory described by an SBProcessAddress (which may name a non-default
+  /// address space). Returns the number of bytes read into \a buf.
+  size_t ReadMemory(SBProcessAddress process_addr, void *buf, size_t size,
+                    lldb::SBError &error);
+
+  /// Resolve an address space name to its numeric id for this process, or
+  /// return LLDB_INVALID_ADDRESS_SPACE_ID and set \a error if it is not valid.
+  uint64_t GetAddressSpaceID(const char *name, lldb::SBError &error);
+
   size_t WriteMemory(addr_t addr, const void *buf, size_t size,
                      lldb::SBError &error);
 
