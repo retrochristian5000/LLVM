@@ -445,12 +445,18 @@ bool InputChunk::generateRelocationCode(raw_ostream &os) const {
       continue;
     }
 
-    uint64_t offset = getVA(rel.Offset) - getInputSectionOffset();
+    // Calculate the address at which to apply the relocation. Note that PIC TLS
+    // segments are handled slightly differently here because at runtime they're
+    // a relative offset from `__tls_base`.
+    uint64_t offset;
+    if (ctx.isPic && isTLS())
+      offset = getChunkOffset(rel.Offset) - getInputSectionOffset();
+    else
+      offset = getVA(rel.Offset) - getInputSectionOffset();
     LLVM_DEBUG(dbgs() << "gen reloc: type=" << relocTypeToString(rel.Type)
                       << " addend=" << rel.Addend << " index=" << rel.Index
                       << " output offset=" << offset << "\n");
 
-    // Calculate the address at which to apply the relocation
     writePtrConst(os, offset, is64, "offset");
 
     // In PIC mode we need to add the __memory_base
