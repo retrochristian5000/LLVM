@@ -2637,13 +2637,14 @@ public:
     if (sliceOp.getType() != expandOp.getSrcType())
       return failure();
 
-    SmallVector<OpFoldResult> mixedExpandedSizes = expandOp.getMixedOutputShape();
+    SmallVector<OpFoldResult> mixedExpandedSizes =
+        expandOp.getMixedOutputShape();
     if (mixedExpandedSizes.size() != sliceOp.getMixedSizes().size())
       return failure();
 
-    for (auto [offset, size, stride, expandedSize] : llvm::zip_equal(
-             sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
-             sliceOp.getMixedStrides(), mixedExpandedSizes)) {
+    for (auto [offset, size, stride, expandedSize] :
+         llvm::zip_equal(sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
+                         sliceOp.getMixedStrides(), mixedExpandedSizes)) {
       if (getConstantIntValue(offset) != static_cast<int64_t>(0) ||
           getConstantIntValue(stride) != static_cast<int64_t>(1))
         return failure();
@@ -2656,25 +2657,48 @@ public:
   }
 };
 
-/// Fold extract_slice of tensor.empty to a smaller tensor.empty.
-class FoldExtractSliceOfEmpty final
-    : public OpRewritePattern<ExtractSliceOp> {
+/// Fold a rank-reducing no-op extract_slice of a tensor.empty into a smaller
+/// tensor.empty.
+///
+/// The slice must be a full/identity slice: all offsets are 0, all strides are
+/// 1, and each size matches the corresponding tensor.empty source dimension.
+/// The slice must also be rank-reducing. Restricting to this case avoids
+/// undoing transforms that intentionally allocate a larger tensor.empty and
+/// then slice it (e.g. transform.tensor.make_loop_independent).
+class FoldExtractSliceOfEmpty final : public OpRewritePattern<ExtractSliceOp> {
 public:
   using OpRewritePattern<ExtractSliceOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(ExtractSliceOp sliceOp,
                                 PatternRewriter &rewriter) const override {
-    auto makeSmallerEmpty = [&]() -> Value {
-      return EmptyOp::create(rewriter, sliceOp.getLoc(), sliceOp.getType(),
-                             sliceOp.getSizes())
-          .getResult();
-    };
+    if (!sliceOp.getSource().getDefiningOp<EmptyOp>())
+      return failure();
 
-    if (sliceOp.getSource().getDefiningOp<EmptyOp>()) {
-      rewriter.replaceOp(sliceOp, makeSmallerEmpty());
-      return success();
+    // Only fold rank-reducing slices. Non-rank-reducing identity slices are
+    // already handled by ExtractSliceOp::fold.
+    if (sliceOp.getType().getRank() >= sliceOp.getSourceType().getRank())
+      return failure();
+
+    // Only fold full/identity slices: all offsets are 0, all strides are 1,
+    // and each size matches the corresponding (static) source dimension.
+    ArrayRef<int64_t> sourceShape = sliceOp.getSourceType().getShape();
+    for (auto [offset, size, stride, srcDim] :
+         llvm::zip_equal(sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
+                         sliceOp.getMixedStrides(), sourceShape)) {
+      if (getConstantIntValue(offset) != static_cast<int64_t>(0) ||
+          getConstantIntValue(stride) != static_cast<int64_t>(1))
+        return failure();
+      // Bail out if the source dim is dynamic or the size does not provably
+      // match it.
+      if (ShapedType::isDynamic(srcDim) || getConstantIntValue(size) != srcDim)
+        return failure();
     }
-    return failure();
+
+    rewriter.replaceOp(sliceOp,
+                       EmptyOp::create(rewriter, sliceOp.getLoc(),
+                                       sliceOp.getType(), sliceOp.getSizes())
+                           .getResult());
+    return success();
   }
 };
 
@@ -2833,7 +2857,7 @@ void ExtractSliceOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
   results.add<
       OpWithOffsetSizesAndStridesConstantArgumentFolder<
-      ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
+          ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
       FoldExtractSliceOfEmpty, FoldExtractSliceOfExpandShape,
       ExtractSliceOpCastFolder>(context);
 }
