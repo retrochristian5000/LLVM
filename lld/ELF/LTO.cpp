@@ -382,12 +382,6 @@ SmallVector<std::unique_ptr<InputFile>, 0> BitcodeCompiler::compile() {
     check(
         pruneCache(ctx.arg.thinLTOCacheDir, ctx.arg.thinLTOCachePolicy, files));
 
-  if (!ctx.arg.ltoObjPath.empty()) {
-    saveBuffer(buf[0].second, ctx.arg.ltoObjPath);
-    for (unsigned i = 1; i != maxTasks; ++i)
-      saveBuffer(buf[i].second, ctx.arg.ltoObjPath + Twine(i));
-  }
-
   bool savePrelink = ctx.arg.saveTempsArgs.contains("prelink");
   SmallVector<std::unique_ptr<InputFile>, 0> ret;
   const char *ext = ctx.arg.ltoEmitAsm ? ".s" : ".o";
@@ -405,6 +399,12 @@ SmallVector<std::unique_ptr<InputFile>, 0> BitcodeCompiler::compile() {
       // Get the native relocatable file after in-process LTO compilation.
       objBuf = buf[i].second;
       bitcodeFilePath = buf[i].first;
+    }
+    if (!ctx.arg.ltoObjPath.empty()) {
+      if (i == 0)
+        saveBuffer(objBuf, ctx.arg.ltoObjPath);
+      else
+        saveBuffer(objBuf, ctx.arg.ltoObjPath + Twine(i));
     }
     if (objBuf.empty())
       continue;
