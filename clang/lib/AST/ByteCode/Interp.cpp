@@ -1612,6 +1612,29 @@ static bool getField(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
     return false;
   }
 
+  if (Ptr.isOpaquePointer()) {
+    const OpaquePointer &OP = Ptr.asOpaquePointer();
+    const Record *R =
+        S.getContext().getRecord(OP.getFieldType()->getAsRecordDecl());
+    if (!R)
+      return false;
+
+    const Record::Field *F = R->findField(Off);
+    if (!F)
+      return false;
+
+    PointerPathEntry *NewPath = S.allocPointerPath(OP.PathLength + 1);
+    if (OP.Path)
+      std::memcpy(NewPath, Ptr.asOpaquePointer().Path,
+                  sizeof(PointerPathEntry) * OP.PathLength);
+
+    NewPath[OP.PathLength] = PointerPathEntry::field(F->Decl);
+
+    S.Stk.push<Pointer>(OpaqueTag{}, OP.Base, F->Decl->getType().getTypePtr(),
+                        NewPath, OP.PathLength + 1);
+    return true;
+  }
+
   if (!Ptr.isBlockPointer()) {
     // If we're trying to get the field of a TypeId pointer, try to produce a
     // proper diagnostic.
@@ -1645,6 +1668,31 @@ static bool getBase(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
                     uint32_t Off, bool NullOK) {
   if (!NullOK && !CheckNull(S, OpPC, Ptr, CSK_Base))
     return false;
+
+  if (Ptr.isOpaquePointer()) {
+    const OpaquePointer &OP = Ptr.asOpaquePointer();
+    const Record *R =
+        S.getContext().getRecord(OP.getFieldType()->getAsRecordDecl());
+    assert(R);
+
+    const Record::Base *B = R->findBase(Off);
+    if (!B)
+      return false;
+
+    unsigned NewPathLength = OP.PathLength + 1;
+    PointerPathEntry *NewPath = S.allocPointerPath(NewPathLength);
+    if (OP.Path)
+      std::memcpy(NewPath, OP.Path,
+                  sizeof(PointerPathEntry) * (NewPathLength - 1));
+
+    NewPath[NewPathLength - 1] =
+        PointerPathEntry::base(cast<CXXRecordDecl>(B->Decl));
+    S.Stk.push<Pointer>(
+        OpaqueTag{}, OP.Base,
+        S.getASTContext().getCanonicalTagType(B->Decl).getTypePtr(), NewPath,
+        NewPathLength);
+    return true;
+  }
 
   if (!Ptr.isBlockPointer()) {
     if (!Ptr.isIntegralPointer())
@@ -1906,6 +1954,7 @@ bool CallVar(InterpState &S, CodePtr OpPC, const Function *Func,
   S.Current = FrameBefore;
   return false;
 }
+
 bool Call(InterpState &S, CodePtr OpPC, const Function *Func,
           uint32_t VarArgSize) {
 
@@ -3217,6 +3266,84 @@ bool CastFloatingIntegralAPS(InterpState &S, CodePtr OpPC, uint32_t BitWidth,
                              uint32_t FPOI) {
   Floating F = S.Stk.pop<Floating>();
   return floatAPCast<true>(S, OpPC, F, BitWidth, FPOI);
+}
+
+bool arrayElemPtrOpaque(InterpState &S, CodePtr OpPC, const OpaquePointer &OP,
+                        uint64_t Offset) {
+  QualType ArrTy;
+  if (OP.PathLength > 0) {
+    if (OP.path().back().Kind == PointerPathEntry::Array) {
+      ArrTy = OP.getSurroundingArray(S.getASTContext());
+    } else {
+      ArrTy = OP.getFieldType();
+    }
+  } else {
+    ArrTy = OP.getObjectType();
+  }
+
+  QualType ElemType;
+  bool PastEnd = true;
+  if (ArrTy->isArrayType()) {
+    const auto *AT = ArrTy->getAsArrayTypeUnsafe();
+    ElemType = AT->getElementType();
+    if (const auto *CAT = dyn_cast<ConstantArrayType>(AT))
+      PastEnd = Offset >= CAT->getZExtSize();
+  } else if (ArrTy->isRecordType()) {
+    ElemType = ArrTy;
+  } else {
+    ElemType = ArrTy;
+  }
+  if (ElemType.isNull())
+    return false;
+
+  unsigned NewPathLength = OP.PathLength + 1;
+  PointerPathEntry *NewPath = S.allocPointerPath(NewPathLength);
+  if (OP.Path)
+    std::memcpy(NewPath, OP.Path,
+                sizeof(PointerPathEntry) * (NewPathLength - 1));
+
+  NewPath[NewPathLength - 1] = PointerPathEntry::array(Offset);
+  S.Stk.push<Pointer>(OpaqueTag{}, OP.Base, ElemType.getTypePtr(), NewPath,
+                      NewPathLength, PastEnd);
+  return true;
+}
+
+bool addSubOffsetOpaque(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
+                        uint64_t Offset, bool Add) {
+  assert(Ptr.isOpaquePointer());
+  const OpaquePointer &OP = Ptr.asOpaquePointer();
+
+  QualType ArrTy = OP.getFieldType();
+  QualType ElemTy;
+  if (ArrTy->isArrayType())
+    ElemTy = ArrTy->getAsArrayTypeUnsafe()->getElementType();
+  else
+    ElemTy = ArrTy;
+
+  if (Offset != 0) {
+    if (isa<IncompleteArrayType>(ArrTy)) {
+      const SourceInfo &E = S.Current->getSource(OpPC);
+      S.FFDiag(E, diag::note_constexpr_unsized_array_indexed);
+      return false;
+    }
+
+    S.CCEDiag(S.Current->getSource(OpPC), diag::note_constexpr_array_index)
+        << Offset << /*non-array*/ true << 0;
+  }
+
+  unsigned ElemSize =
+      S.getASTContext().getTypeSizeInChars(ElemTy).getQuantity();
+  unsigned NewOffset;
+  if (Add)
+    NewOffset = Ptr.getByteOffset() + (ElemSize * Offset);
+  else
+    NewOffset = Ptr.getByteOffset() - (ElemSize * Offset);
+
+  bool PastEnd = NewOffset > 0;
+
+  S.Stk.push<Pointer>(OpaqueTag{}, OP.Base, OP.FieldType, OP.Path,
+                      OP.PathLength, PastEnd, NewOffset);
+  return true;
 }
 
 // FIXME: Would be nice to generate this instead of hardcoding it here.

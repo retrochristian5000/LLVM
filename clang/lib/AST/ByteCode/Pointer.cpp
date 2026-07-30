@@ -59,6 +59,9 @@ Pointer::Pointer(const Pointer &P)
   case Storage::Typeid:
     Typeid = P.Typeid;
     break;
+  case Storage::Opaque:
+    Opaque = P.Opaque;
+    break;
   }
 }
 
@@ -77,6 +80,9 @@ Pointer::Pointer(Pointer &&P) : Offset(P.Offset), StorageKind(P.StorageKind) {
     break;
   case Storage::Typeid:
     Typeid = P.Typeid;
+    break;
+  case Storage::Opaque:
+    Opaque = P.Opaque;
     break;
   }
 }
@@ -127,6 +133,10 @@ Pointer &Pointer::operator=(const Pointer &P) {
     break;
   case Storage::Typeid:
     Typeid = P.Typeid;
+    break;
+  case Storage::Opaque:
+    Opaque = P.Opaque;
+    break;
   }
   return *this;
 }
@@ -166,6 +176,10 @@ Pointer &Pointer::operator=(Pointer &&P) {
     break;
   case Storage::Typeid:
     Typeid = P.Typeid;
+    break;
+  case Storage::Opaque:
+    Opaque = P.Opaque;
+    break;
   }
   return *this;
 }
@@ -196,6 +210,11 @@ APValue Pointer::toAPValue(const ASTContext &ASTCtx) const {
                        TypeInfo, QualType(Typeid.TypeInfoType, 0)),
                    CharUnits::Zero(), {},
                    /*OnePastTheEnd=*/false, /*IsNull=*/false);
+  }
+
+  if (isOpaquePointer()) {
+    return APValue(APValue::LValueBase(), CharUnits::Zero(), Path,
+                   /*IsOnePastEnd=*/false, /*IsNullPtr=*/true);
   }
 
   // Build the lvalue base from the block.
@@ -347,6 +366,11 @@ void Pointer::print(llvm::raw_ostream &OS) const {
     OS << "(Typeid) { " << (const void *)asTypeidPointer().TypePtr << ", "
        << (const void *)asTypeidPointer().TypeInfoType << " + " << Offset
        << "}";
+    break;
+  case Storage::Opaque:
+    OS << "(Opaque) { Base: " << Opaque.Base << ", " << Opaque.FieldType
+       << " Length: " << Opaque.PathLength;
+    OS << "} + " << Offset;
   }
 }
 
@@ -371,6 +395,8 @@ Pointer::computeOffsetForComparison(const ASTContext &ASTCtx) const {
     return getIntegerRepresentation();
   case Storage::Typeid:
     return reinterpret_cast<uintptr_t>(asTypeidPointer().TypePtr) + Offset;
+  case Storage::Opaque:
+    return reinterpret_cast<uintptr_t>(asOpaquePointer().Base) + Offset;
   }
 
   auto getTypeSize = [&](QualType T) -> std::optional<size_t> {
@@ -449,6 +475,8 @@ Pointer::computeLayoutOffset(const ASTContext &ASTCtx) const {
     return getIntegerRepresentation();
   case Storage::Typeid:
     return reinterpret_cast<uintptr_t>(asTypeidPointer().TypePtr) + Offset;
+  case Storage::Opaque:
+    return reinterpret_cast<uintptr_t>(asOpaquePointer().Base) + Offset;
   }
 
   auto getTypeSize = [&](QualType T) -> std::optional<size_t> {
@@ -1195,4 +1223,29 @@ IntPointer IntPointer::baseCast(const interp::Context &Ctx,
   QualType T = RD->getASTContext().getTagType(ElaboratedTypeKeyword::None,
                                               std::nullopt, RD, false);
   return {T.getTypePtr(), Value + BaseLayoutOffset.getQuantity()};
+}
+
+QualType OpaquePointer::getSurroundingArray(const ASTContext &ASTCtx) const {
+  assert(PathLength != 0);
+  assert(Path[PathLength - 1].Kind == PointerPathEntry::Array);
+
+  QualType CurType = getObjectType();
+  for (const PointerPathEntry &Entry : path().drop_back(1)) {
+    switch (Entry.Kind) {
+    case PointerPathEntry::Base:
+      CurType = ASTCtx.getCanonicalTagType(Entry.RD.getPointer());
+      break;
+    case PointerPathEntry::Field:
+      CurType = Entry.FD->getType();
+      break;
+    case PointerPathEntry::Array: {
+      if (!CurType->isArrayType())
+        break;
+      const ArrayType *AT = CurType->getAsArrayTypeUnsafe();
+      assert(AT);
+      CurType = AT->getElementType();
+    }
+    }
+  }
+  return CurType;
 }
