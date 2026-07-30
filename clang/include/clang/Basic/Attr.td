@@ -5333,7 +5333,7 @@ def HLSLVkLocation : HLSLAnnotationAttr {
 }
 
 // `row_major` / `column_major` are HLSL keywords that select the in-memory
-// layout of a matrix-typed declaration. 
+// layout of a matrix-typed declaration.
 def HLSLRowMajor : TypeAttr {
   let Spellings = [CustomKeyword<"row_major">];
   let LangOpts = [HLSL];
@@ -5519,4 +5519,13 @@ def Personality : InheritableAttr {
   let Args = [DeclArgument<Function, "Routine">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [PersonalityDocs];
+}
+
+def CompleteOnMemberInst : InheritableAttr {
+  let Spellings = [Clang<"complete_on_member_instantiation">];
+  let Args = [TypeArgument<"CompleteType">];
+  let Subjects = SubjectList<[CXXRecord]>;
+  let Documentation = [CompleteOnMemberInstDocs];
+  let InheritEvenIfAlreadyPresent = 1;
+  let TemplateDependent = 1;
 }
