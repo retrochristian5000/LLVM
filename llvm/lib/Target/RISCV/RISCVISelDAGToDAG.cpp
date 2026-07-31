@@ -1816,6 +1816,32 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     if (tryShrinkShlLogicImm(Node))
       return;
 
+    if (Subtarget->hasStdExtP()) {
+      if (N0->getOpcode() == ISD::ADD) {
+        SDValue AddN0 = N0->getOperand(0);
+        SDValue AddN1 = N0.getOperand(1);
+
+        EVT ValTyN0 = AddN0.getValueType(), ValTyN1 = AddN1.getValueType();
+        if (AddN0.getOpcode() == ISD::AssertZext &&
+            AddN1.getOpcode() == ISD::AssertZext && ValTyN0 == ValTyN1) {
+
+          if (N1C->getZExtValue() == ((1 << 8) - 1)) {
+            SDNode *PADDB = CurDAG->getMachineNode(RISCV::PADD_B, DL, ValTyN0,
+                                                   AddN0, AddN1);
+            ReplaceNode(Node, PADDB);
+            return;
+          }
+
+          if (N1C->getZExtValue() == ((1 << 16) - 1)) {
+            SDNode *PADDH = CurDAG->getMachineNode(RISCV::PADD_H, DL, ValTyN0,
+                                                   AddN0, AddN1);
+            ReplaceNode(Node, PADDH);
+            return;
+          }
+        }
+      }
+    }
+
     break;
   }
   case ISD::MUL: {
