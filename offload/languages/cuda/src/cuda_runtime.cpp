@@ -1,4 +1,4 @@
-/*===------ LLVM/Offload helpers for kernel languages (CUDA/HIP) -*- c++ -*-===
+/*===---- cuda_runtime.cpp - CUDA runtime api implementations --------------===
  *
  * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
  * See https://llvm.org/LICENSE.txt for license information.
@@ -7,9 +7,14 @@
  *===-----------------------------------------------------------------------===
  */
 
-#include "__llvm_offload.h"
+#include "cuda_runtime.h"
+
+#include "OffloadAPI.h"
+
+#define LANGUAGE cuda
+
+#include "../../kernel/src/LanguageRuntime.cpp"
 
 extern "C" {
-unsigned llvmLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim,
-                          void **args, size_t sharedMem = 0, void *stream = 0);
+void __cudaRegisterFatBinaryEnd(void *) {}
 }
