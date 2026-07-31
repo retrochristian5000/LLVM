@@ -1,4 +1,4 @@
-//===-- Implementation header for sigprocmask -------------------*- C++ -*-===//
+//===-- Darwin implementation of sigaddset --------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,20 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC_SIGNAL_SIGPROCMASK_H
-#define LLVM_LIBC_SRC_SIGNAL_SIGPROCMASK_H
-
+#include "src/signal/sigaddset.h"
 #include "hdr/types/sigset_t.h"
+#include "src/__support/common.h"
+#include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-int sigprocmask_impl(int how, const sigset_t *__restrict set,
-                     sigset_t *__restrict oldset);
-
-int sigprocmask(int how, const sigset_t *__restrict set,
-                sigset_t *__restrict oldset);
+LLVM_LIBC_FUNCTION(int, sigaddset, (sigset_t * set, int signum)) {
+  if (!set || signum <= 0 || signum >= NSIG) {
+    libc_errno = EINVAL;
+    return -1;
+  }
+  set->__signals[0] |= (1U << (signum - 1));
+  return 0;
+}
 
 } // namespace LIBC_NAMESPACE_DECL
-
-#endif // LLVM_LIBC_SRC_SIGNAL_SIGPROCMASK_H
