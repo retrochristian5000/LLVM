@@ -19,9 +19,11 @@
 #include "flang/Parser/parse-tree.h"
 #include "flang/Semantics/openmp-directive-sets.h"
 #include "flang/Semantics/semantics.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Frontend/OpenMP/OMP.h"
+#include "llvm/Frontend/OpenMP/OMPContext.h"
 
 #include <cstddef>
 #include <functional>
@@ -107,6 +109,8 @@ public:
   void Leave(const parser::OpenMPConstruct &);
   void Enter(const parser::OpenMPDeclarativeConstruct &);
   void Leave(const parser::OpenMPDeclarativeConstruct &);
+  void Enter(const parser::OpenACCDeclarativeConstruct &);
+  void Enter(const parser::OpenACCRoutineConstruct &);
 
   void Enter(const parser::OpenMPMisplacedEndDirective &);
   void Leave(const parser::OpenMPMisplacedEndDirective &);
@@ -299,6 +303,12 @@ private:
   void CheckNestedConstruct(const parser::OpenMPLoopConstruct &x);
   const parser::Name GetLoopIndex(const parser::DoConstruct *x);
   void CheckIterationVariables(const parser::OpenMPLoopConstruct &x);
+  void CheckIterationVariableRestrictions(
+      llvm::ArrayRef<const parser::DoConstruct *> loops);
+  void CheckIterationVariableDataSharingClauses(
+      const parser::OmpDirectiveSpecification &spec,
+      llvm::ArrayRef<const parser::DoConstruct *> loops,
+      bool requireResolvedDSA);
   std::int64_t GetOrdCollapseLevel(const parser::OpenMPLoopConstruct &x);
   void CheckAssociatedLoopConstraints(const parser::OpenMPLoopConstruct &x);
   void CheckScanModifier(const parser::OmpClause::Reduction &x);
@@ -308,7 +318,10 @@ private:
   void EndMetadirectiveVariantScope();
 
   // check-omp-variant.cpp
+  void BeginMetadirectiveSelection();
+  void EndMetadirectiveSelection(const parser::OmpClauseList &);
   void CheckMetadirectiveVariantsWithoutLoop(std::size_t firstVariant = 0);
+  void CheckMetadirectiveLoopAssociationInterruptedByDirective();
   void CheckOmpDeclareVariantDirective(
       const parser::OmpDeclareVariantDirective &);
   void CheckDeclareVariantUserConditions(const parser::OmpContextSelector &);
@@ -536,8 +549,23 @@ private:
     const parser::OmpDirectiveSpecification *spec;
     bool checkDefaultNoneInAssociatedLoop;
   };
+  using ConstructTraitSequence = llvm::SmallVector<llvm::omp::TraitProperty, 8>;
+  struct MetadirectiveConditionConstraint {
+    const parser::ScalarExpr *expr;
+    bool value;
+    const parser::OmpClauseList *owner;
+  };
+  struct MetadirectiveConstructAlternative {
+    ConstructTraitSequence traits;
+    llvm::SmallVector<MetadirectiveConditionConstraint, 2> conditions;
+  };
+  struct MetadirectiveConstructContext {
+    llvm::SmallVector<MetadirectiveConstructAlternative, 2> alternatives;
+  };
   std::vector<MetadirectiveLoopVariant> metadirectiveLoopVariants_;
   std::vector<std::size_t> metadirectiveVariantScopeStarts_;
+  std::vector<std::size_t> metadirectiveSelectionStarts_;
+  std::vector<MetadirectiveConstructContext> metadirectiveConstructContexts_;
   const parser::traits::OmpContextSelectorSpecification *currentWhenSelector_{
       nullptr};
 

@@ -1636,11 +1636,10 @@ bool IsDoacrossAffected(const parser::OpenMPLoopConstruct &x) {
 /// The k DO loop is affected by the DO construct [2].
 /// For the top-level DO COLLAPSE(5) construct, the k loop is the only
 /// directly affected loop.
-std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
-    const parser::OpenMPLoopConstruct &x, unsigned version,
-    SemanticsContext *semaCtx) {
+static std::optional<std::vector<const parser::DoConstruct *>>
+CollectAffectedDoLoopsImpl(const parser::OmpDirectiveSpecification &spec,
+    const LoopSequence &sequence, unsigned version, SemanticsContext *semaCtx) {
   std::vector<const parser::DoConstruct *> result;
-  const parser::OmpDirectiveSpecification &spec{x.BeginDir()};
 
   auto [depth, _]{GetAffectedNestDepthWithReason(spec, version, semaCtx)};
 
@@ -1708,11 +1707,25 @@ std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
     return success && produced >= level;
   }};
 
-  LoopSequence sequence(std::get<parser::Block>(x.t), version, true, semaCtx);
   if (visit(sequence, visit)) {
     return result;
   }
   return std::nullopt;
+}
+
+std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
+    const parser::OpenMPLoopConstruct &x, unsigned version,
+    SemanticsContext *semaCtx) {
+  LoopSequence sequence{std::get<parser::Block>(x.t), version, true, semaCtx};
+  return CollectAffectedDoLoopsImpl(x.BeginDir(), sequence, version, semaCtx);
+}
+
+std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
+    const parser::OmpDirectiveSpecification &spec,
+    const parser::ExecutionPartConstruct &root, unsigned version,
+    SemanticsContext *semaCtx) {
+  LoopSequence sequence{root, version, true, semaCtx};
+  return CollectAffectedDoLoopsImpl(spec, sequence, version, semaCtx);
 }
 
 #ifdef EXPENSIVE_CHECKS
@@ -2421,14 +2434,10 @@ UnsupportedSelectorFeature FindUnsupportedSelectorFeature(
   return UnsupportedSelectorFeature::None;
 }
 
-// Add the construct trait properties implied by an OpenMP directive (e.g.
-// `target` adds `construct_target_target`, `target teams` adds both
-// `construct_target_target` and `construct_teams_teams`) to \p vmi. This
-// decomposes combined/composite construct selectors into their leaf traits.
-static void AppendConstructTraitsForDirective(
-    llvm::omp::Directive dir, llvm::omp::VariantMatchInfo &vmi) {
+void AppendConstructTraitsForDirective(llvm::omp::Directive dir,
+    llvm::SmallVectorImpl<llvm::omp::TraitProperty> &constructTraits) {
   auto add = [&](llvm::omp::TraitProperty prop) {
-    vmi.addTrait(prop, llvm::omp::getOpenMPContextTraitPropertyName(prop, ""));
+    constructTraits.push_back(prop);
   };
   if (llvm::omp::allTargetSet.test(dir))
     add(llvm::omp::TraitProperty::construct_target_target);
@@ -2444,6 +2453,19 @@ static void AppendConstructTraitsForDirective(
   // directive set), so it is matched explicitly.
   if (dir == llvm::omp::Directive::OMPD_dispatch)
     add(llvm::omp::TraitProperty::construct_dispatch_dispatch);
+}
+
+// Add the construct trait properties implied by an OpenMP directive (e.g.
+// `target` adds `construct_target_target`, `target teams` adds both
+// `construct_target_target` and `construct_teams_teams`) to \p vmi.
+static void AppendConstructTraitsToMatchInfo(
+    llvm::omp::Directive dir, llvm::omp::VariantMatchInfo &vmi) {
+  llvm::SmallVector<llvm::omp::TraitProperty, 8> constructTraits;
+  AppendConstructTraitsForDirective(dir, constructTraits);
+  for (llvm::omp::TraitProperty trait : constructTraits) {
+    vmi.addTrait(
+        trait, llvm::omp::getOpenMPContextTraitPropertyName(trait, ""));
+  }
 }
 
 static void AddTraitPropertiesFromSelector(llvm::omp::TraitSet set,
@@ -2497,7 +2519,7 @@ static void AddTraitPropertiesFromSelector(llvm::omp::TraitSet set,
   // Construct trait selector with no properties (e.g. `construct={simd}`):
   // the selector itself implies the property.
   if (const auto *dir{std::get_if<llvm::omp::Directive>(&traitName.u)}) {
-    AppendConstructTraitsForDirective(*dir, vmi);
+    AppendConstructTraitsToMatchInfo(*dir, vmi);
   }
 }
 
@@ -2519,6 +2541,263 @@ std::optional<DynamicUserCondition> MakeVariantMatchInfo(
     }
   }
   return dynamicCond;
+}
+
+std::optional<MetadirectiveCandidateSet> BuildMetadirectiveCandidateSet(
+    const parser::OmpClauseList &clauses, SemanticsContext &context,
+    const OmpVariantMatchContext &matchContext) {
+  MetadirectiveCandidateSet result;
+
+  auto getContextSelector = [](const parser::OmpClause::When &whenClause)
+      -> const parser::modifier::OmpContextSelector * {
+    const auto &modifiers{std::get<0>(whenClause.v.t)};
+    if (!modifiers || modifiers->size() != 1) {
+      return nullptr;
+    }
+    return std::get_if<parser::modifier::OmpContextSelector>(
+        &modifiers->front().u);
+  };
+
+  auto getDirectiveVariant = [](const parser::OmpClause::When &whenClause)
+      -> std::pair<const parser::OmpDirectiveSpecification *, bool> {
+    const auto &optionalSpec{std::get<1>(whenClause.v.t)};
+    if (!optionalSpec) {
+      return {nullptr, false};
+    }
+    if (optionalSpec->value().DirId() == llvm::omp::Directive::OMPD_nothing) {
+      return {nullptr, true};
+    }
+    return {&optionalSpec->value(), true};
+  };
+
+  auto getFallbackVariant = [](const parser::OmpDirectiveSpecification &spec) {
+    return spec.DirId() == llvm::omp::Directive::OMPD_nothing ? nullptr : &spec;
+  };
+
+  for (const parser::OmpClause &clause : clauses.v) {
+    if (const auto *whenClause{
+            std::get_if<parser::OmpClause::When>(&clause.u)}) {
+      const auto *ctxSel{getContextSelector(*whenClause)};
+      if (!ctxSel ||
+          FindUnsupportedSelectorFeature(*ctxSel, context) !=
+              UnsupportedSelectorFeature::None) {
+        return std::nullopt;
+      }
+
+      auto [spec, isExplicit]{getDirectiveVariant(*whenClause)};
+      llvm::omp::VariantMatchInfo rawVMI;
+      std::optional<DynamicUserCondition> dynamicCondition{
+          MakeVariantMatchInfo(rawVMI, *ctxSel, context)};
+      if (llvm::any_of(
+              rawVMI.ConstructTraits, [](llvm::omp::TraitProperty property) {
+                return llvm::omp::getOpenMPContextTraitSetForProperty(
+                           property) != llvm::omp::TraitSet::construct;
+              })) {
+        return std::nullopt;
+      }
+
+      if (dynamicCondition) {
+        constexpr llvm::omp::TraitProperty dynamicConditionTrait{
+            llvm::omp::TraitProperty::user_condition_unknown};
+        constexpr llvm::omp::TraitProperty matchAnyTrait{
+            llvm::omp::TraitProperty::implementation_extension_match_any};
+        constexpr llvm::omp::TraitProperty matchNoneTrait{
+            llvm::omp::TraitProperty::implementation_extension_match_none};
+
+        // Static applicability uses only traits known at compile time. Keep
+        // the condition's score so a true runtime condition is still ranked
+        // correctly.
+        llvm::omp::VariantMatchInfo staticVMI{rawVMI};
+        std::optional<llvm::APInt> conditionScore;
+        auto scoreIt{staticVMI.ScoreMap.find(dynamicConditionTrait)};
+        if (scoreIt != staticVMI.ScoreMap.end()) {
+          conditionScore = scoreIt->second;
+          staticVMI.ScoreMap.erase(scoreIt);
+        }
+        staticVMI.RequiredTraits.reset(unsigned(dynamicConditionTrait));
+        llvm::APInt *conditionScorePtr{
+            conditionScore ? &*conditionScore : nullptr};
+
+        bool hasMatchAny{rawVMI.RequiredTraits.test(unsigned(matchAnyTrait))};
+        bool hasMatchNone{rawVMI.RequiredTraits.test(unsigned(matchNoneTrait))};
+        bool isStaticVMIApplicable{
+            llvm::omp::isVariantApplicableInContext(staticVMI, matchContext)};
+        // Only match_any can remain applicable when the static traits do not
+        // match, because a true runtime condition may satisfy the selector.
+        if (!isStaticVMIApplicable) {
+          if (!hasMatchAny ||
+              staticVMI.RequiredTraits.test(
+                  unsigned(llvm::omp::TraitProperty::invalid))) {
+            continue;
+          }
+
+          llvm::omp::VariantMatchInfo conditionTrueVMI{staticVMI};
+          conditionTrueVMI.addTrait(
+              llvm::omp::TraitProperty::user_condition_true, "<condition>",
+              conditionScorePtr);
+          if (!llvm::omp::isVariantApplicableInContext(
+                  conditionTrueVMI, matchContext)) {
+            continue;
+          }
+        }
+
+        auto addConditionTraitForRanking =
+            [&](llvm::omp::VariantMatchInfo &rankingVMI) {
+              rankingVMI.addTrait(hasMatchNone
+                      ? dynamicConditionTrait
+                      : llvm::omp::TraitProperty::user_condition_true,
+                  "<condition>", conditionScorePtr);
+            };
+
+        if (hasMatchAny && isStaticVMIApplicable) {
+          // Represent both outcomes: a guarded candidate with the condition's
+          // score and an unguarded candidate with only the static traits.
+          llvm::omp::VariantMatchInfo conditionTrueVMI{staticVMI};
+          addConditionTraitForRanking(conditionTrueVMI);
+          result.candidates.push_back({spec, std::move(conditionTrueVMI),
+              isExplicit, dynamicCondition});
+          result.candidates.push_back({spec, std::move(staticVMI), isExplicit});
+          continue;
+        }
+
+        llvm::omp::VariantMatchInfo rankingVMI{staticVMI};
+        addConditionTraitForRanking(rankingVMI);
+        result.candidates.push_back({spec, std::move(rankingVMI), isExplicit,
+            dynamicCondition, /*conditionShouldBeTrue=*/!hasMatchNone});
+        continue;
+      }
+
+      if (!llvm::omp::isVariantApplicableInContext(rawVMI, matchContext)) {
+        continue;
+      }
+      result.candidates.push_back({spec, std::move(rawVMI), isExplicit});
+    } else if (const auto *otherwiseClause{
+                   std::get_if<parser::OmpClause::Otherwise>(&clause.u)}) {
+      if (otherwiseClause->v && otherwiseClause->v->v) {
+        result.fallback = getFallbackVariant(otherwiseClause->v->v->value());
+      }
+    } else if (const auto *defaultVariantClause{
+                   std::get_if<parser::OmpClause::DefaultVariant>(&clause.u)}) {
+      result.fallback = getFallbackVariant(defaultVariantClause->v.v.value());
+    }
+  }
+  return result;
+}
+
+std::optional<unsigned> SelectBestMetadirectiveCandidate(
+    llvm::ArrayRef<unsigned> candidateIndices,
+    llvm::ArrayRef<MetadirectiveCandidate> candidates,
+    const OmpVariantMatchContext &matchContext) {
+  if (candidateIndices.empty()) {
+    return std::nullopt;
+  }
+  if (candidateIndices.size() == 1) {
+    return candidateIndices.front();
+  }
+
+  // The context scorer preserves input order for ties. Explicit replacements
+  // take precedence over an omitted directive's implicit NOTHING.
+  llvm::SmallVector<unsigned, 4> candidateOrder;
+  candidateOrder.reserve(candidateIndices.size());
+  for (unsigned index : candidateIndices) {
+    if (candidates[index].isExplicit) {
+      candidateOrder.push_back(index);
+    }
+  }
+  for (unsigned index : candidateIndices) {
+    if (!candidates[index].isExplicit) {
+      candidateOrder.push_back(index);
+    }
+  }
+
+  llvm::SmallVector<llvm::omp::VariantMatchInfo, 4> orderedVMIs;
+  orderedVMIs.reserve(candidateOrder.size());
+  for (unsigned index : candidateOrder) {
+    orderedVMIs.push_back(candidates[index].vmi);
+  }
+
+  int bestIndex{
+      llvm::omp::getBestVariantMatchForContext(orderedVMIs, matchContext)};
+  if (bestIndex < 0) {
+    return std::nullopt;
+  }
+  CHECK(static_cast<std::size_t>(bestIndex) < candidateOrder.size());
+  return candidateOrder[bestIndex];
+}
+
+llvm::SmallVector<unsigned, 4> GetMetadirectiveElsePathCandidates(
+    unsigned selectedIndex, llvm::ArrayRef<unsigned> candidateIndices,
+    llvm::ArrayRef<MetadirectiveCandidate> candidates,
+    SemanticsContext &context) {
+  CHECK(selectedIndex < candidates.size());
+  const MetadirectiveCandidate &selected{candidates[selectedIndex]};
+  CHECK(selected.dynamicCondition);
+  const SomeExpr *selectedExpr{
+      GetExpr(context, *selected.dynamicCondition->expr)};
+
+  llvm::SmallVector<unsigned, 4> result;
+  result.reserve(candidateIndices.size());
+  for (unsigned index : candidateIndices) {
+    if (index == selectedIndex) {
+      continue;
+    }
+
+    const MetadirectiveCandidate &candidate{candidates[index]};
+    bool hasSameFailedCondition{candidate.dynamicCondition &&
+        candidate.conditionShouldBeTrue == selected.conditionShouldBeTrue};
+    if (hasSameFailedCondition) {
+      const SomeExpr *candidateExpr{
+          GetExpr(context, *candidate.dynamicCondition->expr)};
+      hasSameFailedCondition =
+          selectedExpr && candidateExpr && *selectedExpr == *candidateExpr;
+    }
+    if (!hasSameFailedCondition) {
+      result.push_back(index);
+    }
+  }
+  return result;
+}
+
+llvm::SmallVector<const parser::OmpDirectiveSpecification *, 4>
+GetReachableMetadirectiveVariants(const MetadirectiveCandidateSet &candidateSet,
+    const OmpVariantMatchContext &matchContext, SemanticsContext &context) {
+  llvm::SmallVector<unsigned, 4> candidates;
+  candidates.reserve(candidateSet.candidates.size());
+  for (unsigned index{0}; index < candidateSet.candidates.size(); ++index) {
+    candidates.push_back(index);
+  }
+
+  llvm::SmallVector<const parser::OmpDirectiveSpecification *, 4> reachable;
+  while (true) {
+    std::optional<unsigned> selected{SelectBestMetadirectiveCandidate(
+        candidates, candidateSet.candidates, matchContext)};
+    if (!selected) {
+      reachable.push_back(candidateSet.fallback);
+      break;
+    }
+
+    const MetadirectiveCandidate &candidate{candidateSet.candidates[*selected]};
+    reachable.push_back(candidate.spec);
+    // An unguarded winner ends selection. A dynamic winner leaves the
+    // remaining candidates reachable through its false path.
+    if (!candidate.dynamicCondition) {
+      break;
+    }
+
+    candidates = GetMetadirectiveElsePathCandidates(
+        *selected, candidates, candidateSet.candidates, context);
+
+    if (std::optional<unsigned> selectedInElse{SelectBestMetadirectiveCandidate(
+            candidates, candidateSet.candidates, matchContext)}) {
+      const MetadirectiveCandidate &elseCandidate{
+          candidateSet.candidates[*selectedInElse]};
+      if (!elseCandidate.dynamicCondition &&
+          elseCandidate.spec == candidate.spec) {
+        break;
+      }
+    }
+  }
+  return reachable;
 }
 
 bool MayVariantBeSelected(

@@ -257,6 +257,60 @@ private:
   std::string features_;
 };
 
+/// Add the construct traits implied by \p dir, decomposing combined and
+/// composite directives into their leaf traits.
+void AppendConstructTraitsForDirective(llvm::omp::Directive dir,
+    llvm::SmallVectorImpl<llvm::omp::TraitProperty> &constructTraits);
+
+struct MetadirectiveCandidate {
+  MetadirectiveCandidate(const parser::OmpDirectiveSpecification *spec,
+      llvm::omp::VariantMatchInfo vmi, bool isExplicit,
+      std::optional<DynamicUserCondition> dynamicCondition = std::nullopt,
+      bool conditionShouldBeTrue = true)
+      : spec{spec}, vmi{std::move(vmi)}, isExplicit{isExplicit},
+        dynamicCondition{dynamicCondition},
+        conditionShouldBeTrue{conditionShouldBeTrue} {}
+
+  const parser::OmpDirectiveSpecification *spec{nullptr};
+  llvm::omp::VariantMatchInfo vmi;
+  bool isExplicit{false};
+  std::optional<DynamicUserCondition> dynamicCondition;
+  bool conditionShouldBeTrue{true};
+};
+
+struct MetadirectiveCandidateSet {
+  llvm::SmallVector<MetadirectiveCandidate, 4> candidates;
+  /// Null represents either an explicit NOTHING fallback or no fallback.
+  const parser::OmpDirectiveSpecification *fallback{nullptr};
+};
+
+/// Build the statically applicable candidates for a METADIRECTIVE.
+///
+/// Returns std::nullopt when a selector is malformed or uses a feature that
+/// variant matching cannot yet model.
+std::optional<MetadirectiveCandidateSet> BuildMetadirectiveCandidateSet(
+    const parser::OmpClauseList &clauses, SemanticsContext &context,
+    const OmpVariantMatchContext &matchContext);
+
+std::optional<unsigned> SelectBestMetadirectiveCandidate(
+    llvm::ArrayRef<unsigned> candidateIndices,
+    llvm::ArrayRef<MetadirectiveCandidate> candidates,
+    const OmpVariantMatchContext &matchContext);
+
+/// Return the candidates that remain after the dynamic condition guarding
+/// \p selectedIndex does not match. Candidates guarded by an equivalent
+/// condition with the same polarity are unreachable on that path.
+llvm::SmallVector<unsigned, 4> GetMetadirectiveElsePathCandidates(
+    unsigned selectedIndex, llvm::ArrayRef<unsigned> candidateIndices,
+    llvm::ArrayRef<MetadirectiveCandidate> candidates,
+    SemanticsContext &context);
+
+/// Return every replacement that can be selected, retaining lower-ranked
+/// candidates after a dynamic condition. Null represents NOTHING.
+llvm::SmallVector<const parser::OmpDirectiveSpecification *, 4>
+GetReachableMetadirectiveVariants(const MetadirectiveCandidateSet &candidateSet,
+    const OmpVariantMatchContext &matchContext, SemanticsContext &context);
+
 /// True if a variant guarded by \p selector may be selected in the current
 /// compilation context.
 ///
@@ -417,6 +471,13 @@ std::optional<int64_t> GetMinimumSequenceCount(
 /// way that prevented the function from returning an accurate result.
 std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
     const parser::OpenMPLoopConstruct &x, unsigned version,
+    SemanticsContext *semaCtx = nullptr);
+
+/// Collect the set of DO loops in \p root that would be directly affected by
+/// \p spec when it is selected as a metadirective replacement.
+std::optional<std::vector<const parser::DoConstruct *>> CollectAffectedDoLoops(
+    const parser::OmpDirectiveSpecification &spec,
+    const parser::ExecutionPartConstruct &root, unsigned version,
     SemanticsContext *semaCtx = nullptr);
 
 /// Returns whether the loop nest associated with `x` is a doacross loop nest,

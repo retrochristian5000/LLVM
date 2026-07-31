@@ -148,6 +148,18 @@ subroutine no_loop_before_stmt(a)
   a = 0
 end subroutine
 
+! An OpenMP declarative directive also interrupts the loop association.
+subroutine no_loop_before_declarative_directive(n, a)
+  integer :: n, a(n), i
+  integer, save :: x
+  !ERROR: This construct should contain a DO-loop or a loop-nest-generating construct
+  !$omp metadirective when(implementation={vendor(llvm)}: do) default(nothing)
+  !$omp threadprivate(x)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
 ! A variant that cannot be selected on this target needs no loop nest.
 subroutine no_loop_dead_variant()
   !$omp metadirective when(device={kind(nohost)}: do) default(nothing)
@@ -274,4 +286,352 @@ subroutine loop_in_if_branch(n, a, flag)
       a(i) = i
     end do
   end if
+end subroutine
+
+subroutine noninteger_iteration_variable(n, a)
+  integer :: n, a(n)
+  real :: i
+  !$omp metadirective when(implementation={vendor(llvm)}: do) default(nothing)
+  !ERROR: The DO loop iteration variable must be of integer type
+  do i = 1, n
+    a(int(i)) = int(i)
+  end do
+end subroutine
+
+subroutine noninteger_collapsed_iteration_variables(n, a)
+  integer :: n, a(n, n)
+  real :: i, j
+  !$omp metadirective when(implementation={vendor(llvm)}: do collapse(2)) default(nothing)
+  !ERROR: The DO loop iteration variable must be of integer type
+  do i = 1, n
+    !ERROR: The DO loop iteration variable must be of integer type
+    do j = 1, n
+      a(int(j), int(i)) = int(i)
+    end do
+  end do
+end subroutine
+
+subroutine threadprivate_iteration_variable(n, a)
+  integer :: n, a(n)
+  integer, save :: i
+  !$omp threadprivate(i)
+  !$omp metadirective when(implementation={vendor(llvm)}: do) default(nothing)
+  !ERROR: Loop iteration variable of an affected loop cannot be THREADPRIVATE
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+subroutine invalid_iteration_variable_dsa(n, a)
+  integer :: n, a(n), i
+  !ERROR: Loop iteration variable with a predetermined data sharing attribute cannot appear in a FIRSTPRIVATE clause
+  !$omp metadirective when(implementation={vendor(llvm)}: do firstprivate(i)) default(nothing)
+  !BECAUSE: 'i' is an iteration variable of an affected loop
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+! An invalid iteration variable in a variant that cannot be selected on this
+! target does not constrain the program.
+subroutine dead_variant_noninteger_iteration_variable(n, a)
+  integer :: n, a(n)
+  real :: i
+  !$omp metadirective when(device={kind(nohost)}: do) default(nothing)
+  do i = 1, n
+    a(int(i)) = int(i)
+  end do
+end subroutine
+
+subroutine dead_variant_invalid_iteration_variable_dsa(n, a)
+  integer :: n, a(n), i
+  !$omp metadirective when(device={kind(nohost)}: do firstprivate(i)) default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+subroutine unreachable_ranked_collapse(n, a)
+  integer :: n, a(n), i
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): .true.)}: do) &
+  !$omp& when(user={condition(score(1): .true.)}: do collapse(2)) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+subroutine unreachable_ranked_iteration_variable(n, a)
+  integer :: n, a(n)
+  real :: i
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): .true.)}: nothing) &
+  !$omp& when(user={condition(score(1): .true.)}: do) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(int(i)) = int(i)
+  end do
+end subroutine
+
+subroutine unreachable_ranked_interrupted_association(n, a)
+  integer :: n, a(n), i
+  integer, save :: x
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): .true.)}: nothing) &
+  !$omp& when(user={condition(score(1): .true.)}: do) &
+  !$omp& default(nothing)
+  !$omp threadprivate(x)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+! Repeating the same runtime guard does not make a lower-ranked candidate
+! reachable. If FLAG is true the higher-ranked candidate wins; if it is false
+! neither candidate matches.
+subroutine unreachable_same_runtime_condition_collapse(n, a, flag)
+  integer :: n, a(n), i
+  logical :: flag
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): flag)}: do) &
+  !$omp& when(user={condition(score(1): flag)}: do collapse(2)) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+subroutine unreachable_same_runtime_condition_iteration_variable(n, a, flag)
+  integer :: n, a(n)
+  logical :: flag
+  real :: i
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): flag)}: nothing) &
+  !$omp& when(user={condition(score(1): flag)}: do) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(int(i)) = int(i)
+  end do
+end subroutine
+
+subroutine unreachable_same_runtime_condition_interruption(n, a, flag)
+  integer :: n, a(n), i
+  integer, save :: x
+  logical :: flag
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): flag)}: nothing) &
+  !$omp& when(user={condition(score(1): flag)}: do) &
+  !$omp& default(nothing)
+  !$omp threadprivate(x)
+  do i = 1, n
+    a(i) = i
+  end do
+end subroutine
+
+! A statically selected enclosing replacement contributes its construct traits
+! to nested selection. The inner DO is reachable because PARALLEL is known to
+! be present.
+subroutine construct_from_enclosing_metadirective(n, a)
+  integer :: n, a(n)
+  real :: i
+  !$omp begin metadirective &
+  !$omp& when(implementation={vendor(llvm)}: parallel) &
+  !$omp& default(nothing)
+  !$omp metadirective &
+  !$omp& when(construct={parallel}: do) &
+  !$omp& default(nothing)
+  !ERROR: The DO loop iteration variable must be of integer type
+  do i = 1, n
+    a(int(i)) = int(i)
+  end do
+  !$omp end metadirective
+end subroutine
+
+! CRITICAL is statically selected and does not provide a PARALLEL construct
+! trait. The inner DO is therefore unreachable and must not constrain the
+! THREADPRIVATE iteration variable.
+subroutine impossible_construct_from_enclosing_metadirective(n, a)
+  integer :: n, a(n)
+  integer, save :: i
+  !$omp threadprivate(i)
+  !$omp begin metadirective &
+  !$omp& when(implementation={vendor(llvm)}: critical) &
+  !$omp& default(nothing)
+  !$omp metadirective &
+  !$omp& when(construct={parallel}: do) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
+  !$omp end metadirective
+end subroutine
+
+! A runtime condition leaves the enclosing PARALLEL/NOTHING choice unresolved.
+! Keep the inner DO conservatively because it is reachable on the PARALLEL
+! path.
+subroutine unresolved_construct_from_enclosing_metadirective(n, a, flag)
+  integer :: n, a(n)
+  integer, save :: i
+  logical :: flag
+  !$omp threadprivate(i)
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: parallel) &
+  !$omp& default(nothing)
+  !$omp metadirective &
+  !$omp& when(construct={parallel}: do) &
+  !$omp& default(nothing)
+  !ERROR: Loop iteration variable of an affected loop cannot be THREADPRIVATE
+  do i = 1, n
+    a(i) = i
+  end do
+  !$omp end metadirective
+end subroutine
+
+! Selected traits occur at the enclosing metadirective's position, before the
+! source PARALLEL trait. TARGET,PARALLEL therefore selects SIMD and diagnoses
+! the noncanonical loop.
+subroutine ordered_enclosing_metadirective_traits(n)
+  integer :: n, i
+  i = 0
+  !$omp begin metadirective &
+  !$omp& when(implementation={vendor(llvm)}: target) &
+  !$omp& default(nothing)
+  !$omp parallel
+  !$omp metadirective &
+  !ERROR: This construct requires a canonical loop nest
+  !$omp& when(construct={target, parallel}: simd) &
+  !$omp& default(nothing)
+  !BECAUSE: DO WHILE loop is not a valid affected loop
+  do while (i < n)
+    i = i + 1
+  end do
+  !$omp end parallel
+  !$omp end metadirective
+end subroutine
+
+! Reversing those traits does not match the effective TARGET,PARALLEL nesting,
+! so the same noncanonical loop is unaffected by SIMD.
+subroutine reversed_enclosing_metadirective_traits(n)
+  integer :: n, i
+  i = 0
+  !$omp begin metadirective &
+  !$omp& when(implementation={vendor(llvm)}: target) &
+  !$omp& default(nothing)
+  !$omp parallel
+  !$omp metadirective &
+  !$omp& when(construct={parallel, target}: simd) &
+  !$omp& default(nothing)
+  do while (i < n)
+    i = i + 1
+  end do
+  !$omp end parallel
+  !$omp end metadirective
+end subroutine
+
+! The high-scored constant-true NOTHING shadows the inner DO in every possible
+! outer context. It must be pruned even though the enclosing PARALLEL/NOTHING
+! selection is dynamic.
+subroutine shadowed_construct_in_unresolved_metadirective(n, a, flag)
+  integer :: n, a(n)
+  integer, save :: i
+  logical :: flag
+  !$omp threadprivate(i)
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: parallel) &
+  !$omp& default(nothing)
+  !$omp metadirective &
+  !$omp& when(user={condition(score(100): .true.)}: nothing) &
+  !$omp& when(construct={parallel}: do) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
+  !$omp end metadirective
+end subroutine
+
+! The same FLAG controls both enclosing selections. PARALLEL requires FLAG and
+! TARGET requires .NOT.FLAG, so the combined construct context is impossible.
+subroutine correlated_nested_metadirective_paths(flag, n)
+  logical, intent(in) :: flag
+  integer :: n, i
+  i = 0
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: parallel) &
+  !$omp& default(nothing)
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: nothing) &
+  !$omp& default(target)
+  !$omp metadirective &
+  !$omp& when(construct={parallel, target}: simd) &
+  !$omp& default(nothing)
+  do while (i < n)
+    i = i + 1
+  end do
+  !$omp end metadirective
+  !$omp end metadirective
+end subroutine
+
+! Independent flags can select PARALLEL and TARGET together, so the inner SIMD
+! remains reachable and constrains the associated loop.
+subroutine independent_nested_metadirective_paths(flag1, flag2, n)
+  logical, intent(in) :: flag1, flag2
+  integer :: n, i
+  i = 0
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag1)}: parallel) &
+  !$omp& default(nothing)
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag2)}: nothing) &
+  !$omp& default(target)
+  !$omp metadirective &
+  !ERROR: This construct requires a canonical loop nest
+  !$omp& when(construct={parallel, target}: simd) &
+  !$omp& default(nothing)
+  !BECAUSE: DO WHILE loop is not a valid affected loop
+  do while (i < n)
+    i = i + 1
+  end do
+  !$omp end metadirective
+  !$omp end metadirective
+end subroutine
+
+! A mutable condition can change between nested selection points. Do not
+! correlate equal expressions in that case: PARALLEL and TARGET are reachable
+! together when FLAG is initially true and then assigned false.
+subroutine mutable_nested_metadirective_paths(flag, n)
+  logical :: flag
+  integer :: n, i
+  i = 0
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: parallel) &
+  !$omp& default(nothing)
+  flag = .false.
+  !$omp begin metadirective &
+  !$omp& when(user={condition(flag)}: nothing) &
+  !$omp& default(target)
+  !$omp metadirective &
+  !ERROR: This construct requires a canonical loop nest
+  !$omp& when(construct={parallel, target}: simd) &
+  !$omp& default(nothing)
+  !BECAUSE: DO WHILE loop is not a valid affected loop
+  do while (i < n)
+    i = i + 1
+  end do
+  !$omp end metadirective
+  !$omp end metadirective
+end subroutine
+
+subroutine dynamic_ranked_collapse(n, a, flag)
+  integer :: n, a(n), i
+  logical :: flag
+  !$omp metadirective &
+  !$omp& when(user={condition(score(2): flag)}: nothing) &
+  !ERROR: This construct requires a nest of depth 2, but the associated nest is a nest of depth 1
+  !BECAUSE: COLLAPSE clause was specified with argument 2
+  !$omp& when(user={condition(score(1): .true.)}: do collapse(2)) &
+  !$omp& default(nothing)
+  do i = 1, n
+    a(i) = i
+  end do
 end subroutine

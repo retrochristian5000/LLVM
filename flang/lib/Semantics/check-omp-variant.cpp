@@ -28,6 +28,7 @@
 #include "flang/Semantics/tools.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Frontend/OpenMP/OMP.h"
 
 #include <algorithm>
@@ -753,11 +754,253 @@ void OmpStructureChecker::Leave(const parser::OmpDirectiveSpecification &x) {
   }
 }
 
-void OmpStructureChecker::Enter(const parser::OmpMetadirectiveDirective &x) {
-  EnterDirectiveNest(MetadirectiveNest);
+void OmpStructureChecker::BeginMetadirectiveSelection() {
+  metadirectiveSelectionStarts_.push_back(metadirectiveLoopVariants_.size());
 }
 
-void OmpStructureChecker::Leave(const parser::OmpMetadirectiveDirective &) {
+void OmpStructureChecker::EndMetadirectiveSelection(
+    const parser::OmpClauseList &clauses) {
+  CHECK(!metadirectiveSelectionStarts_.empty());
+  std::size_t firstVariant{metadirectiveSelectionStarts_.back()};
+  metadirectiveSelectionStarts_.pop_back();
+  CHECK(!metadirectiveConstructContexts_.empty());
+
+  // Nested dynamic selections form a cross product. Bound it and leave all
+  // variants conservatively reachable if the exact context set grows larger.
+  constexpr std::size_t maxConstructTraitAlternatives{64};
+  auto isInvariantCondition =
+      [&](const MetadirectiveConditionConstraint &condition) {
+        const SomeExpr *expr{GetExpr(context_, *condition.expr)};
+        if (!expr)
+          return false;
+        auto symbols{evaluate::CollectSymbols(*expr)};
+        return !symbols.empty() &&
+            llvm::all_of(symbols, [](const Symbol &symbol) {
+              if (IsNamedConstant(symbol))
+                return true;
+              return IsIntentIn(symbol) && !IsPointer(symbol) &&
+                  !evaluate::IsCoarray(symbol) &&
+                  !symbol.attrs().HasAny({Attr::ASYNCHRONOUS, Attr::VOLATILE});
+            });
+      };
+  auto sameCondition = [&](const MetadirectiveConditionConstraint &left,
+                           const MetadirectiveConditionConstraint &right) {
+    // Repeated conditions within one metadirective are evaluated at the same
+    // selection point. Across nested metadirectives, only correlate expressions
+    // whose values cannot have changed between the two selections.
+    if (left.owner != right.owner &&
+        (!isInvariantCondition(left) || !isInvariantCondition(right)))
+      return false;
+    if (left.expr == right.expr)
+      return true;
+    const SomeExpr *leftExpr{GetExpr(context_, *left.expr)};
+    const SomeExpr *rightExpr{GetExpr(context_, *right.expr)};
+    return leftExpr && rightExpr && *leftExpr == *rightExpr;
+  };
+  auto addCondition =
+      [&](llvm::SmallVectorImpl<MetadirectiveConditionConstraint> &conditions,
+          MetadirectiveConditionConstraint condition) {
+        for (const MetadirectiveConditionConstraint &existing : conditions) {
+          if (sameCondition(existing, condition))
+            return existing.value == condition.value;
+        }
+        conditions.push_back(condition);
+        return true;
+      };
+  auto sameConditions =
+      [&](llvm::ArrayRef<MetadirectiveConditionConstraint> left,
+          llvm::ArrayRef<MetadirectiveConditionConstraint> right) {
+        if (left.size() != right.size())
+          return false;
+        return llvm::all_of(left, [&](const auto &leftCondition) {
+          return llvm::any_of(right, [&](const auto &rightCondition) {
+            return leftCondition.value == rightCondition.value &&
+                sameCondition(leftCondition, rightCondition);
+          });
+        });
+      };
+  auto containsAlternative =
+      [&](llvm::ArrayRef<MetadirectiveConstructAlternative> alternatives,
+          const MetadirectiveConstructAlternative &alternative) {
+        return llvm::any_of(alternatives, [&](const auto &existing) {
+          return existing.traits == alternative.traits &&
+              sameConditions(existing.conditions, alternative.conditions);
+        });
+      };
+
+  llvm::SmallVector<MetadirectiveConstructAlternative, 4>
+      constructTraitAlternatives(1);
+  auto appendAlternatives =
+      [&](llvm::ArrayRef<MetadirectiveConstructAlternative> suffixes) {
+        if (suffixes.empty())
+          return false;
+
+        llvm::SmallVector<MetadirectiveConstructAlternative, 4>
+            combinedAlternatives;
+        for (const MetadirectiveConstructAlternative &prefix :
+            constructTraitAlternatives) {
+          for (const MetadirectiveConstructAlternative &suffix : suffixes) {
+            MetadirectiveConstructAlternative combined{prefix};
+            combined.traits.append(suffix.traits);
+            bool isCompatible{llvm::all_of(suffix.conditions,
+                [&](MetadirectiveConditionConstraint condition) {
+                  return addCondition(combined.conditions, condition);
+                })};
+            if (!isCompatible ||
+                containsAlternative(combinedAlternatives, combined))
+              continue;
+            if (combinedAlternatives.size() == maxConstructTraitAlternatives)
+              return false;
+            combinedAlternatives.push_back(std::move(combined));
+          }
+        }
+        if (combinedAlternatives.empty())
+          return false;
+        constructTraitAlternatives = std::move(combinedAlternatives);
+        return true;
+      };
+
+  // Interleave each enclosing metadirective's selected traits with source
+  // constructs at the metadirective's position in the construct stack.
+  std::size_t metadirectiveContextIndex{0};
+  for (const LoopOrConstruct &item : constructStack_) {
+    if (const auto *construct{
+            std::get_if<const parser::OpenMPConstruct *>(&item)}) {
+      llvm::omp::Directive directive{
+          parser::omp::GetOmpDirectiveName(**construct).v};
+      if (directive == llvm::omp::Directive::OMPD_metadirective) {
+        CHECK(
+            metadirectiveContextIndex < metadirectiveConstructContexts_.size());
+        const MetadirectiveConstructContext &context{
+            metadirectiveConstructContexts_[metadirectiveContextIndex++]};
+        bool isCurrentMetadirective{metadirectiveContextIndex ==
+            metadirectiveConstructContexts_.size()};
+        if (!isCurrentMetadirective &&
+            !appendAlternatives(context.alternatives))
+          return;
+        continue;
+      }
+
+      ConstructTraitSequence sourceTraits;
+      AppendConstructTraitsForDirective(directive, sourceTraits);
+      for (MetadirectiveConstructAlternative &alternative :
+          constructTraitAlternatives)
+        alternative.traits.append(sourceTraits);
+    }
+  }
+
+  struct ReachableVariantPath {
+    const parser::OmpDirectiveSpecification *specification;
+    llvm::SmallVector<MetadirectiveConditionConstraint, 2> conditions;
+  };
+  auto getReachableVariantPaths =
+      [&](const MetadirectiveCandidateSet &candidateSet,
+          const OmpVariantMatchContext &matchContext) {
+        llvm::SmallVector<unsigned, 4> candidates;
+        candidates.reserve(candidateSet.candidates.size());
+        for (unsigned i{0}; i < candidateSet.candidates.size(); ++i)
+          candidates.push_back(i);
+
+        llvm::SmallVector<ReachableVariantPath, 4> paths;
+        llvm::SmallVector<MetadirectiveConditionConstraint, 2> pathConditions;
+        while (true) {
+          std::optional<unsigned> selected{SelectBestMetadirectiveCandidate(
+              candidates, candidateSet.candidates, matchContext)};
+          if (!selected) {
+            paths.push_back({candidateSet.fallback, pathConditions});
+            break;
+          }
+
+          const MetadirectiveCandidate &candidate{
+              candidateSet.candidates[*selected]};
+          if (!candidate.dynamicCondition) {
+            paths.push_back({candidate.spec, pathConditions});
+            break;
+          }
+
+          MetadirectiveConditionConstraint selectedCondition{
+              candidate.dynamicCondition->expr, candidate.conditionShouldBeTrue,
+              &clauses};
+          auto selectedPathConditions{pathConditions};
+          if (addCondition(selectedPathConditions, selectedCondition))
+            paths.push_back(
+                {candidate.spec, std::move(selectedPathConditions)});
+
+          MetadirectiveConditionConstraint failedCondition{
+              candidate.dynamicCondition->expr,
+              !candidate.conditionShouldBeTrue, &clauses};
+          if (!addCondition(pathConditions, failedCondition))
+            break;
+          candidates = GetMetadirectiveElsePathCandidates(
+              *selected, candidates, candidateSet.candidates, context_);
+        }
+        return paths;
+      };
+
+  llvm::SmallVector<const parser::OmpDirectiveSpecification *, 4>
+      reachableVariants;
+  llvm::SmallVector<MetadirectiveConstructAlternative, 2> currentAlternatives;
+  for (const MetadirectiveConstructAlternative &constructAlternative :
+      constructTraitAlternatives) {
+    OmpVariantMatchContext matchContext{context_, constructAlternative.traits};
+    std::optional<MetadirectiveCandidateSet> candidateSet{
+        BuildMetadirectiveCandidateSet(clauses, context_, matchContext)};
+    if (!candidateSet) {
+      // Keep every variant when selection cannot yet model a selector.
+      return;
+    }
+
+    for (const ReachableVariantPath &path :
+        getReachableVariantPaths(*candidateSet, matchContext)) {
+      MetadirectiveConstructAlternative currentAlternative;
+      if (path.specification)
+        AppendConstructTraitsForDirective(
+            path.specification->DirId(), currentAlternative.traits);
+      currentAlternative.conditions = constructAlternative.conditions;
+      bool isCompatible{llvm::all_of(
+          path.conditions, [&](MetadirectiveConditionConstraint condition) {
+            return addCondition(currentAlternative.conditions, condition);
+          })};
+      if (!isCompatible)
+        continue;
+
+      if (!llvm::is_contained(reachableVariants, path.specification))
+        reachableVariants.push_back(path.specification);
+      if (!containsAlternative(currentAlternatives, currentAlternative)) {
+        if (currentAlternatives.size() == maxConstructTraitAlternatives)
+          return;
+        currentAlternatives.push_back(std::move(currentAlternative));
+      }
+    }
+  }
+  if (currentAlternatives.empty())
+    return;
+
+  // Make every reachable replacement and its accumulated path constraints
+  // available to metadirectives in a delimited body.
+  MetadirectiveConstructContext &currentContext{
+      metadirectiveConstructContexts_.back()};
+  currentContext.alternatives = std::move(currentAlternatives);
+
+  auto first{metadirectiveLoopVariants_.begin() + firstVariant};
+  metadirectiveLoopVariants_.erase(
+      std::remove_if(first, metadirectiveLoopVariants_.end(),
+          [&](const MetadirectiveLoopVariant &variant) {
+            return !llvm::is_contained(reachableVariants, variant.spec);
+          }),
+      metadirectiveLoopVariants_.end());
+}
+
+void OmpStructureChecker::Enter(const parser::OmpMetadirectiveDirective &x) {
+  metadirectiveConstructContexts_.emplace_back();
+  EnterDirectiveNest(MetadirectiveNest);
+  BeginMetadirectiveSelection();
+}
+
+void OmpStructureChecker::Leave(const parser::OmpMetadirectiveDirective &x) {
+  EndMetadirectiveSelection(x.v.Clauses());
+  CHECK(!metadirectiveConstructContexts_.empty());
+  metadirectiveConstructContexts_.pop_back();
   ExitDirectiveNest(MetadirectiveNest);
 }
 
@@ -822,6 +1065,7 @@ void OmpStructureChecker::Enter(const parser::ExecutionPartConstruct &x) {
   // Build the matching context once for the static-applicability gate below.
   OmpVariantMatchContext matchContext{context_};
   UnorderedSymbolSet defaultNoneDiagnosed;
+  llvm::SmallSetVector<const parser::DoConstruct *, 4> affectedDoLoops;
 
   for (const MetadirectiveLoopVariant &variant : variants) {
     const parser::OmpDirectiveSpecification *spec{variant.spec};
@@ -834,6 +1078,11 @@ void OmpStructureChecker::Enter(const parser::ExecutionPartConstruct &x) {
     if (assoc == llvm::omp::Association::LoopNest) {
       if (!checkRootLoopCanonical(*spec, /*isSequence=*/false)) {
         continue;
+      }
+      if (auto loops{CollectAffectedDoLoops(*spec, x, version, &context_)}) {
+        CheckIterationVariableDataSharingClauses(
+            *spec, *loops, /*requireResolvedDSA=*/false);
+        affectedDoLoops.insert(loops->begin(), loops->end());
       }
 
       // A standalone metadirective does not contain its associated loop in
@@ -862,9 +1111,16 @@ void OmpStructureChecker::Enter(const parser::ExecutionPartConstruct &x) {
         CheckRectangularNest(*spec, sequence);
       }
     } else if (assoc == llvm::omp::Association::LoopSeq) {
-      (void)checkRootLoopCanonical(*spec, /*isSequence=*/true);
+      if (checkRootLoopCanonical(*spec, /*isSequence=*/true)) {
+        if (auto loops{CollectAffectedDoLoops(*spec, x, version, &context_)}) {
+          CheckIterationVariableDataSharingClauses(
+              *spec, *loops, /*requireResolvedDSA=*/false);
+          affectedDoLoops.insert(loops->begin(), loops->end());
+        }
+      }
     }
   }
+  CheckIterationVariableRestrictions(affectedDoLoops.getArrayRef());
 }
 
 // Diagnose loop-associated metadirective variants that are not followed by a
@@ -899,6 +1155,19 @@ void OmpStructureChecker::CheckMetadirectiveVariantsWithoutLoop(
       context_.Say(
           variant.spec->DirName().source, MsgShouldContainDoOr, "sequence");
     }
+  }
+}
+
+void OmpStructureChecker::
+    CheckMetadirectiveLoopAssociationInterruptedByDirective() {
+  std::size_t firstVariant{metadirectiveVariantScopeStarts_.empty()
+          ? 0
+          : metadirectiveVariantScopeStarts_.back()};
+  if (firstVariant < metadirectiveLoopVariants_.size()) {
+    // A declarative directive between a loop-associated metadirective and a
+    // DO construct in the same scope interrupts their association. Preserve
+    // pending variants from enclosing scopes.
+    CheckMetadirectiveVariantsWithoutLoop(firstVariant);
   }
 }
 
