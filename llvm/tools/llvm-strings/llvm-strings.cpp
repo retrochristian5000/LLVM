@@ -19,6 +19,7 @@
 #include "llvm/Option/Option.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -88,7 +89,9 @@ static void parseIntArg(const opt::InputArgList &Args, int ID, T &Value) {
   }
 }
 
-static void strings(raw_ostream &OS, StringRef FileName, StringRef Contents) {
+static void strings(raw_ostream &OS, StringRef FileName,
+                    sys::fs::file_t Handle) {
+  SmallString<sys::fs::DefaultReadChunkSize> Buffer;
   auto print = [&OS, FileName](unsigned Offset, StringRef L) {
     if (L.size() < static_cast<size_t>(MinLength))
       return;
@@ -110,19 +113,37 @@ static void strings(raw_ostream &OS, StringRef FileName, StringRef Contents) {
     OS << L << '\n';
   };
 
-  const char *B = Contents.begin();
-  const char *P = nullptr, *E = nullptr, *S = nullptr;
-  for (P = Contents.begin(), E = Contents.end(); P < E; ++P) {
-    if (isPrint(*P) || *P == '\t') {
-      if (S == nullptr)
-        S = P;
-    } else if (S) {
-      print(S - B, StringRef(S, P - S));
-      S = nullptr;
+  Buffer.resize_for_overwrite(sys::fs::DefaultReadChunkSize);
+  std::string StringBuffer;
+  unsigned Offset = 0;
+  while (true) {
+    Expected<size_t> ReadBytesOrErr = sys::fs::readNativeFile(
+        Handle, MutableArrayRef(Buffer.data(), Buffer.size()));
+    if (!ReadBytesOrErr) {
+      errs() << FileName << ": "
+             << errorToErrorCode(ReadBytesOrErr.takeError()).message() << '\n';
+      return;
+    }
+    std::size_t CurSize = *ReadBytesOrErr;
+    if (CurSize <= 0)
+      break;
+    for (std::size_t I = 0; I != CurSize; ++I) {
+      char C = Buffer[I];
+      if (isPrint(C) || C == '\t') {
+        StringBuffer.push_back(C);
+      } else if (StringBuffer.size()) {
+        print(Offset, StringRef(StringBuffer.c_str(), StringBuffer.size()));
+        Offset += StringBuffer.size();
+        StringBuffer.clear();
+        ++Offset;
+      } else {
+        ++Offset;
+      }
     }
   }
-  if (S)
-    print(S - B, StringRef(S, E - S));
+
+  if (StringBuffer.size())
+    print(Offset, StringRef(StringBuffer.c_str(), StringBuffer.size()));
 }
 
 int main(int argc, char **argv) {
@@ -174,13 +195,17 @@ int main(int argc, char **argv) {
     InputFileNames.push_back("-");
 
   for (const auto &File : InputFileNames) {
-    ErrorOr<std::unique_ptr<MemoryBuffer>> Buffer =
-        MemoryBuffer::getFileOrSTDIN(File, /*IsText=*/true);
-    if (std::error_code EC = Buffer.getError())
-      errs() << File << ": " << EC.message() << '\n';
-    else
-      strings(llvm::outs(), File == "-" ? "{standard input}" : File,
-              Buffer.get()->getMemBufferRef().getBuffer());
+    if (File == "-") {
+      strings(llvm::outs(), "{standard input}", sys::fs::getStdinHandle());
+    } else {
+      Expected<sys::fs::file_t> FDOrErr = sys::fs::openNativeFileForReadWrite(
+          File, sys::fs::CD_OpenExisting, sys::fs::OF_None);
+      if (!FDOrErr) {
+        errs() << File << ": " << FDOrErr.takeError() << '\n';
+        continue;
+      }
+      strings(llvm::outs(), File, *FDOrErr);
+    }
   }
 
   return EXIT_SUCCESS;
