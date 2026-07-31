@@ -5,19 +5,19 @@
 
 #include <sys/stat.h> // for stat, mkdir, mkfifo
 #ifndef _WIN32
-#include <unistd.h> // for ftruncate, link, symlink, getcwd, chdir
-#include <sys/statvfs.h>
+#  include <unistd.h> // for ftruncate, link, symlink, getcwd, chdir
+#  include <sys/statvfs.h>
 #else
-#include <io.h>
-#include <direct.h>
+#  include <io.h>
+#  include <direct.h>
 // winsock2.h must be included before windows.h to avoid clashing with the
 // older winsock.h that windows.h would otherwise pull in.
-#include <winsock2.h> // for AF_UNIX sockets
-#include <afunix.h>
-#include <windows.h> // for CreateSymbolicLink, CreateHardLink
-#if defined(_MSC_VER)
-#pragma comment(lib, "ws2_32")
-#endif
+#  include <winsock2.h> // for AF_UNIX sockets
+#  include <afunix.h>
+#  include <windows.h> // for CreateSymbolicLink, CreateHardLink
+#  if defined(_MSC_VER)
+#    pragma comment(lib, "ws2_32")
+#  endif
 #endif
 
 #include <cassert>
@@ -38,8 +38,8 @@
 
 // For creating socket files
 #if !defined(__FreeBSD__) && !defined(__APPLE__) && !defined(_WIN32)
-# include <sys/socket.h>
-# include <sys/un.h>
+#  include <sys/socket.h>
+#  include <sys/un.h>
 #endif
 // On Windows the AF_UNIX socket headers (winsock2.h/afunix.h) are included
 // above, before windows.h.
@@ -47,293 +47,278 @@ namespace fs = std::filesystem;
 
 namespace utils {
 #ifdef _WIN32
-    inline int mkdir(const char* path, int mode) { (void)mode; return ::_mkdir(path); }
-    inline int symlink(const char* oldname, const char* newname, bool is_dir) {
-        DWORD flags = is_dir ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
-        if (CreateSymbolicLinkA(newname, oldname,
-                                flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
-          return 0;
-        if (GetLastError() != ERROR_INVALID_PARAMETER)
-          return 1;
-        return !CreateSymbolicLinkA(newname, oldname, flags);
-    }
-    inline int link(const char *oldname, const char* newname) {
-        return !CreateHardLinkA(newname, oldname, NULL);
-    }
-    inline int setenv(const char *var, const char *val, int overwrite) {
-        (void)overwrite;
-        return ::_putenv((std::string(var) + "=" + std::string(val)).c_str());
-    }
-    inline int unsetenv(const char *var) {
-        return ::_putenv((std::string(var) + "=").c_str());
-    }
-    inline bool space(std::string path, std::uintmax_t &capacity,
-                      std::uintmax_t &free, std::uintmax_t &avail) {
-        ULARGE_INTEGER FreeBytesAvailableToCaller, TotalNumberOfBytes,
-                       TotalNumberOfFreeBytes;
-        if (!GetDiskFreeSpaceExA(path.c_str(), &FreeBytesAvailableToCaller,
-                                 &TotalNumberOfBytes, &TotalNumberOfFreeBytes))
-          return false;
-        capacity = TotalNumberOfBytes.QuadPart;
-        free = TotalNumberOfFreeBytes.QuadPart;
-        avail = FreeBytesAvailableToCaller.QuadPart;
-        assert(capacity > 0);
-        assert(free > 0);
-        assert(avail > 0);
-        return true;
-    }
+inline int mkdir(const char* path, int mode) {
+  (void)mode;
+  return ::_mkdir(path);
+}
+inline int symlink(const char* oldname, const char* newname, bool is_dir) {
+  DWORD flags = is_dir ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
+  if (CreateSymbolicLinkA(newname, oldname, flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+    return 0;
+  if (GetLastError() != ERROR_INVALID_PARAMETER)
+    return 1;
+  return !CreateSymbolicLinkA(newname, oldname, flags);
+}
+inline int link(const char* oldname, const char* newname) { return !CreateHardLinkA(newname, oldname, NULL); }
+inline int setenv(const char* var, const char* val, int overwrite) {
+  (void)overwrite;
+  return ::_putenv((std::string(var) + "=" + std::string(val)).c_str());
+}
+inline int unsetenv(const char* var) { return ::_putenv((std::string(var) + "=").c_str()); }
+inline bool space(std::string path, std::uintmax_t& capacity, std::uintmax_t& free, std::uintmax_t& avail) {
+  ULARGE_INTEGER FreeBytesAvailableToCaller, TotalNumberOfBytes, TotalNumberOfFreeBytes;
+  if (!GetDiskFreeSpaceExA(path.c_str(), &FreeBytesAvailableToCaller, &TotalNumberOfBytes, &TotalNumberOfFreeBytes))
+    return false;
+  capacity = TotalNumberOfBytes.QuadPart;
+  free     = TotalNumberOfFreeBytes.QuadPart;
+  avail    = FreeBytesAvailableToCaller.QuadPart;
+  assert(capacity > 0);
+  assert(free > 0);
+  assert(avail > 0);
+  return true;
+}
 #else
-    using ::mkdir;
-    inline int symlink(const char* oldname, const char* newname, bool is_dir) { (void)is_dir; return ::symlink(oldname, newname); }
-    using ::link;
-    using ::setenv;
-    using ::unsetenv;
-    inline bool space(std::string path, std::uintmax_t &capacity,
-                      std::uintmax_t &free, std::uintmax_t &avail) {
-        struct statvfs expect;
-        if (::statvfs(path.c_str(), &expect) == -1)
-          return false;
-        assert(expect.f_bavail > 0);
-        assert(expect.f_bfree > 0);
-        assert(expect.f_bsize > 0);
-        assert(expect.f_blocks > 0);
-        assert(expect.f_frsize > 0);
-        auto do_mult = [&](std::uintmax_t val) {
-            std::uintmax_t fsize = expect.f_frsize;
-            std::uintmax_t new_val = val * fsize;
-            assert(new_val / fsize == val); // Test for overflow
-            return new_val;
-        };
-        capacity = do_mult(expect.f_blocks);
-        free = do_mult(expect.f_bfree);
-        avail = do_mult(expect.f_bavail);
-        return true;
-    }
+using ::mkdir;
+inline int symlink(const char* oldname, const char* newname, bool is_dir) {
+  (void)is_dir;
+  return ::symlink(oldname, newname);
+}
+using ::link;
+using ::setenv;
+using ::unsetenv;
+inline bool space(std::string path, std::uintmax_t& capacity, std::uintmax_t& free, std::uintmax_t& avail) {
+  struct statvfs expect;
+  if (::statvfs(path.c_str(), &expect) == -1)
+    return false;
+  assert(expect.f_bavail > 0);
+  assert(expect.f_bfree > 0);
+  assert(expect.f_bsize > 0);
+  assert(expect.f_blocks > 0);
+  assert(expect.f_frsize > 0);
+  auto do_mult = [&](std::uintmax_t val) {
+    std::uintmax_t fsize   = expect.f_frsize;
+    std::uintmax_t new_val = val * fsize;
+    assert(new_val / fsize == val); // Test for overflow
+    return new_val;
+  };
+  capacity = do_mult(expect.f_blocks);
+  free     = do_mult(expect.f_bfree);
+  avail    = do_mult(expect.f_bavail);
+  return true;
+}
 #endif
 
-    // N.B. libc might define some of the foo[64] identifiers using macros from
-    // foo64 -> foo or vice versa.
+// N.B. libc might define some of the foo[64] identifiers using macros from
+// foo64 -> foo or vice versa.
 #if defined(_WIN32)
-    using off64_t = std::int64_t;
+using off64_t = std::int64_t;
 #elif defined(__MVS__) || defined(__LP64__)
-    using off64_t = ::off_t;
+using off64_t = ::off_t;
 #else
-    using ::off64_t;
+using ::off64_t;
 #endif
 
-    inline FILE* fopen64(const char* pathname, const char* mode) {
-        // Bionic does not distinguish between fopen and fopen64, but fopen64
-        // wasn't added until API 24.
+inline FILE* fopen64(const char* pathname, const char* mode) {
+  // Bionic does not distinguish between fopen and fopen64, but fopen64
+  // wasn't added until API 24.
 #if defined(_WIN32) || defined(__MVS__) || defined(__LP64__) || defined(__BIONIC__)
-        return ::fopen(pathname, mode);
+  return ::fopen(pathname, mode);
 #else
-        return ::fopen64(pathname, mode);
+  return ::fopen64(pathname, mode);
 #endif
-    }
+}
 
-    inline int ftruncate64(int fd, off64_t length) {
+inline int ftruncate64(int fd, off64_t length) {
 #if defined(_WIN32)
-        // _chsize_s sets errno on failure and also returns the error number.
-        return ::_chsize_s(fd, length) ? -1 : 0;
+  // _chsize_s sets errno on failure and also returns the error number.
+  return ::_chsize_s(fd, length) ? -1 : 0;
 #elif defined(__MVS__) || defined(__LP64__)
-        return ::ftruncate(fd, length);
+  return ::ftruncate(fd, length);
 #else
-        return ::ftruncate64(fd, length);
+  return ::ftruncate64(fd, length);
 #endif
-    }
+}
 
-    inline std::string getcwd() {
-        // Assume that path lengths are not greater than this.
-        // This should be fine for testing purposes.
-        char buf[4096];
-        char* ret = ::getcwd(buf, sizeof(buf));
-        assert(ret && "getcwd failed");
-        return std::string(ret);
-    }
+inline std::string getcwd() {
+  // Assume that path lengths are not greater than this.
+  // This should be fine for testing purposes.
+  char buf[4096];
+  char* ret = ::getcwd(buf, sizeof(buf));
+  assert(ret && "getcwd failed");
+  return std::string(ret);
+}
 
-    inline bool exists(std::string const& path) {
-        struct ::stat tmp;
-        return ::stat(path.c_str(), &tmp) == 0;
-    }
+inline bool exists(std::string const& path) {
+  struct ::stat tmp;
+  return ::stat(path.c_str(), &tmp) == 0;
+}
 } // namespace utils
 
-struct scoped_test_env
-{
-    scoped_test_env() : test_root(available_cwd_path()) {
+struct scoped_test_env {
+  scoped_test_env()
+      : test_root(available_cwd_path())
+  {
 #ifdef _WIN32
-        // Windows mkdir can create multiple recursive directories
-        // if needed.
-        std::string cmd = "mkdir " + test_root.string();
+    // Windows mkdir can create multiple recursive directories
+    // if needed.
+    std::string cmd = "mkdir " + test_root.string();
 #else
-        std::string cmd = "mkdir -p " + test_root.string();
+    std::string cmd = "mkdir -p " + test_root.string();
 #endif
-        int ret = std::system(cmd.c_str());
-        assert(ret == 0);
+    int ret = std::system(cmd.c_str());
+    assert(ret == 0);
 
-        // Ensure that the root_path is fully resolved, i.e. it contains no
-        // symlinks. The filesystem tests depend on that. We do this after
-        // creating the root_path, because `fs::canonical` requires the
-        // path to exist.
-        test_root = fs::canonical(test_root);
-    }
+    // Ensure that the root_path is fully resolved, i.e. it contains no
+    // symlinks. The filesystem tests depend on that. We do this after
+    // creating the root_path, because `fs::canonical` requires the
+    // path to exist.
+    test_root = fs::canonical(test_root);
+  }
 
-    ~scoped_test_env() {
+  ~scoped_test_env() {
 #ifdef _WIN32
-        std::string cmd = "rmdir /s /q " + test_root.string();
-        int ret = std::system(cmd.c_str());
-        assert(ret == 0);
+    std::string cmd = "rmdir /s /q " + test_root.string();
+    int ret         = std::system(cmd.c_str());
+    assert(ret == 0);
 #else
-#if defined(__MVS__)
-        // The behaviour of chmod -R on z/OS prevents recursive
-        // permission change for directories that do not have read permission.
-        std::string cmd = "find  " + test_root.string() + " -exec chmod 777 {} \\;";
-#else
-        std::string cmd = "chmod -R 777 " + test_root.string();
-#endif // defined(__MVS__)
-        int ret = std::system(cmd.c_str());
+#  if defined(__MVS__)
+    // The behaviour of chmod -R on z/OS prevents recursive
+    // permission change for directories that do not have read permission.
+    std::string cmd = "find  " + test_root.string() + " -exec chmod 777 {} \\;";
+#  else
+    std::string cmd = "chmod -R 777 " + test_root.string();
+#  endif // defined(__MVS__)
+    int ret = std::system(cmd.c_str());
 #  if !defined(_AIX) && !defined(__ANDROID__)
-        // On AIX the chmod command will return non-zero when trying to set
-        // the permissions on a directory that contains a bad symlink. This triggers
-        // the assert, despite being able to delete everything with the following
-        // `rm -r` command.
-        //
-        // Android's chmod was buggy in old OSs, but skipping this assert is
-        // sufficient to ensure that the `rm -rf` succeeds for almost all tests:
-        //  - Android L: chmod aborts after one error
-        //  - Android L and M: chmod -R tries to set permissions of a symlink
-        //    target.
-        // LIBCXX-ANDROID-FIXME: Other fixes to consider: place a toybox chmod
-        // onto old devices, re-enable this assert for devices running Android N
-        // and up, rewrite this chmod+rm in C or C++.
-        assert(ret == 0);
+    // On AIX the chmod command will return non-zero when trying to set
+    // the permissions on a directory that contains a bad symlink. This triggers
+    // the assert, despite being able to delete everything with the following
+    // `rm -r` command.
+    //
+    // Android's chmod was buggy in old OSs, but skipping this assert is
+    // sufficient to ensure that the `rm -rf` succeeds for almost all tests:
+    //  - Android L: chmod aborts after one error
+    //  - Android L and M: chmod -R tries to set permissions of a symlink
+    //    target.
+    // LIBCXX-ANDROID-FIXME: Other fixes to consider: place a toybox chmod
+    // onto old devices, re-enable this assert for devices running Android N
+    // and up, rewrite this chmod+rm in C or C++.
+    assert(ret == 0);
 #  endif
 
-        cmd = "rm -rf " + test_root.string();
-        ret = std::system(cmd.c_str());
-        assert(ret == 0);
+    cmd = "rm -rf " + test_root.string();
+    ret = std::system(cmd.c_str());
+    assert(ret == 0);
 #endif
+  }
+
+  scoped_test_env(scoped_test_env const&)            = delete;
+  scoped_test_env& operator=(scoped_test_env const&) = delete;
+
+  fs::path make_env_path(std::string p) { return sanitize_path(p); }
+
+  std::string sanitize_path(std::string raw) {
+    assert(raw.find("..") == std::string::npos);
+    std::string root = test_root.string();
+    if (root.compare(0, root.size(), raw, 0, root.size()) != 0) {
+      assert(raw.front() != '\\');
+      fs::path tmp(test_root);
+      tmp /= raw;
+      return tmp.string();
     }
+    return raw;
+  }
 
-    scoped_test_env(scoped_test_env const &) = delete;
-    scoped_test_env & operator=(scoped_test_env const &) = delete;
+  // Purposefully using a size potentially larger than off_t here so we can
+  // test the behavior of libc++fs when it is built with _FILE_OFFSET_BITS=64
+  // but the caller is not (std::filesystem also uses uintmax_t rather than
+  // off_t). On a 32-bit system this allows us to create a file larger than
+  // 2GB.
+  std::string create_file(fs::path filename_path, std::uintmax_t size = 0) {
+    std::string filename = sanitize_path(filename_path.string());
 
-    fs::path make_env_path(std::string p) { return sanitize_path(p); }
-
-    std::string sanitize_path(std::string raw) {
-        assert(raw.find("..") == std::string::npos);
-        std::string root = test_root.string();
-        if (root.compare(0, root.size(), raw, 0, root.size()) != 0) {
-            assert(raw.front() != '\\');
-            fs::path tmp(test_root);
-            tmp /= raw;
-            return tmp.string();
-        }
-        return raw;
+    if (size >
+        static_cast<typename std::make_unsigned<utils::off64_t>::type>(std::numeric_limits<utils::off64_t>::max())) {
+      std::fprintf(stderr, "create_file(%s, %ju) too large\n", filename.c_str(), size);
+      std::abort();
     }
-
-    // Purposefully using a size potentially larger than off_t here so we can
-    // test the behavior of libc++fs when it is built with _FILE_OFFSET_BITS=64
-    // but the caller is not (std::filesystem also uses uintmax_t rather than
-    // off_t). On a 32-bit system this allows us to create a file larger than
-    // 2GB.
-    std::string create_file(fs::path filename_path, std::uintmax_t size = 0) {
-        std::string filename = sanitize_path(filename_path.string());
-
-        if (size >
-            static_cast<typename std::make_unsigned<utils::off64_t>::type>(
-                std::numeric_limits<utils::off64_t>::max())) {
-            std::fprintf(stderr, "create_file(%s, %ju) too large\n",
-                         filename.c_str(), size);
-            std::abort();
-        }
 
 #if defined(_WIN32) || defined(__MVS__)
 #  define FOPEN_CLOEXEC_FLAG ""
 #else
 #  define FOPEN_CLOEXEC_FLAG "e"
 #endif
-        FILE* file = utils::fopen64(filename.c_str(), "w" FOPEN_CLOEXEC_FLAG);
-        if (file == nullptr) {
-            std::fprintf(stderr, "fopen %s failed: %s\n", filename.c_str(),
-                         std::strerror(errno));
-            std::abort();
-        }
-
-        if (utils::ftruncate64(
-                fileno(file), static_cast<utils::off64_t>(size)) == -1) {
-            std::fprintf(stderr, "ftruncate %s %ju failed: %s\n", filename.c_str(),
-                         size, std::strerror(errno));
-            std::fclose(file);
-            std::abort();
-        }
-
-        std::fclose(file);
-        return filename;
+    FILE* file = utils::fopen64(filename.c_str(), "w" FOPEN_CLOEXEC_FLAG);
+    if (file == nullptr) {
+      std::fprintf(stderr, "fopen %s failed: %s\n", filename.c_str(), std::strerror(errno));
+      std::abort();
     }
 
-    std::string create_dir(fs::path filename_path) {
-        std::string filename = filename_path.string();
-        filename = sanitize_path(std::move(filename));
-        int ret = utils::mkdir(filename.c_str(), 0777); // rwxrwxrwx mode
-        assert(ret == 0);
-        return filename;
+    if (utils::ftruncate64(fileno(file), static_cast<utils::off64_t>(size)) == -1) {
+      std::fprintf(stderr, "ftruncate %s %ju failed: %s\n", filename.c_str(), size, std::strerror(errno));
+      std::fclose(file);
+      std::abort();
     }
 
-    std::string create_file_dir_symlink(fs::path source_path,
-                                        fs::path to_path,
-                                        bool sanitize_source = true,
-                                        bool is_dir = false) {
-        std::string source = source_path.string();
-        std::string to = to_path.string();
-        if (sanitize_source)
-            source = sanitize_path(std::move(source));
-        to = sanitize_path(std::move(to));
-        int ret = utils::symlink(source.c_str(), to.c_str(), is_dir);
-        assert(ret == 0);
-        return to;
-    }
+    std::fclose(file);
+    return filename;
+  }
 
-    std::string create_symlink(fs::path source_path,
-                               fs::path to_path,
-                               bool sanitize_source = true) {
-        return create_file_dir_symlink(source_path, to_path, sanitize_source,
-                                       false);
-    }
+  std::string create_dir(fs::path filename_path) {
+    std::string filename = filename_path.string();
+    filename             = sanitize_path(std::move(filename));
+    int ret              = utils::mkdir(filename.c_str(), 0777); // rwxrwxrwx mode
+    assert(ret == 0);
+    return filename;
+  }
 
-    std::string create_directory_symlink(fs::path source_path,
-                                         fs::path to_path,
-                                         bool sanitize_source = true) {
-        return create_file_dir_symlink(source_path, to_path, sanitize_source,
-                                       true);
-    }
+  std::string
+  create_file_dir_symlink(fs::path source_path, fs::path to_path, bool sanitize_source = true, bool is_dir = false) {
+    std::string source = source_path.string();
+    std::string to     = to_path.string();
+    if (sanitize_source)
+      source = sanitize_path(std::move(source));
+    to      = sanitize_path(std::move(to));
+    int ret = utils::symlink(source.c_str(), to.c_str(), is_dir);
+    assert(ret == 0);
+    return to;
+  }
 
-    std::string create_hardlink(fs::path source_path, fs::path to_path) {
-        std::string source = source_path.string();
-        std::string to = to_path.string();
-        source = sanitize_path(std::move(source));
-        to = sanitize_path(std::move(to));
-        int ret = utils::link(source.c_str(), to.c_str());
-        assert(ret == 0);
-        return to;
-    }
+  std::string create_symlink(fs::path source_path, fs::path to_path, bool sanitize_source = true) {
+    return create_file_dir_symlink(source_path, to_path, sanitize_source, false);
+  }
+
+  std::string create_directory_symlink(fs::path source_path, fs::path to_path, bool sanitize_source = true) {
+    return create_file_dir_symlink(source_path, to_path, sanitize_source, true);
+  }
+
+  std::string create_hardlink(fs::path source_path, fs::path to_path) {
+    std::string source = source_path.string();
+    std::string to     = to_path.string();
+    source             = sanitize_path(std::move(source));
+    to                 = sanitize_path(std::move(to));
+    int ret            = utils::link(source.c_str(), to.c_str());
+    assert(ret == 0);
+    return to;
+  }
 
 #ifndef _WIN32
-    std::string create_fifo(std::string file) {
-        file = sanitize_path(std::move(file));
-        int ret = ::mkfifo(file.c_str(), 0666); // rw-rw-rw- mode
-        assert(ret == 0);
-        return file;
-    }
+  std::string create_fifo(std::string file) {
+    file    = sanitize_path(std::move(file));
+    int ret = ::mkfifo(file.c_str(), 0666); // rw-rw-rw- mode
+    assert(ret == 0);
+    return file;
+  }
 #endif
 
   // Some platforms doesn't support socket files so we shouldn't even
   // allow tests to call this unguarded.
 #if !defined(__FreeBSD__) && !defined(__APPLE__) && !defined(_WIN32)
-    std::string create_socket(std::string file) {
-      file = sanitize_path(std::move(file));
+  std::string create_socket(std::string file) {
+    file = sanitize_path(std::move(file));
 
-      ::sockaddr_un address;
-      address.sun_family = AF_UNIX;
+    ::sockaddr_un address;
+    address.sun_family = AF_UNIX;
 
 // If file.size() is too big, try to create a file directly inside
 // /tmp to make sure file path is short enough.
@@ -351,59 +336,59 @@ struct scoped_test_env
     return file;
   }
 #elif defined(_WIN32)
-    // Windows supports AF_UNIX (Unix domain) sockets, which materialize as a
-    // reparse-point file on disk. Winsock must be initialized before use; this
-    // is done once per process by WinsockInit below.
-    std::string create_socket(std::string file) {
-      static const int wsaInit = WinsockInit();
-      (void)wsaInit;
+  // Windows supports AF_UNIX (Unix domain) sockets, which materialize as a
+  // reparse-point file on disk. Winsock must be initialized before use; this
+  // is done once per process by WinsockInit below.
+  std::string create_socket(std::string file) {
+    static const int wsaInit = WinsockInit();
+    (void)wsaInit;
 
-      file = sanitize_path(std::move(file));
+    file = sanitize_path(std::move(file));
 
-      ::sockaddr_un address;
-      address.sun_family = AF_UNIX;
-      assert(file.size() < sizeof(address.sun_path));
-      std::memcpy(address.sun_path, file.c_str(), file.size() + 1);
+    ::sockaddr_un address;
+    address.sun_family = AF_UNIX;
+    assert(file.size() < sizeof(address.sun_path));
+    std::memcpy(address.sun_path, file.c_str(), file.size() + 1);
 
-      SOCKET fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-      assert(fd != INVALID_SOCKET);
-      assert(::bind(fd, reinterpret_cast<::sockaddr*>(&address), sizeof(address)) == 0);
-      // Intentionally leave the socket open: the file exists on disk as long as
-      // the socket lives, which is sufficient for the duration of the test.
-      return file;
-    }
+    SOCKET fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(fd != INVALID_SOCKET);
+    assert(::bind(fd, reinterpret_cast<::sockaddr*>(&address), sizeof(address)) == 0);
+    // Intentionally leave the socket open: the file exists on disk as long as
+    // the socket lives, which is sufficient for the duration of the test.
+    return file;
+  }
 
 private:
-    static int WinsockInit() {
-      WSADATA wsaData;
-      return ::WSAStartup(MAKEWORD(2, 2), &wsaData);
-    }
+  static int WinsockInit() {
+    WSADATA wsaData;
+    return ::WSAStartup(MAKEWORD(2, 2), &wsaData);
+  }
 
 public:
 #endif
 
-    fs::path test_root;
+  fs::path test_root;
 
 private:
-    // This could potentially introduce a filesystem race if multiple
-    // scoped_test_envs were created concurrently in the same test (hence
-    // sharing the same cwd). However, it is fairly unlikely to happen as
-    // we generally don't use scoped_test_env from multiple threads, so
-    // this is deemed acceptable.
-    // The cwd.filename() itself isn't unique across all tests in the suite,
-    // so start the numbering from a hash of the full cwd, to avoid
-    // different tests interfering with each other.
-    static inline fs::path available_cwd_path() {
-        fs::path const cwd = utils::getcwd();
-        fs::path const tmp = fs::temp_directory_path();
-        std::string base = cwd.filename().string();
-        std::size_t i = std::hash<std::string>()(cwd.string());
-        fs::path p = tmp / (base + "-static_env." + std::to_string(i));
-        while (utils::exists(p.string())) {
-            p = tmp / (base + "-static_env." + std::to_string(++i));
-        }
-        return p;
+  // This could potentially introduce a filesystem race if multiple
+  // scoped_test_envs were created concurrently in the same test (hence
+  // sharing the same cwd). However, it is fairly unlikely to happen as
+  // we generally don't use scoped_test_env from multiple threads, so
+  // this is deemed acceptable.
+  // The cwd.filename() itself isn't unique across all tests in the suite,
+  // so start the numbering from a hash of the full cwd, to avoid
+  // different tests interfering with each other.
+  static inline fs::path available_cwd_path() {
+    fs::path const cwd = utils::getcwd();
+    fs::path const tmp = fs::temp_directory_path();
+    std::string base   = cwd.filename().string();
+    std::size_t i      = std::hash<std::string>()(cwd.string());
+    fs::path p         = tmp / (base + "-static_env." + std::to_string(i));
+    while (utils::exists(p.string())) {
+      p = tmp / (base + "-static_env." + std::to_string(++i));
     }
+    return p;
+  }
 };
 
 /// This class generates the following tree:
@@ -425,104 +410,92 @@ private:
 ///     `-- symlink_to_empty_file -> empty_file
 ///
 class static_test_env {
-    scoped_test_env env_;
+  scoped_test_env env_;
+
 public:
-    static_test_env() {
-        env_.create_symlink("dne", "bad_symlink", false);
-        env_.create_dir("dir1");
-        env_.create_dir("dir1/dir2");
-        env_.create_file("dir1/dir2/afile3");
-        env_.create_dir("dir1/dir2/dir3");
-        env_.create_file("dir1/dir2/dir3/file5");
-        env_.create_file("dir1/dir2/file4");
-        env_.create_directory_symlink("dir3", "dir1/dir2/symlink_to_dir3", false);
-        env_.create_file("dir1/file1");
-        env_.create_file("dir1/file2", 42);
-        env_.create_file("empty_file");
-        env_.create_file("non_empty_file", 42);
-        env_.create_directory_symlink("dir1", "symlink_to_dir", false);
-        env_.create_symlink("empty_file", "symlink_to_empty_file", false);
-    }
+  static_test_env() {
+    env_.create_symlink("dne", "bad_symlink", false);
+    env_.create_dir("dir1");
+    env_.create_dir("dir1/dir2");
+    env_.create_file("dir1/dir2/afile3");
+    env_.create_dir("dir1/dir2/dir3");
+    env_.create_file("dir1/dir2/dir3/file5");
+    env_.create_file("dir1/dir2/file4");
+    env_.create_directory_symlink("dir3", "dir1/dir2/symlink_to_dir3", false);
+    env_.create_file("dir1/file1");
+    env_.create_file("dir1/file2", 42);
+    env_.create_file("empty_file");
+    env_.create_file("non_empty_file", 42);
+    env_.create_directory_symlink("dir1", "symlink_to_dir", false);
+    env_.create_symlink("empty_file", "symlink_to_empty_file", false);
+  }
 
-    const fs::path Root = env_.test_root;
+  const fs::path Root = env_.test_root;
 
-    fs::path makePath(fs::path const& p) const {
-        // env_path is expected not to contain symlinks.
-        fs::path const& env_path = Root;
-        return env_path / p;
-    }
+  fs::path makePath(fs::path const& p) const {
+    // env_path is expected not to contain symlinks.
+    fs::path const& env_path = Root;
+    return env_path / p;
+  }
 
-    const std::vector<fs::path> TestFileList = {
-        makePath("empty_file"),
-        makePath("non_empty_file"),
-        makePath("dir1/file1"),
-        makePath("dir1/file2")
-    };
+  const std::vector<fs::path> TestFileList = {
+      makePath("empty_file"), makePath("non_empty_file"), makePath("dir1/file1"), makePath("dir1/file2")};
 
-    const std::vector<fs::path> TestDirList = {
-        makePath("dir1"),
-        makePath("dir1/dir2"),
-        makePath("dir1/dir2/dir3")
-    };
+  const std::vector<fs::path> TestDirList = {makePath("dir1"), makePath("dir1/dir2"), makePath("dir1/dir2/dir3")};
 
-    const fs::path File          = TestFileList[0];
-    const fs::path Dir           = TestDirList[0];
-    const fs::path Dir2          = TestDirList[1];
-    const fs::path Dir3          = TestDirList[2];
-    const fs::path SymlinkToFile = makePath("symlink_to_empty_file");
-    const fs::path SymlinkToDir  = makePath("symlink_to_dir");
-    const fs::path BadSymlink    = makePath("bad_symlink");
-    const fs::path DNE           = makePath("DNE");
-    const fs::path EmptyFile     = TestFileList[0];
-    const fs::path NonEmptyFile  = TestFileList[1];
-    const fs::path CharFile      = "/dev/null"; // Hopefully this exists
+  const fs::path File          = TestFileList[0];
+  const fs::path Dir           = TestDirList[0];
+  const fs::path Dir2          = TestDirList[1];
+  const fs::path Dir3          = TestDirList[2];
+  const fs::path SymlinkToFile = makePath("symlink_to_empty_file");
+  const fs::path SymlinkToDir  = makePath("symlink_to_dir");
+  const fs::path BadSymlink    = makePath("bad_symlink");
+  const fs::path DNE           = makePath("DNE");
+  const fs::path EmptyFile     = TestFileList[0];
+  const fs::path NonEmptyFile  = TestFileList[1];
+  const fs::path CharFile      = "/dev/null"; // Hopefully this exists
 
-    const std::vector<fs::path> DirIterationList = {
-        makePath("dir1/dir2"),
-        makePath("dir1/file1"),
-        makePath("dir1/file2")
-    };
+  const std::vector<fs::path> DirIterationList = {
+      makePath("dir1/dir2"), makePath("dir1/file1"), makePath("dir1/file2")};
 
-    const std::vector<fs::path> DirIterationListDepth1 = {
-        makePath("dir1/dir2/afile3"),
-        makePath("dir1/dir2/dir3"),
-        makePath("dir1/dir2/symlink_to_dir3"),
-        makePath("dir1/dir2/file4"),
-    };
+  const std::vector<fs::path> DirIterationListDepth1 = {
+      makePath("dir1/dir2/afile3"),
+      makePath("dir1/dir2/dir3"),
+      makePath("dir1/dir2/symlink_to_dir3"),
+      makePath("dir1/dir2/file4"),
+  };
 
-    const std::vector<fs::path> RecDirIterationList = {
-        makePath("dir1/dir2"),
-        makePath("dir1/file1"),
-        makePath("dir1/file2"),
-        makePath("dir1/dir2/afile3"),
-        makePath("dir1/dir2/dir3"),
-        makePath("dir1/dir2/symlink_to_dir3"),
-        makePath("dir1/dir2/file4"),
-        makePath("dir1/dir2/dir3/file5")
-    };
+  const std::vector<fs::path> RecDirIterationList = {
+      makePath("dir1/dir2"), makePath("dir1/file1"), makePath("dir1/file2"), makePath("dir1/dir2/afile3"),
+      makePath("dir1/dir2/dir3"),
+      makePath("dir1/dir2/symlink_to_dir3"),
+      makePath("dir1/dir2/file4"),
+      makePath("dir1/dir2/dir3/file5")};
 
-    const std::vector<fs::path> RecDirFollowSymlinksIterationList = {
-        makePath("dir1/dir2"),
-        makePath("dir1/file1"),
-        makePath("dir1/file2"),
-        makePath("dir1/dir2/afile3"),
-        makePath("dir1/dir2/dir3"),
-        makePath("dir1/dir2/file4"),
-        makePath("dir1/dir2/dir3/file5"),
-        makePath("dir1/dir2/symlink_to_dir3"),
-        makePath("dir1/dir2/symlink_to_dir3/file5"),
-    };
+  const std::vector<fs::path> RecDirFollowSymlinksIterationList = {
+      makePath("dir1/dir2"),
+      makePath("dir1/file1"),
+      makePath("dir1/file2"),
+      makePath("dir1/dir2/afile3"),
+      makePath("dir1/dir2/dir3"),
+      makePath("dir1/dir2/file4"),
+      makePath("dir1/dir2/dir3/file5"),
+      makePath("dir1/dir2/symlink_to_dir3"),
+      makePath("dir1/dir2/symlink_to_dir3/file5"),
+  };
 };
 
 struct CWDGuard {
   std::string oldCwd_;
-  CWDGuard() : oldCwd_(utils::getcwd()) { }
+  CWDGuard()
+      : oldCwd_(utils::getcwd())
+  {}
   ~CWDGuard() {
     int ret = ::chdir(oldCwd_.c_str());
     assert(ret == 0 && "chdir failed");
   }
 
-  CWDGuard(CWDGuard const&) = delete;
+  CWDGuard(CWDGuard const&)            = delete;
   CWDGuard& operator=(CWDGuard const&) = delete;
 };
 
@@ -549,8 +522,7 @@ inline std::error_code GetTestEC(unsigned Idx = 0) {
   return std::make_error_code(GetErrc());
 }
 
-inline bool ErrorIsImp(const std::error_code& ec,
-                       std::vector<std::errc> const& errors) {
+inline bool ErrorIsImp(const std::error_code& ec, std::vector<std::errc> const& errors) {
   std::error_condition cond = ec.default_error_condition();
   for (auto errc : errors) {
     if (cond.value() == static_cast<int>(errc))
@@ -567,16 +539,17 @@ inline bool ErrorIs(const std::error_code& ec, std::errc First, ErrcT... Rest) {
 
 // Provide our own Sleep routine since std::this_thread::sleep_for is not
 // available in single-threaded mode.
-template <class Dur> void SleepFor(Dur dur) {
-    using namespace std::chrono;
+template <class Dur>
+void SleepFor(Dur dur) {
+  using namespace std::chrono;
 #if !_LIBCPP_HAS_MONOTONIC_CLOCK
-    using Clock = system_clock;
+  using Clock = system_clock;
 #else
-    using Clock = steady_clock;
+  using Clock = steady_clock;
 #endif
-    const auto wake_time = Clock::now() + dur;
-    while (Clock::now() < wake_time)
-        ;
+  const auto wake_time = Clock::now() + dur;
+  while (Clock::now() < wake_time)
+    ;
 }
 
 inline fs::perms NormalizeExpectedPerms(fs::perms P) {
@@ -588,8 +561,7 @@ inline fs::perms NormalizeExpectedPerms(fs::perms P) {
   // all users.
   P |= fs::perms::owner_read | fs::perms::group_read | fs::perms::others_read;
   P |= fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec;
-  fs::perms Write =
-      fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
+  fs::perms Write = fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
   if ((P & Write) != fs::perms::none)
     P |= Write;
 #endif
@@ -604,19 +576,29 @@ struct ExceptionChecker {
   const char* func_name;
   std::string opt_message;
 
-  explicit ExceptionChecker(std::errc first_err, const char* fun_name,
-                            std::string opt_msg = {})
-      : expected_err{first_err}, num_paths(0), func_name(fun_name),
-        opt_message(opt_msg) {}
-  explicit ExceptionChecker(fs::path p, std::errc first_err,
-                            const char* fun_name, std::string opt_msg = {})
-      : expected_err(first_err), expected_path1(p), num_paths(1),
-        func_name(fun_name), opt_message(opt_msg) {}
+  explicit ExceptionChecker(std::errc first_err, const char* fun_name, std::string opt_msg = {})
+      : expected_err{first_err},
+        num_paths(0),
+        func_name(fun_name),
+        opt_message(opt_msg)
+  {}
+  explicit ExceptionChecker(fs::path p, std::errc first_err, const char* fun_name, std::string opt_msg = {})
+      : expected_err(first_err),
+        expected_path1(p),
+        num_paths(1),
+        func_name(fun_name),
+        opt_message(opt_msg)
+  {}
 
-  explicit ExceptionChecker(fs::path p1, fs::path p2, std::errc first_err,
-                            const char* fun_name, std::string opt_msg = {})
-      : expected_err(first_err), expected_path1(p1), expected_path2(p2),
-        num_paths(2), func_name(fun_name), opt_message(opt_msg) {}
+  explicit ExceptionChecker(fs::path p1, fs::path p2, std::errc first_err, const char* fun_name,
+                            std::string opt_msg = {})
+      : expected_err(first_err),
+        expected_path1(p1),
+        expected_path2(p2),
+        num_paths(2),
+        func_name(fun_name),
+        opt_message(opt_msg)
+  {}
 
   void operator()(fs::filesystem_error const& Err) {
     assert(ErrorIsImp(Err.code(), {expected_err}));
@@ -636,23 +618,17 @@ struct ExceptionChecker {
     if (!opt_message.empty()) {
       additional_msg = opt_message + ": ";
     }
-    auto transform_path = [](const fs::path& p) {
-      return "\"" + p.string() + "\"";
-    };
-    std::string format = [&]() -> std::string {
+    auto transform_path = [](const fs::path& p) { return "\"" + p.string() + "\""; };
+    std::string format  = [&]() -> std::string {
       switch (num_paths) {
       case 0:
-        return format_string("filesystem error: in %s: %s%s", func_name,
-                             additional_msg, message);
+        return format_string("filesystem error: in %s: %s%s", func_name, additional_msg, message);
       case 1:
-        return format_string("filesystem error: in %s: %s%s [%s]", func_name,
-                             additional_msg, message,
+        return format_string("filesystem error: in %s: %s%s [%s]", func_name, additional_msg, message,
                              transform_path(expected_path1).c_str());
       case 2:
-        return format_string("filesystem error: in %s: %s%s [%s] [%s]",
-                             func_name, additional_msg, message,
-                             transform_path(expected_path1).c_str(),
-                             transform_path(expected_path2).c_str());
+        return format_string("filesystem error: in %s: %s%s [%s] [%s]", func_name, additional_msg, message,
+                             transform_path(expected_path1).c_str(), transform_path(expected_path2).c_str());
       default:
         TEST_FAIL("unexpected case");
         return "";
@@ -666,9 +642,8 @@ struct ExceptionChecker {
     }
   }
 
-  ExceptionChecker(ExceptionChecker const&) = delete;
+  ExceptionChecker(ExceptionChecker const&)            = delete;
   ExceptionChecker& operator=(ExceptionChecker const&) = delete;
-
 };
 
 inline fs::path GetWindowsInaccessibleDir() {
@@ -677,28 +652,31 @@ inline fs::path GetWindowsInaccessibleDir() {
   const fs::path dir("C:\\System Volume Information");
   std::error_code ec;
   const fs::path root("C:\\");
-  for (const auto &ent : fs::directory_iterator(root, ec)) {
+  for (const auto& ent : fs::directory_iterator(root, ec)) {
     if (ent != dir)
       continue;
     // Basic sanity checks on the directory_entry
     if (!ent.exists() || !ent.is_directory()) {
-      std::fprintf(stderr, "The expected inaccessible directory \"%s\" was found "
-                           "but doesn't behave as expected, skipping tests "
-                           "regarding it\n", dir.string().c_str());
+      std::fprintf(stderr,
+                   "The expected inaccessible directory \"%s\" was found "
+                   "but doesn't behave as expected, skipping tests "
+                   "regarding it\n", dir.string().c_str());
       return fs::path();
     }
     // Check that it indeed is inaccessible as expected
     (void)fs::exists(ent, ec);
     if (!ec) {
-      std::fprintf(stderr, "The expected inaccessible directory \"%s\" was found "
-                           "but seems to be accessible, skipping tests "
-                           "regarding it\n", dir.string().c_str());
+      std::fprintf(stderr,
+                   "The expected inaccessible directory \"%s\" was found "
+                   "but seems to be accessible, skipping tests "
+                   "regarding it\n", dir.string().c_str());
       return fs::path();
     }
     return ent;
   }
-  std::fprintf(stderr, "No inaccessible directory \"%s\" found, skipping tests "
-                       "regarding it\n", dir.string().c_str());
+  std::fprintf(stderr,
+               "No inaccessible directory \"%s\" found, skipping tests "
+               "regarding it\n", dir.string().c_str());
   return fs::path();
 }
 
