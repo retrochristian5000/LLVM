@@ -460,19 +460,58 @@ protected:
   const ArraySpec &arraySpec();
   void set_arraySpec(const ArraySpec arraySpec) { arraySpec_ = arraySpec; }
   const ArraySpec &coarraySpec();
+  std::list<Bound> &droppedBoundsToCheck() { return droppedBoundsToCheck_; }
+  const std::list<Bound> &attrDroppedBoundsToCheck() const {
+    return attrDroppedBoundsToCheck_;
+  }
+  // Bounds from a DIMENSION attribute's array-spec that an entity-decl's own
+  // array-spec has overridden.  They are no longer part of the entity's shape,
+  // but they remain specification expressions that must be validated.  Copies
+  // are returned because the attribute applies to every entity-decl in the
+  // statement.
+  std::list<Bound> overriddenAttrArraySpecBounds() const {
+    std::list<Bound> result;
+    if (!arraySpec_.empty() && !attrArraySpec_.empty()) {
+      for (const ShapeSpec &spec : attrArraySpec_) {
+        for (const Bound *bound : {&spec.lbound(), &spec.ubound()}) {
+          // A constant bound -- notably the synthesized default lower bound of
+          // 1 when only an upper bound was written -- is trivially a valid
+          // specification expression, so retain only bounds that might
+          // reference something requiring validation.
+          if (const auto &expr{bound->GetExplicit()};
+              expr && !evaluate::IsConstantExpr(*expr)) {
+            result.push_back(*bound);
+          }
+        }
+      }
+    }
+    return result;
+  }
   void BeginArraySpec();
   void EndArraySpec();
-  void ClearArraySpec() { arraySpec_.clear(); }
+  void ClearArraySpec() {
+    arraySpec_.clear();
+    droppedBoundsToCheck_.clear();
+  }
   void ClearCoarraySpec() { coarraySpec_.clear(); }
 
 private:
   // arraySpec_/coarraySpec_ are populated from any ArraySpec/CoarraySpec
   ArraySpec arraySpec_;
   ArraySpec coarraySpec_;
+  // Bounds of a zero-size explicit-shape bounds array (F2023): the entity is
+  // scalar, so these specification expressions are stashed here and validated
+  // later rather than stored in the shape.
+  std::list<Bound> droppedBoundsToCheck_;
   // When an ArraySpec is under an AttrSpec or ComponentAttrSpec, it is moved
   // into attrArraySpec_
   ArraySpec attrArraySpec_;
   ArraySpec attrCoarraySpec_;
+  // Bounds dropped from a zero-size or overriden DIMENSION attribute (F2023).
+  // Like attrArraySpec_, this is statement-level: it survives per-entity
+  // clearing so the bounds are validated for every entity-decl the attribute
+  // applies to, even when an entity-decl's own array-spec overrides the shape.
+  std::list<Bound> attrDroppedBoundsToCheck_;
 
   void PostAttrSpec();
 };
@@ -2935,7 +2974,7 @@ void ArraySpecVisitor::Post(const parser::RankClause &x) {
 
 void ArraySpecVisitor::Post(const parser::ArraySpec &x) {
   CHECK(arraySpec_.empty());
-  arraySpec_ = AnalyzeArraySpec(context(), x);
+  arraySpec_ = AnalyzeArraySpec(context(), x, droppedBoundsToCheck_);
 }
 void ArraySpecVisitor::Post(const parser::ComponentArraySpec &x) {
   CHECK(arraySpec_.empty());
@@ -2957,12 +2996,15 @@ void ArraySpecVisitor::BeginArraySpec() {
   CHECK(coarraySpec_.empty());
   CHECK(attrArraySpec_.empty());
   CHECK(attrCoarraySpec_.empty());
+  CHECK(attrDroppedBoundsToCheck_.empty());
 }
 void ArraySpecVisitor::EndArraySpec() {
   CHECK(arraySpec_.empty());
   CHECK(coarraySpec_.empty());
   attrArraySpec_.clear();
   attrCoarraySpec_.clear();
+  droppedBoundsToCheck_.clear();
+  attrDroppedBoundsToCheck_.clear();
 }
 void ArraySpecVisitor::PostAttrSpec() {
   // Save dimension/codimension from attrs so we can process array/coarray-spec
@@ -2976,6 +3018,11 @@ void ArraySpecVisitor::PostAttrSpec() {
           "Attribute 'DIMENSION' cannot be used more than once"_err_en_US);
     }
   }
+  // A zero-size DIMENSION attribute leaves arraySpec_ empty but produces bounds
+  // to check; move them to the statement-level list so they apply to every
+  // entity-decl.
+  attrDroppedBoundsToCheck_.splice(
+      attrDroppedBoundsToCheck_.end(), droppedBoundsToCheck_);
   if (!coarraySpec_.empty()) {
     if (attrCoarraySpec_.empty()) {
       attrCoarraySpec_ = coarraySpec_;
@@ -6493,7 +6540,11 @@ void DeclarationVisitor::Post(const parser::ObjectDecl &x) {
 // Declare an entity not yet known to be an object or proc.
 Symbol &DeclarationVisitor::DeclareUnknownEntity(
     const parser::Name &name, Attrs attrs) {
-  if (!arraySpec().empty() || !coarraySpec().empty()) {
+  if (!arraySpec().empty() || !coarraySpec().empty() ||
+      !droppedBoundsToCheck().empty() || !attrDroppedBoundsToCheck().empty()) {
+    // A zero-size explicit-shape bounds array (F2023) declares a scalar with an
+    // empty arraySpec, but still carries dropped bound checks that must be
+    // stashed on an ObjectEntityDetails, so route it to DeclareObjectEntity.
     return DeclareObjectEntity(name, attrs);
   } else {
     Symbol &symbol{DeclareEntity<EntityDetails>(name, attrs)};
@@ -6622,6 +6673,24 @@ Symbol &DeclarationVisitor::DeclareObjectEntity(
       } else {
         details->set_coshape(coarraySpec());
       }
+    }
+    // Stash bounds from a zero-size explicit-shape bounds array (F2023).  The
+    // entity is scalar, so these are not part of its shape, but they are still
+    // specification expressions to be validated during declaration checking.
+    // Bounds from the entity-decl's own array-spec are moved; those from a
+    // DIMENSION attribute are copied, since the attribute applies to every
+    // entity-decl in the statement.
+    for (Bound &bound : droppedBoundsToCheck()) {
+      details->add_droppedBoundToCheck(std::move(bound));
+    }
+    for (const Bound &bound : attrDroppedBoundsToCheck()) {
+      details->add_droppedBoundToCheck(Bound{bound});
+    }
+    // An entity-decl's own array-spec overrides the DIMENSION attribute's
+    // array-spec (a non-zero-size bounds array), but the attribute's bounds
+    // remain specification expressions that must be validated.
+    for (Bound &bound : overriddenAttrArraySpecBounds()) {
+      details->add_droppedBoundToCheck(std::move(bound));
     }
     SetBindNameOn(symbol);
   }
