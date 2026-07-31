@@ -35,12 +35,12 @@ namespace language_runtime = llvm::offload::kernel;
 Error_t Malloc(void **DevPtr, size_t Size) {
   ol_device_handle_t Device = language_runtime::getDefaultDevice();
   ol_result_t Result = olMemAlloc(Device, OL_ALLOC_TYPE_DEVICE, Size, DevPtr);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t Free(void *DevPtr) {
   ol_result_t Result = olMemFree(DevPtr);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t Memcpy(void *Dst, const void *Src, size_t Size, MemcpyKind Kind) {
@@ -77,10 +77,11 @@ Error_t Memcpy(void *Dst, const void *Src, size_t Size, MemcpyKind Kind) {
     fprintf(stderr, LANGUAGE_STR "MemcpyDefault is not implemented yet");
     abort();
   };
-
+  if (Result != OL_SUCCESS) {
+    return LastError = convertResult(Result);
+  }
   Result = olSyncQueue(Queue);
-
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t DeviceSynchronize() {
@@ -88,35 +89,35 @@ Error_t DeviceSynchronize() {
   // plugins.
   ol_queue_handle_t Queue = language_runtime::getDefaultQueue();
   ol_result_t Result = olSyncQueue(Queue);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t GetDevice(int *DeviceNo) {
   ol_device_handle_t Device = language_runtime::getDevice(DeviceNo);
   if (!Device)
-    return ErrorInvalidDevice;
-  return Success;
+    return LastError = ErrorInvalidDevice;
+  return LastError = Success;
 }
 
 Error_t GetDeviceCount(int *Count) {
   *Count = language_runtime::getDeviceCount();
-  return Success;
+  return LastError = Success;
 }
 
 Error_t SetDevice(int DeviceNo) {
   ol_device_handle_t Device = language_runtime::setDefaultDevice(DeviceNo);
   if (!Device)
-    return ErrorInvalidDevice;
+    return LastError = ErrorInvalidDevice;
   assert(Device == language_runtime::getDefaultDevice() &&
          "Set Device is not Default Device");
-  return Success;
+  return LastError = Success;
 }
 
 Error_t HostAlloc(void **Ptr, size_t Size, unsigned int Flags) {
   // TODO:
   ol_device_handle_t Device = language_runtime::getDefaultDevice();
   ol_result_t Result = olMemAllocHost(Device, Size, Ptr);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t MallocHost(void **Ptr, size_t Size) {
@@ -125,7 +126,7 @@ Error_t MallocHost(void **Ptr, size_t Size) {
 
 Error_t FreeHost(void *Ptr) {
   ol_result_t Result = olMemFree(Ptr);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t GetDeviceProperties(DeviceProp_t *DeviceProp, int DeviceNo) {
@@ -139,7 +140,7 @@ Error_t GetDeviceProperties(DeviceProp_t *DeviceProp, int DeviceNo) {
                   &DeviceProp->multiProcessorCount);
   olGetDeviceInfo(Device, OL_DEVICE_INFO_NUM_LANES, sizeof(uint32_t),
                   &DeviceProp->warpSize);
-  return Success;
+  return LastError = Success;
 }
 
 Error_t StreamCreate(Stream_t *Stream) {
@@ -148,23 +149,23 @@ Error_t StreamCreate(Stream_t *Stream) {
       olCreateQueue(language_runtime::getDefaultDevice(), &Queue);
   if (Result == OL_SUCCESS)
     *Stream = reinterpret_cast<Stream_t>(Queue);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t StreamDestroy(Stream_t Stream) {
   ol_queue_handle_t Queue;
   Error_t Err = getQueueFromStream(Stream, &Queue);
   if (Err != Success)
-    return Err;
+    return LastError = Err;
   ol_result_t Result = olDestroyQueue(Queue);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }
 
 Error_t StreamSynchronize(Stream_t Stream) {
   ol_queue_handle_t Queue;
   Error_t Err = getQueueFromStream(Stream, &Queue);
   if (Err != Success)
-    return Err;
+    return LastError = Err;
   ol_result_t Result = olSyncQueue(Queue);
-  return convertResult(Result);
+  return LastError = convertResult(Result);
 }

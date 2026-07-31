@@ -18,8 +18,12 @@
 #undef ErrorInvalidValue
 #undef ErrorInvalidDevice
 #undef ErrorUnknown
+#undef ErrorInvalidResourceHandle
+#undef ErrorInvalidConfiguration
 #undef GetErrorName
 #undef GetErrorString
+#undef GetLastError
+#undef PeekAtLastError
 #undef MemcpyKind
 #undef MemcpyHostToHost
 #undef MemcpyHostToDevice

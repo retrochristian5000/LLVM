@@ -41,6 +41,16 @@ int main() {
   // CHECK: unknown name: Unrecognized error
   // CHECK: unknown string: Unknown error
 
+  print_error("invalid resource handle", hipErrorInvalidResourceHandle);
+  // CHECK: invalid resource handle value: 4
+  // CHECK: invalid resource handle name: hipErrorInvalidResourceHandle
+  // CHECK: invalid resource handle string: Invalid resource handle
+
+  print_error("invalid configuration", hipErrorInvalidConfiguration);
+  // CHECK: invalid configuration value: 5
+  // CHECK: invalid configuration name: hipErrorInvalidConfiguration
+  // CHECK: invalid configuration string: Invalid configuration argument
+
   hipError_t Unrecognized = static_cast<hipError_t>(999);
   print_error("unrecognized", Unrecognized);
   // CHECK: unrecognized value: 999

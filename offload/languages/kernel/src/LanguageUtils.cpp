@@ -20,10 +20,19 @@ static Error_t convertResult(ol_result_t Result) {
     return ErrorInvalidValue;
   case OL_ERRC_INVALID_DEVICE:
     return ErrorInvalidDevice;
+  case OL_ERRC_INVALID_SIZE:
+    return ErrorInvalidConfiguration;
+  case OL_ERRC_INVALID_NULL_HANDLE:
+  case OL_ERRC_INVALID_QUEUE:
+  case OL_ERRC_INVALID_EVENT:
+  case OL_ERRC_INVALID_CONTEXT:
+    return ErrorInvalidResourceHandle;
   default:
     return ErrorUnknown;
   }
 }
+
+static thread_local Error_t LastError = Success;
 
 const char *GetErrorName(Error_t Error) {
   switch (Error) {
@@ -35,6 +44,8 @@ const char *GetErrorName(Error_t Error) {
     LLVM_OFFLOAD_ERR_STR(Success)
     LLVM_OFFLOAD_ERR_STR(ErrorInvalidValue)
     LLVM_OFFLOAD_ERR_STR(ErrorInvalidDevice)
+    LLVM_OFFLOAD_ERR_STR(ErrorInvalidResourceHandle)
+    LLVM_OFFLOAD_ERR_STR(ErrorInvalidConfiguration)
 #undef LLVM_OFFLOAD_ERR_STR
 #undef LLVM_OFFLOAD_STRINGIFY
 #undef LLVM_OFFLOAD_STRINGIFY_IMPL
@@ -53,9 +64,21 @@ const char *GetErrorString(Error_t Error) {
     return "Invalid device number";
   case ErrorUnknown:
     return "Unknown error";
+  case ErrorInvalidResourceHandle:
+    return "Invalid resource handle";
+  case ErrorInvalidConfiguration:
+    return "Invalid configuration argument";
   }
   return "Unrecognized error";
 }
+
+Error_t GetLastError() {
+  Error_t Error = LastError;
+  LastError = Success;
+  return Error;
+}
+
+Error_t PeekAtLastError() { return LastError; }
 
 static Error_t getQueueFromStream(Stream_t Stream, ol_queue_handle_t *Queue) {
   if (!Stream)
