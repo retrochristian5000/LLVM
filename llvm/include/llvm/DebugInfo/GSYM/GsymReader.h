@@ -85,6 +85,10 @@ public:
   /// Get the string offset byte size for this GSYM file.
   virtual uint8_t getStringOffsetSize() const = 0;
 
+  /// Get the raw UUID bytes for this GSYM file, or an empty ref if none.
+  /// In v1 the UUID lives in the header; in v2 it is an optional data section.
+  virtual StringRef getUUID() const = 0;
+
   /// Construct a GsymReader from a file on disk.
   ///
   /// \param Path The file path the GSYM file to read.
@@ -198,6 +202,19 @@ public:
   ///
   /// \param  OS The output stream to dump to.
   virtual void dump(raw_ostream &OS) = 0;
+
+  enum class StatisticsFormat { Text, JSON, PrettyJSON };
+
+  /// Dump statistics about the GSYM data contained in this object.
+  ///
+  /// \param GSYMPath The file path used for display and to get file size.
+  ///
+  /// \param OS The output stream to dump to.
+  ///
+  /// \param Format Output format: Text, JSON (dense), or PrettyJSON.
+  LLVM_ABI void
+  dumpStatistics(StringRef GSYMPath, raw_ostream &OS,
+                 StatisticsFormat Format = StatisticsFormat::Text);
 
   /// Dump a FunctionInfo object.
   ///
@@ -401,10 +418,9 @@ protected:
   /// AddrOffsets member variable.
   ///
   /// \returns An ArrayRef of an appropriate address offset size.
-  template <class T> ArrayRef<T>
-  getAddrOffsets() const {
+  template <class T> ArrayRef<T> getAddrOffsets() const {
     return ArrayRef<T>(reinterpret_cast<const T *>(AddrOffsets.data()),
-                       AddrOffsets.size()/sizeof(T));
+                       AddrOffsets.size() / sizeof(T));
   }
 
   /// Get an appropriate address from the address table.
