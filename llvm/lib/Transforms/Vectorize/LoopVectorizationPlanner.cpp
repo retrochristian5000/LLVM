@@ -67,6 +67,10 @@ static cl::opt<bool> ForceTargetSupportsGatherScatterOps(
     cl::desc("Assume the target supports gather/scatter operations (used for "
              "testing)."));
 
+static cl::opt<float> ScalableEpilogueVFCostScaleFactor(
+    "scalable-epilogue-vf-cost-scale-factor", cl::init(2.0), cl::Hidden,
+    cl::desc("Scale the cost of scalable epilogue VFs by this factor."));
+
 /// Write a \p DebugMsg about vectorization to the debug output stream. If \p I
 /// is passed, the message relates to that particular instruction.
 #ifndef NDEBUG
@@ -706,10 +710,10 @@ bool LoopVectorizationPlanner::isMoreProfitable(const VectorizationFactor &A,
         !B.Width.isScalar())
       return true;
 
-  // Prefer fixed VFs for epilogue loops (unless the fixed cost is much more
-  // expensive -- >= 2x). There are some extra costs for using scalable vectors
-  // in epilogues (e.g., reduced post-vectorization unrolling) that are not
-  // represented in the cost. TODO: Reconsider this restriction for predicated
+  // Favor fixed VFs for epilogue loops by scaling the costs of scalable VFs
+  // 'ScalableEpilogueVFCostScaleFactor' (default 2.0). This is intended to
+  // model that fixed VFs are more likely to be fully unrolled (or optimized
+  // out) post vectorization. TODO: Reconsider this restriction for predicated
   // epilogues (once supported).
   if (IsEpilogue && A.Width.isScalable() != B.Width.isScalable() &&
       A.Cost.isValid() && B.Cost.isValid()) {
@@ -717,7 +721,9 @@ bool LoopVectorizationPlanner::isMoreProfitable(const VectorizationFactor &A,
     if (B.Width.isFixed())
       std::swap(FixedCost, ScalableCost);
 
-    if (FixedCost / ScalableCost <= 2)
+    ScalableCost *= ScalableEpilogueVFCostScaleFactor.getValue();
+
+    if (FixedCost <= ScalableCost)
       return A.Width.isFixed();
   }
 
