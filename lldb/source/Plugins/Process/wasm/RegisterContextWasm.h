@@ -60,6 +60,14 @@ public:
                      const RegisterValue &value) override;
 
 private:
+  /// The module whose code this context's frame is executing, which a virtual
+  /// register number has no room to carry. Taken from the frame's program
+  /// counter, which is the only place the module of a frame LLDB made from the
+  /// registers is recorded. Resolved on each use: the innermost frame's context
+  /// is the thread's own and outlives any stop, so an answer held onto would
+  /// start naming the module of a previous stop.
+  uint32_t GetModuleID();
+
   std::unordered_map<size_t, std::unique_ptr<WasmVirtualRegisterInfo>>
       m_register_map;
 };

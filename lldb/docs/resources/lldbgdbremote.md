@@ -2657,9 +2657,22 @@ stack traces.
 
 ### qWasmGlobal
 
-Get the value of a Wasm global variable for the given frame index at the given
-variable index. The indexes are encoded as base 10. The result is a hex-encoded
-little-endian value of the global.
+Get the value of a Wasm global variable at the given variable index, in the
+module instance that holds it. The indexes are encoded as base 10. The result is
+a hex-encoded little-endian value of the whole global, or `E<nn>`.
+
+A global index space belongs to a module instance, so an index only names a
+global together with the instance to read it from. A stub that advertises
+`qWasmInstance+` is given that instance as an address space:
+
+```
+send packet: $qWasmGlobal:2;address_space:16;#2e
+read packet: $e0030100#b9
+```
+
+A stub that does not is given a frame index in place of the suffix. A frame can
+only stand in for the instance it is executing, which leaves a global of an
+instance with no active frame out of reach:
 
 ```
 send packet: $qWasmGlobal:0;2#cb
@@ -2668,6 +2681,46 @@ read packet: $e0030100#b9
 
 **Priority to Implement:** Only required for Wasm support. Necessary to show
 variables.
+
+
+### qWasmInstance (qSupported feature)
+
+A stub advertises `qWasmInstance+` in its `qSupported` response
+when it can be told which module instance to read from, rather than only serving
+what a frame can reach.
+
+A module instance has address spaces of its own, so a Wasm stub names an
+instance with a `;address_space:<id>;` key-value suffix, in which the id is
+encoded as base 10. A packet whose scope is an instance rather than a frame
+carries that suffix in place of its frame index. Today `qWasmGlobal` is the only
+such packet, and a stub that adds a query for instance-scoped state that no
+address can name has to carry the same suffix rather than introduce a packet of
+its own.
+
+An address in a packet is 64 bits wide: an address space tag in bits 63:62, the
+id of the module instance the address belongs to in bits 61:32, and an offset
+into that space in the low 32 bits. The tag is 0 for linear memory and 1 for the
+object space, which holds the module image. The load address a stub reports for
+an instance in `qXfer:libraries:read` is therefore `(1 << 62) | (<id> << 32)`,
+the base of its module in the object space, to which LLDB adds the offset of each
+section that lives there.
+
+A read of the module image names the instance to read from that way, and so does
+a read of linear memory that LLDB resolves through a loaded section. An address
+the running code computed, such as one relative to a frame base, carries no id,
+and a stub serves it from the instance the current thread is executing. Only a
+global needs the suffix, because a global has no address at all.
+
+The same id appears in the PCs returned by `qWasmCallStack`. Ids are at most 30
+bits wide and unique among live instances, so a stub reports each instance under
+a name and a load address of its own. LLDB keys a module on that name, so two
+entries sharing one name are the same module and only the last load address
+survives. Zero is reserved for the default address space of a process, so a stub
+numbers its instances from one. A stub must answer an id it does not recognize
+with an error rather than with the state of another instance.
+
+**Priority to Implement:** Only required for Wasm support. Necessary to show the
+globals of a module instance that has no active frame.
 
 
 ### qWasmLocal
