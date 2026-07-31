@@ -48,16 +48,19 @@ for.end:                                          ; preds = %for.body
 }
 
 ; CHECK: function 'g':
-; When the stride is not constant, we can speculate the stride.
+; When the stride is not constant, we are forced to do umin/umax to get
+; the interval limits.
 
 ;   for (i = 0; i < 10000; i++) {
 ;     B[i] = A[i] * 3;
 ;   }
 
-; CHECK: Low: (20000 + %a) High: (60004 + %a)
-; CHECK: Equal predicate: %step == 1
+; Here it is not obvious what the limits are, since 'step' could be negative.
 
-define void @g(i64 %step) {
+; CHECK: Low: ((60000 + %a) umin (60000 + (-40000 * %step) + %a))
+; CHECK: High: (4 + ((60000 + %a) umax (60000 + (-40000 * %step) + %a)))
+
+define void @g(i64 %step) optsize {
 entry:
   %a = load ptr, ptr @A, align 8
   %b = load ptr, ptr @B, align 8
