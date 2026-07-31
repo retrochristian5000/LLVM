@@ -3452,8 +3452,15 @@ CIRGenModule::createCIRFunction(mlir::Location loc, StringRef name,
     //
     // Be sure to insert a new function before a current one.
     CIRGenFunction *cgf = this->curCGF;
-    if (cgf)
+    if (cgf) {
       builder.setInsertionPoint(cgf->curFn);
+    } else {
+      // No CIRGenFunction is active, but the builder's insertion point may
+      // still be inside another op (e.g. a function materialized on demand
+      // while generating a vtable thunk).  Insert at module scope so the new
+      // function is not parented under the ambient insertion point.
+      builder.setInsertionPointToEnd(theModule.getBody());
+    }
 
     func = cir::FuncOp::create(builder, loc, name, funcType);
 
@@ -3478,9 +3485,6 @@ CIRGenModule::createCIRFunction(mlir::Location loc, StringRef name,
     // Record the func_info tag, a C++ special member form or a known standard
     // library entity.
     setFuncInfoAttr(func, funcDecl);
-
-    if (!cgf)
-      theModule.push_back(func);
 
     if (this->getLangOpts().OpenACC) {
       // We only have to handle this attribute, since OpenACCAnnotAttrs are
