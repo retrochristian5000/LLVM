@@ -676,7 +676,8 @@ public:
   bool hasSanitizeCoverage() const {
     return SanitizeCoverageType || SanitizeCoverageIndirectCalls ||
            SanitizeCoverageTraceCmp || SanitizeCoverageTraceLoads ||
-           SanitizeCoverageTraceStores || SanitizeCoverageControlFlow;
+           SanitizeCoverageTraceStores || SanitizeCoverageControlFlow ||
+           SanitizeCoverageTraceArgs || SanitizeCoverageTraceRet;
   }
 
   // Check if any one of SanitizeBinaryMetadata* is enabled.
