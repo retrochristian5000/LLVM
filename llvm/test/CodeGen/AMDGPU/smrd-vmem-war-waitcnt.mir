@@ -2,8 +2,6 @@
 # RUN: llc -mtriple=amdgpu9.00 -run-pass=si-insert-waitcnts -o - %s | FileCheck %s
 
 --- |
-  target triple = "amdgcn"
-
   define amdgpu_kernel void @smrd_vmem_may_alias_war(ptr addrspace(1) %src,
                                                      ptr addrspace(1) %dst) {
     ret void
