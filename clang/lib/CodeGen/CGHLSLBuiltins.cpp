@@ -527,6 +527,18 @@ static Value *emitHlslClamp(CodeGenFunction &CGF, const CallExpr *E,
   return Clamp;
 }
 
+static CallInst *emitResourceIntrinsic(CodeGenFunction &CGF, llvm::Type *RetTy,
+                                       Intrinsic::ID ID,
+                                       ArrayRef<Value *> Args) {
+  SmallVector<llvm::Type *> ArgTys;
+  ArgTys.reserve(Args.size());
+  for (Value *Arg : Args)
+    ArgTys.push_back(Arg->getType());
+  Function *IntrFn = Intrinsic::getOrInsertDeclaration(&CGF.CGM.getModule(), ID,
+                                                       RetTy, ArgTys);
+  return CGF.EmitRuntimeCall(IntrFn, Args);
+}
+
 static Value *emitGetDimensions(CodeGenFunction &CGF, const CallExpr *E,
                                 unsigned IntrinsicID, unsigned NumRetComps,
                                 bool HasLod) {
@@ -661,13 +673,13 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
 
     llvm::Type *RetTy = ConvertType(E->getType());
     if (E->getNumArgs() <= 4) {
-      return Builder.CreateIntrinsic(
-          RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(), Args);
+      return emitResourceIntrinsic(
+          *this, RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(), Args);
     }
 
     Args.push_back(emitHlslClamp(*this, E, 4));
-    return Builder.CreateIntrinsic(
-        RetTy, CGM.getHLSLRuntime().getSampleClampIntrinsic(), Args);
+    return emitResourceIntrinsic(
+        *this, RetTy, CGM.getHLSLRuntime().getSampleClampIntrinsic(), Args);
   }
   case Builtin::BI__builtin_hlsl_resource_sample_bias: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
@@ -686,13 +698,14 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     Args.push_back(emitHlslOffset(*this, E, 4, getOffsetType(CGM, RT)));
 
     llvm::Type *RetTy = ConvertType(E->getType());
-    if (E->getNumArgs() <= 5)
-      return Builder.CreateIntrinsic(
-          RetTy, CGM.getHLSLRuntime().getSampleBiasIntrinsic(), Args);
+    if (E->getNumArgs() <= 5) {
+      return emitResourceIntrinsic(
+          *this, RetTy, CGM.getHLSLRuntime().getSampleBiasIntrinsic(), Args);
+    }
 
     Args.push_back(emitHlslClamp(*this, E, 5));
-    return Builder.CreateIntrinsic(
-        RetTy, CGM.getHLSLRuntime().getSampleBiasClampIntrinsic(), Args);
+    return emitResourceIntrinsic(
+        *this, RetTy, CGM.getHLSLRuntime().getSampleBiasClampIntrinsic(), Args);
   }
   case Builtin::BI__builtin_hlsl_resource_sample_grad: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
@@ -821,8 +834,8 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     Value *SamplerOp = EmitScalarExpr(E->getArg(1));
     Value *CoordOp = EmitScalarExpr(E->getArg(2));
 
-    return Builder.CreateIntrinsic(
-        ConvertType(E->getType()),
+    return emitResourceIntrinsic(
+        *this, ConvertType(E->getType()),
         CGM.getHLSLRuntime().getCalculateLodIntrinsic(),
         {HandleOp, SamplerOp, CoordOp});
   }
@@ -831,8 +844,8 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     Value *SamplerOp = EmitScalarExpr(E->getArg(1));
     Value *CoordOp = EmitScalarExpr(E->getArg(2));
 
-    return Builder.CreateIntrinsic(
-        ConvertType(E->getType()),
+    return emitResourceIntrinsic(
+        *this, ConvertType(E->getType()),
         CGM.getHLSLRuntime().getCalculateLodUnclampedIntrinsic(),
         {HandleOp, SamplerOp, CoordOp});
   }
