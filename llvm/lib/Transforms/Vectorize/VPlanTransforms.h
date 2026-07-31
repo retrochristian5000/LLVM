@@ -410,8 +410,7 @@ struct VPlanTransforms {
   /// recipe have been removed.
   static bool removeBranchOnConst(VPlan &Plan, bool OnlyLatches = false);
 
-  /// Perform common-subexpression-elimination on \p Plan. This also CSEs
-  /// redundant widened loads within a basic block.
+  /// Perform common-subexpression-elimination on \p Plan.
   static void cse(VPlan &Plan);
 
   /// If there's a single exit block, optimize its phi recipes that use exiting

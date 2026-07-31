@@ -2309,7 +2309,7 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 } // end anonymous namespace
 
 /// Perform a common-subexpression-elimination of single-def recipes on the \p
-/// Plan, also eliminating redundant widened loads within a basic block.
+/// Plan.
 void VPlanTransforms::cse(VPlan &Plan) {
   VPDominatorTree VPDT(Plan);
   DenseMap<VPSingleDefRecipe *, VPSingleDefRecipe *, VPCSEDenseMapInfo> CSEMap;
