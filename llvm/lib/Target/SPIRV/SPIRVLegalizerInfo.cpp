@@ -405,7 +405,8 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
         return DstTy.isPointerVector() && SrcTy.isVector() &&
                !SrcTy.isPointer() &&
                DstTy.getNumElements() == SrcTy.getNumElements();
-      });
+      })
+      .scalarize(0);
   getActionDefinitionsBuilder(G_PTRTOINT)
       .legalForCartesianProduct(allIntScalars, allPtrs)
       .legalIf(
@@ -416,7 +417,8 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
         return SrcTy.isPointerVector() && DstTy.isVector() &&
                !DstTy.isPointer() &&
                DstTy.getNumElements() == SrcTy.getNumElements();
-      });
+      })
+      .scalarize(0);
   getActionDefinitionsBuilder(G_PTR_ADD)
       .legalForCartesianProduct(allPtrs, allIntScalars)
       .legalIf(
