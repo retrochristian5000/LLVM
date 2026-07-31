@@ -22,7 +22,9 @@
 #include "llvm/CodeGen/GlobalISel/CombinerInfo.h"
 #include "llvm/CodeGen/GlobalISel/GIMatchTableExecutorImpl.h"
 #include "llvm/CodeGen/GlobalISel/GISelValueTracking.h"
+#include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/GlobalISel/MIPatternMatch.h"
+#include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/Target/TargetMachine.h"
@@ -63,6 +65,7 @@ public:
   bool tryCombineAll(MachineInstr &I) const override;
 
   bool isVgprRegBank(Register Reg) const;
+  bool isSgprRegBank(Register Reg) const;
   Register getAsVgpr(Register Reg) const;
 
   struct MinMaxMedOpc {
@@ -103,6 +106,11 @@ public:
   void applyMinMaxToMinMax3(MachineInstr &MI,
                             MinMaxToMinMax3MatchInfo &MatchInfo) const;
 
+  bool matchMergeReadAnyLaneToVgpr(MachineInstr &Copy,
+                                   SmallVector<Register> &Srcs) const;
+  void applyMergeReadAnyLaneToVgpr(MachineInstr &Copy,
+                                   SmallVector<Register> &Srcs) const;
+
 private:
   SIModeRegisterDefaults getMode() const;
   bool getIEEE() const;
@@ -140,7 +148,12 @@ AMDGPURegBankCombinerImpl::AMDGPURegBankCombinerImpl(
 }
 
 bool AMDGPURegBankCombinerImpl::isVgprRegBank(Register Reg) const {
-  return RBI.getRegBank(Reg, MRI, TRI)->getID() == AMDGPU::VGPRRegBankID;
+  const RegisterBank *RB = RBI.getRegBank(Reg, MRI, TRI);
+  return RB && RB->getID() == AMDGPU::VGPRRegBankID;
+}
+
+bool AMDGPURegBankCombinerImpl::isSgprRegBank(Register Reg) const {
+  return MRI.getRegBankOrNull(Reg) == &RBI.getRegBank(AMDGPU::SGPRRegBankID);
 }
 
 Register AMDGPURegBankCombinerImpl::getAsVgpr(Register Reg) const {
@@ -573,6 +586,76 @@ bool AMDGPURegBankCombinerImpl::matchMinMaxToMinMax3(
 
   MatchInfo = {AMDGPUOpc, R0, R1, R2};
   return true;
+}
+
+// Sgpr0 = G_AMDGPU_READANYLANE Vgpr0
+// Src = G_MERGE_LIKE Sgpr0, Sgpr1, ...
+// Dst = COPY Src
+// ->
+// Vgpr1 = COPY Sgpr1
+// Dst = G_MERGE_LIKE Vgpr0, Vgpr1, ...
+//
+// Merge sources that are not readanylanes have to be uniform, copying them to a
+// vgpr is a broadcast. Requires at least one readanylane source, otherwise this
+// would only move the copy from the merge result to its sources.
+bool AMDGPURegBankCombinerImpl::matchMergeReadAnyLaneToVgpr(
+    MachineInstr &Copy, SmallVector<Register> &Srcs) const {
+  Register Dst = Copy.getOperand(0).getReg();
+  Register Src = Copy.getOperand(1).getReg();
+
+  if (!isVgprRegBank(Dst))
+    return false;
+
+  // Skip physical source registers and source registers with register class.
+  if (!Src.isVirtual() || MRI.getRegClassOrNull(Src))
+    return false;
+
+  auto *Merge = getOpcodeDef<GMergeLikeInstr>(Src, MRI);
+  if (!Merge)
+    return false;
+
+  bool SawReadAnyLane = false;
+  for (unsigned I = 0; I < Merge->getNumSources(); ++I) {
+    Register MergeSrc = Merge->getSourceReg(I);
+    if (!MergeSrc.isVirtual())
+      return false;
+
+    MachineInstr *MergeSrcMI = MRI.getVRegDef(MergeSrc);
+    if (MergeSrcMI->getOpcode() == AMDGPU::G_AMDGPU_READANYLANE) {
+      Srcs.push_back(MergeSrcMI->getOperand(1).getReg());
+      SawReadAnyLane = true;
+      continue;
+    }
+
+    if (isSgprRegBank(MergeSrc)) {
+      Srcs.push_back(MergeSrc);
+      continue;
+    }
+
+    return false;
+  }
+
+  return SawReadAnyLane;
+}
+
+void AMDGPURegBankCombinerImpl::applyMergeReadAnyLaneToVgpr(
+    MachineInstr &Copy, SmallVector<Register> &Srcs) const {
+  const RegisterBank &VgprRB = RBI.getRegBank(AMDGPU::VGPRRegBankID);
+  for (Register &Src : Srcs) {
+    if (!isVgprRegBank(Src))
+      Src = B.buildCopy({&VgprRB, MRI.getType(Src)}, Src).getReg(0);
+  }
+
+  Register Dst = Copy.getOperand(0).getReg();
+  if (Dst.isVirtual()) {
+    B.buildMergeLikeInstr(Dst, Srcs);
+  } else {
+    LLT Ty = MRI.getType(Copy.getOperand(1).getReg());
+    auto Merge = B.buildMergeLikeInstr({&VgprRB, Ty}, Srcs);
+    B.buildCopy(Dst, Merge.getReg(0));
+  }
+
+  Copy.eraseFromParent();
 }
 
 bool AMDGPURegBankCombinerImpl::applyD16Load(
