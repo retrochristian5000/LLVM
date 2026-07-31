@@ -2333,10 +2333,12 @@ void VPlanTransforms::cse(VPlan &Plan) {
       if (auto *Load = dyn_cast<VPWidenLoadRecipe>(&R)) {
         VPWidenLoadRecipe *Match = nullptr;
         for (VPWidenLoadRecipe *C : LoadCandidates) {
-          // Consecutive vs. gather loads have different address operands, so
-          // the operand check below also distinguishes those cases.
+          // isConsecutive() and isMasked() are stored separately from the
+          // operands, so they must be compared explicitly.
           if (C->getScalarType() != Load->getScalarType() ||
               C->getAlign() != Load->getAlign() ||
+              C->isConsecutive() != Load->isConsecutive() ||
+              C->isMasked() != Load->isMasked() ||
               !equal(C->operands(), Load->operands()))
             continue;
           Match = C;
