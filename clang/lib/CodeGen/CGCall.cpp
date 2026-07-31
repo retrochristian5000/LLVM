@@ -30,6 +30,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/Basic/CodeGenOptions.h"
+#include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/CodeGen/SwiftCallingConv.h"
@@ -6350,13 +6351,39 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
       else if (const auto *FPT =
                    Callee.getAbstractInfo().getCalleeFunctionProtoType())
         CST = QualType(FPT, 0);
+      else if (const auto *FT =
+                   Callee.getAbstractInfo().getCalleeFunctionType())
+        CST = QualType(FT, 0);
       else
         llvm_unreachable(
             "Cannot find the callee type to generate callee_type metadata.");
 
       // Set type identifier metadata of indirect calls for call graph section.
-      if (!CST.isNull())
+      if (!CST.isNull()) {
+        if (!CST->isFunctionProtoType()) {
+          // For unprototyped callees, reconstruct a prototype from the argument
+          // types passed at the call site (after default argument promotion).
+          if (const auto *FNPT = CST->getAs<FunctionNoProtoType>()) {
+            SmallVector<QualType, 8> ParamTypes;
+            // CallArgs already contains default-promoted argument types for
+            // unprototyped calls.
+            for (const CallArg &Arg : CallArgs)
+              ParamTypes.push_back(Arg.getType());
+            FunctionProtoType::ExtProtoInfo EPI;
+            CST = getContext().getFunctionType(FNPT->getReturnType(),
+                                               ParamTypes, EPI);
+          }
+
+          llvm::Metadata *MD =
+              CGM.CreateMetadataIdentifierForCallGraphType(CST);
+          StringRef TypeStr;
+          if (auto *MDS = dyn_cast_or_null<llvm::MDString>(MD))
+            TypeStr = MDS->getString();
+
+          CGM.getDiags().Report(Loc, diag::warn_cgs_no_proto) << CST << TypeStr;
+        }
         CGM.createCalleeTypeMetadataForIcall(CST, *callOrInvoke);
+      }
     }
   }
 
