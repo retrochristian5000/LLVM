@@ -3036,12 +3036,16 @@ bool LoopAccessInfo::isInvariant(Value *V) const {
 /// Get the stride of a pointer access in a loop. Looks for symbolic
 /// strides "a[i*stride]". Returns the symbolic stride, or null otherwise.
 static const SCEV *getStrideFromPointer(Value *Ptr, ScalarEvolution *SE,
-                                        Loop *Lp) {
+                                        Loop *Lp, unsigned StoreSz) {
   assert(Ptr->getType()->isPointerTy() && "Pointer type expected");
 
   // Get the stride of the GEP, stripping any scaling factors and casts.
   const SCEV *V = SE->removePointerBase(SE->getSCEV(Ptr));
-  match(V, m_scev_Mul(m_SCEVConstant(), m_scev_IntegralCastOrSelf(m_SCEV(V))));
+  APInt One(V->getType()->getIntegerBitWidth(), 1);
+  const APInt *ScalingFactor;
+  if (!match(V, m_scev_Mul(m_scev_APInt(ScalingFactor),
+                           m_scev_IntegralCastOrSelf(m_SCEV(V)))))
+    ScalingFactor = &One;
 
   // The stride to speculate must be the AddRec's step.
   if (!match(V, m_scev_AffineAddRec(m_SCEV(), m_SCEV(V), m_SpecificLoop(Lp))))
@@ -3052,8 +3056,10 @@ static const SCEV *getStrideFromPointer(Value *Ptr, ScalarEvolution *SE,
     return nullptr;
 
   // Strip an optional scaling factor, and let the caller handle the integral
-  // cast.
-  if (match(V, m_scev_Mul(m_SCEVConstant(),
+  // cast. We need to match the ScalingFactor from before.
+  // TODO: If the scaling factor here is a known multiple of what it should be,
+  // we can speculate non-unit strides.
+  if (match(V, m_scev_Mul(m_scev_SpecificInt(*ScalingFactor * StoreSz),
                           m_scev_IntegralCastOrSelf(m_SCEVUnknown()))))
     return cast<SCEVMulExpr>(V)->getOperand(1);
 
@@ -3066,13 +3072,21 @@ void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
   if (!Ptr)
     return;
 
+  // A non-scalable store size is necessary to make sure we speculate over the
+  // right stride.
+  const DataLayout &DL = PSE->getSE()->getDataLayout();
+  TypeSize StoreSz = DL.getTypeStoreSize(getLoadStoreType(MemAccess));
+  if (StoreSz.isScalable())
+    return;
+
   // Note: getStrideFromPointer is a *profitability* heuristic.  We
   // could broaden the scope of values returned here - to anything
   // which happens to be loop invariant and contributes to the
   // computation of an interesting IV - but we chose not to as we
   // don't have a cost model here, and broadening the scope exposes
   // far too many unprofitable cases.
-  const SCEV *StrideExpr = getStrideFromPointer(Ptr, PSE->getSE(), TheLoop);
+  const SCEV *StrideExpr =
+      getStrideFromPointer(Ptr, PSE->getSE(), TheLoop, StoreSz);
   if (!StrideExpr)
     return;
 
@@ -3106,7 +3120,6 @@ void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
   // Match the types so we can compare the stride and the MaxBTC.
   // The Stride can be positive/negative, so we sign extend Stride;
   // The backedgeTakenCount is non-negative, so we zero extend MaxBTC.
-  const DataLayout &DL = TheLoop->getHeader()->getDataLayout();
   uint64_t StrideTypeSizeBits = DL.getTypeSizeInBits(StrideExpr->getType());
   uint64_t BETypeSizeBits = DL.getTypeSizeInBits(MaxBTC->getType());
   const SCEV *CastedStride = StrideExpr;
