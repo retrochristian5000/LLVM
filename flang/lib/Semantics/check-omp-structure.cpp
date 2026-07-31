@@ -945,6 +945,33 @@ void OmpStructureChecker::CheckDirectiveDeprecation(
   // one another, but only the top-level directive should cause a warning.
 }
 
+void OmpStructureChecker::CheckDirectiveInPureProcedure(
+    parser::CharBlock source, llvm::omp::Directive id) {
+  const Scope &scope{context_.FindScope(source)};
+  if (!FindPureProcedureContaining(scope)) {
+    return;
+  }
+  unsigned version{context_.langOptions().OpenMPVersion};
+  // OpenMP 5.1 permits only SIMD and declarative directives in a PURE
+  // procedure; OpenMP 5.2 additionally permits metadirective, assume(s),
+  // nothing, error, and the loop-transforming constructs).
+  bool alwaysAllowed{id == llvm::omp::Directive::OMPD_simd ||
+      llvm::omp::getDirectiveCategory(id) == llvm::omp::Category::Declarative};
+  if (alwaysAllowed || (version >= 52 && llvm::omp::isDirectivePure(id))) {
+    return;
+  }
+  if (llvm::omp::isDirectivePure(id)) {
+    context_.Say(source,
+        "The OpenMP directive '%s' is not allowed in a PURE procedure in %s, %s"_err_en_US,
+        parser::omp::GetUpperName(id, version), ThisVersion(version),
+        TryVersion(52));
+  } else {
+    context_.Say(source,
+        "The OpenMP directive '%s' is not allowed in a PURE procedure"_err_en_US,
+        parser::omp::GetUpperName(id, version));
+  }
+}
+
 std::pair<const parser::OmpClause *, const parser::OmpClause *>
 OmpStructureChecker::FindMutuallyExclusiveClauses(
     llvm::omp::ClauseSet exclusive,
@@ -1293,6 +1320,7 @@ void OmpStructureChecker::Enter(const parser::OpenMPConstruct &x) {
   PushContextAndClauseSets(dirName.source, dirName.v);
   dirStack_.push_back(&GetOmpDirectiveSpecification(x));
   CheckDirectiveDeprecation(x);
+  CheckDirectiveInPureProcedure(dirName.source, dirName.v);
 
   // Verify clauses
   common::visit(
@@ -1349,6 +1377,7 @@ void OmpStructureChecker::Enter(const parser::OpenMPDeclarativeConstruct &x) {
   CheckClauses(dirName, llvm::iterator_range(dirStack_.back()->Clauses().v),
       llvm::iterator_range(std::list<parser::OmpClause>{}));
 
+  CheckDirectiveInPureProcedure(dirName.source, dirName.v);
   EnterDirectiveNest(DeclarativeNest);
 }
 
