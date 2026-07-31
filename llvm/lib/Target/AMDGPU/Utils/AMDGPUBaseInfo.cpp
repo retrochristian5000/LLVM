@@ -425,11 +425,6 @@ struct VOPDXYInfo {
   bool IsY;
 };
 
-struct VCMPXInfo {
-  uint32_t Opcode;
-  bool IsVCMPX;
-};
-
 #define GET_FP4FP8DstByteSelTable_DECL
 #define GET_FP4FP8DstByteSelTable_IMPL
 
@@ -452,7 +447,6 @@ struct FP4FP8DstByteSelInfo {
 #define GET_MUBUFInfoTable_IMPL
 #define GET_SMInfoTable_DECL
 #define GET_SMInfoTable_IMPL
-#define GET_VCMPXInfoTable_IMPL
 #define GET_VOP1InfoTable_DECL
 #define GET_VOP1InfoTable_IMPL
 #define GET_VOP2InfoTable_DECL
@@ -839,11 +833,6 @@ unsigned getTemporalHintType(const MCInstrDesc TID) {
 bool isTrue16Inst(unsigned Opc) {
   const VOPTrue16Info *Info = getTrue16OpcodeHelper(Opc);
   return Info && Info->IsTrue16;
-}
-
-bool isVCMPX(unsigned Opc) {
-  const VCMPXInfo *Info = getVCMPXInfoHelper(Opc);
-  return Info && Info->IsVCMPX;
 }
 
 FPType getFPDstSelType(unsigned Opc) {
