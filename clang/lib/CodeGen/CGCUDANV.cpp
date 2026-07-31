@@ -445,9 +445,7 @@ void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
     else if (CGF.getLangOpts().CUDA)
       KernelLaunchAPI = KernelLaunchAPI + "_ptsz";
   }
-  /// Use __llvmLaunchKernel for LLVMOffload.
-  auto LaunchKernelName = UsesLLVMOffloading ? "__llvm" + KernelLaunchAPI
-                                             : addPrefixToName(KernelLaunchAPI);
+  auto LaunchKernelName = addPrefixToName(KernelLaunchAPI);
   const IdentifierInfo &cudaLaunchKernelII =
       CGM.getContext().Idents.get(LaunchKernelName);
   FunctionDecl *cudaLaunchKernelFD = nullptr;

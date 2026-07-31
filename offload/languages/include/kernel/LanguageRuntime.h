@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "Types.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -116,6 +118,18 @@ Error_t StreamCreate(Stream_t *stream);
 Error_t StreamDestroy(Stream_t stream);
 
 Error_t StreamSynchronize(Stream_t stream);
+
+extern "C" Error_t LaunchKernel(const char *KernelID, dim3 GridDim,
+                                dim3 BlockDim, void *KernelArgsPtr,
+                                size_t DynamicSharedMem, void *Stream);
+
+extern "C" Error_t LaunchKernel_spt(const char *KernelID, dim3 GridDim,
+                                    dim3 BlockDim, void *KernelArgsPtr,
+                                    size_t DynamicSharedMem, void *Stream);
+
+extern "C" Error_t LaunchKernel_ptsz(const char *KernelID, dim3 GridDim,
+                                     dim3 BlockDim, void *KernelArgsPtr,
+                                     size_t DynamicSharedMem, void *Stream);
 
 #if defined(__AMDGPU__) || defined(__NVPTX__)
 #include <gpuintrin.h>

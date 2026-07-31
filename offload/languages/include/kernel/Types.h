@@ -10,15 +10,22 @@
 
 #pragma once
 
-#include "Types.h"
 #include <cstddef>
 #include <cstdint>
 
+#ifdef __CLANG_GPU_BUILTIN_VARS_H__
+using uint3 = dim3;
+#else
 struct uint3 {
   unsigned x = 0, y = 0, z = 0;
 };
 
-using dim3 = uint3;
+struct dim3 : uint3 {
+  constexpr dim3(unsigned X = 1, unsigned Y = 1, unsigned Z = 1)
+      : uint3{X, Y, Z} {}
+  constexpr dim3(uint3 V) : uint3{V.x, V.y, V.z} {}
+};
+#endif
 
 struct CallConfigurationTy {
   dim3 GridSize;

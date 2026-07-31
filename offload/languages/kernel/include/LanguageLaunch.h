@@ -14,7 +14,6 @@
 #include "OffloadAPI.h"
 #include "Types.h"
 
-#include <algorithm> // for std::max
 #include <cstddef>
 #include <cstdint>
 

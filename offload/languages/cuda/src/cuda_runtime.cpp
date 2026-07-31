@@ -9,8 +9,25 @@
 
 #include "cuda_runtime.h"
 
+#include "LanguageLaunch.h"
 #include "OffloadAPI.h"
 
 #define LANGUAGE cuda
 
 #include "../../kernel/src/LanguageRuntime.cpp"
+
+extern "C" {
+#define CUDA_LAUNCH_KERNEL(SUFFIX)                                             \
+  cudaError_t cudaLaunchKernel##SUFFIX(                                        \
+      const char *KernelID, dim3 GridDim, dim3 BlockDim, void *KernelArgsPtr,  \
+      size_t DynamicSharedMem, void *Stream) {                                 \
+    return LastError = convertResult(__llvmLaunchKernelImpl(                   \
+               KernelID, GridDim, BlockDim, KernelArgsPtr, DynamicSharedMem,   \
+               Stream));                                                       \
+  }
+
+CUDA_LAUNCH_KERNEL()
+CUDA_LAUNCH_KERNEL(_ptsz)
+CUDA_LAUNCH_KERNEL(_spt)
+#undef CUDA_LAUNCH_KERNEL
+}

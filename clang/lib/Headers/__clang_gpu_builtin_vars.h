@@ -25,9 +25,9 @@ static inline __attribute__((device)) const struct {
 extern "C" {
 
 typedef struct dim3 {
-  dim3() {}
-  dim3(unsigned x) : x(x) {}
-  unsigned x = 0, y = 0, z = 0;
+  constexpr dim3(unsigned x = 1, unsigned y = 1, unsigned z = 1)
+      : x(x), y(y), z(z) {}
+  unsigned x, y, z;
 } dim3;
 
 // TODO: For some reason the CUDA device compilation requires this declaration

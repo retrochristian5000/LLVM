@@ -50,7 +50,7 @@
 // HST-NEXT:    [[TMP15:%.*]] = call i32 @__cudaPopCallConfiguration(ptr [[GRID_DIM]], ptr [[BLOCK_DIM]], ptr [[SHMEM_SIZE]], ptr [[STREAM]])
 // HST-NEXT:    [[TMP16:%.*]] = load i32, ptr [[SHMEM_SIZE]], align 4
 // HST-NEXT:    [[TMP17:%.*]] = load ptr, ptr [[STREAM]], align 4
-// HST-NEXT:    [[CALL:%.*]] = call noundef i32 @__llvmLaunchKernel(ptr noundef @_Z18__device_stub__fooisPvS_, ptr noundef byval([[STRUCT_DIM3]]) align 4 [[GRID_DIM]], ptr noundef byval([[STRUCT_DIM3]]) align 4 [[BLOCK_DIM]], ptr noundef [[KERNEL_LAUNCH_PARAMS]], i32 noundef [[TMP16]], ptr noundef [[TMP17]]) #[[ATTR3:[0-9]+]]
+// HST-NEXT:    [[CALL:%.*]] = call noundef i32 @cudaLaunchKernel(ptr noundef @_Z18__device_stub__fooisPvS_, ptr noundef byval([[STRUCT_DIM3]]) align 4 [[GRID_DIM]], ptr noundef byval([[STRUCT_DIM3]]) align 4 [[BLOCK_DIM]], ptr noundef [[KERNEL_LAUNCH_PARAMS]], i32 noundef [[TMP16]], ptr noundef [[TMP17]]) #[[ATTR3:[0-9]+]]
 // HST-NEXT:    br label %[[SETUP_END:.*]]
 // HST:       [[SETUP_END]]:
 // HST-NEXT:    ret void

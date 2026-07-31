@@ -50,5 +50,6 @@ install(TARGETS LLVMOffloadKernel
 install(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../include/kernel/DefineLanguageNames.inc
         ${CMAKE_CURRENT_SOURCE_DIR}/../include/kernel/LanguageRuntime.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include/kernel/Types.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../include/kernel/UndefineLanguageNames.inc
         DESTINATION ${CMAKE_INSTALL_PREFIX}/include/offload/kernel/)

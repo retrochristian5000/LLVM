@@ -9,11 +9,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "LanguageLaunch.h"
+#include "OffloadAPI.h"
 #include "RuntimeAPI.h"
 
 #include <cstdio>
 
 namespace language_launch = llvm::offload::kernel;
+
+static constexpr ol_error_struct_t InvalidKernelError = {
+    OL_ERRC_INVALID_NULL_HANDLE, "kernel is not registered"};
+
+static constexpr ol_error_struct_t InvalidDeviceError = {OL_ERRC_INVALID_DEVICE,
+                                                         "invalid device"};
+
+static constexpr ol_error_struct_t InvalidArgumentError = {
+    OL_ERRC_INVALID_ARGUMENT, "invalid argument to kernel launch"};
+
+static constexpr ol_error_struct_t InvalidConfigurationError = {
+    OL_ERRC_INVALID_SIZE, "invalid kernel launch configuration"};
 
 extern "C" {
 
@@ -45,19 +58,32 @@ ol_result_t __llvmLaunchKernelImpl(const char *KernelID, dim3 GridDim,
                                    dim3 BlockDim, void *KernelArgsPtr,
                                    size_t DynamicSharedMem, void *Stream) {
   ol_device_handle_t Device = language_launch::getDefaultDevice();
+  if (!Device)
+    return &InvalidDeviceError;
+  if (!KernelID)
+    return &InvalidArgumentError;
   ol_symbol_handle_t Kernel = language_launch::getKernel(KernelID);
+  if (!Kernel)
+    return &InvalidKernelError;
+
+  if (GridDim.x == 0 || GridDim.y == 0 || GridDim.z == 0 || BlockDim.x == 0 ||
+      BlockDim.y == 0 || BlockDim.z == 0)
+    return &InvalidConfigurationError;
+
+  if (!KernelArgsPtr)
+    return &InvalidArgumentError;
 
   ol_dimensions_t GridDimensions, BlockDimensions;
   ol_kernel_launch_size_args_t LaunchSizeArgs;
   LaunchSizeArgs.Dimensions =
-      1 + !!(GridDim.y * BlockDim.y > 1) + !!(GridDim.z * BlockDim.z > 1);
+      1 + (GridDim.y > 1 || BlockDim.y > 1) + (GridDim.z > 1 || BlockDim.z > 1);
   GridDimensions.x = GridDim.x;
-  GridDimensions.y = std::max(GridDim.y, 1u);
-  GridDimensions.z = std::max(GridDim.z, 1u);
+  GridDimensions.y = GridDim.y;
+  GridDimensions.z = GridDim.z;
   LaunchSizeArgs.NumGroups = GridDimensions;
   BlockDimensions.x = BlockDim.x;
-  BlockDimensions.y = std::max(BlockDim.y, 1u);
-  BlockDimensions.z = std::max(BlockDim.z, 1u);
+  BlockDimensions.y = BlockDim.y;
+  BlockDimensions.z = BlockDim.z;
   LaunchSizeArgs.GroupSize = BlockDimensions;
   LaunchSizeArgs.DynSharedMemory = DynamicSharedMem;
 
@@ -73,6 +99,13 @@ ol_result_t __llvmLaunchKernelImpl(const char *KernelID, dim3 GridDim,
     size_t *ArgSizes;
   };
   OffloadKernelArgs *OKA = reinterpret_cast<OffloadKernelArgs *>(KernelArgsPtr);
+  if ((!OKA->Args) != (!OKA->ArgSizes))
+    return &InvalidArgumentError;
+  if (OKA->NumArgs > 0 && !OKA->Args)
+    return &InvalidArgumentError;
+  for (size_t I = 0; I < OKA->NumArgs; ++I)
+    if (!OKA->Args[I] || OKA->ArgSizes[I] == 0)
+      return &InvalidArgumentError;
 
   ol_result_t Result;
   Result = olLaunchKernel(Queue, Device, Kernel, &LaunchSizeArgs, &Properties,

@@ -46,10 +46,6 @@ template <class T> static inline hipError_t hipHostFree(T *Ptr) {
 #if defined(__AMDGPU__) || defined(__NVPTX__)
 #define HIP_KERNEL_NAME(...) __VA_ARGS__
 
-extern "C" hipError_t hipLaunchKernel(const char *Kernel, dim3 GridDim,
-                                      dim3 BlockDim, void **KernelArgs,
-                                      size_t DynamicSharedMem, void *Stream);
-
 template <typename... AT, typename FT = void (*)(AT...)>
 static inline void hipLaunchKernelGGL(FT Kernel, dim3 GridDim, dim3 BlockDim,
                                       size_t DynamicSharedMem, void *Stream,

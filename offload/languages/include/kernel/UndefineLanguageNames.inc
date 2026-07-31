@@ -46,3 +46,6 @@
 #undef StreamCreate
 #undef StreamDestroy
 #undef StreamSynchronize
+#undef LaunchKernel
+#undef LaunchKernel_spt
+#undef LaunchKernel_ptsz

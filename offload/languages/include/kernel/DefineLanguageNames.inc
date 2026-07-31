@@ -48,3 +48,6 @@
 #define StreamCreate COMBINE(LANGUAGE, StreamCreate)
 #define StreamDestroy COMBINE(LANGUAGE, StreamDestroy)
 #define StreamSynchronize COMBINE(LANGUAGE, StreamSynchronize)
+#define LaunchKernel COMBINE(LANGUAGE, LaunchKernel)
+#define LaunchKernel_spt COMBINE(LANGUAGE, LaunchKernel_spt)
+#define LaunchKernel_ptsz COMBINE(LANGUAGE, LaunchKernel_ptsz)
