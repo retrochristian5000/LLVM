@@ -399,6 +399,9 @@ static void checkOptions(Ctx &ctx) {
       ctx.arg.zCetReport != ReportPolicy::None)
     ErrAlways(ctx) << "-z cet-report only supported on X86 and X86_64";
 
+  if (ctx.arg.emachine != EM_X86_64 && ctx.arg.zMarkPlt)
+    ErrAlways(ctx) << "-z mark-plt only supported on X86_64";
+
   if (ctx.arg.pie && ctx.arg.shared)
     ErrAlways(ctx) << "-shared and -pie may not be used together";
 
@@ -1667,6 +1670,7 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
       args, "keep-text-section-prefix", "nokeep-text-section-prefix", false);
   ctx.arg.zLrodataAfterBss =
       getZFlag(args, "lrodata-after-bss", "nolrodata-after-bss", false);
+  ctx.arg.zMarkPlt = getZFlag(args, "mark-plt", "nomark-plt", false);
   ctx.arg.zNoBtCfi = hasZOption(args, "nobtcfi");
   ctx.arg.zNodefaultlib = hasZOption(args, "nodefaultlib");
   ctx.arg.zNodelete = hasZOption(args, "nodelete");
