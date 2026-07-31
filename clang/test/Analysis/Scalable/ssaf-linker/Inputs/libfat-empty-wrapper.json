@@ -1,0 +1,8 @@
+{
+  "members": [],
+  "namespace": {
+    "kind": "MultiArchStaticLibrary",
+    "name": "libfat"
+  },
+  "type": "MultiArchStaticLibrary"
+}

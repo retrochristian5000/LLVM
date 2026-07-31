@@ -1,18 +1,13 @@
-// Test clang-ssaf-linker help option
+// Test the --help output for the `multi-arch` subcommand.
 
-// RUN: clang-ssaf-linker --help-list-hidden \
+// RUN: clang-ssaf-linker multi-arch --help-list-hidden \
 // RUN:           | FileCheck %s --match-full-lines
 
 // CHECK:      OVERVIEW: SSAF Linker
 // CHECK-EMPTY:
-// CHECK-NEXT: USAGE: clang-ssaf-linker{{(\.exe)?}} [subcommand] [options] <input files>
+// CHECK-NEXT: SUBCOMMAND 'multi-arch': Operations on multi-architecture StaticLibraries and SharedLibraries
 // CHECK-EMPTY:
-// CHECK-NEXT: SUBCOMMANDS:
-// CHECK-EMPTY:
-// CHECK-NEXT:   multi-arch     - Operations on multi-architecture StaticLibraries and SharedLibraries
-// CHECK-NEXT:   static-library - Operations on StaticLibraries
-// CHECK-EMPTY:
-// CHECK-NEXT:   Type "clang-ssaf-linker{{(\.exe)?}} <subcommand> --help" to get more help on a specific subcommand
+// CHECK-NEXT: USAGE: clang-ssaf-linker{{(\.exe)?}} multi-arch [options] <verb> <StaticLibrary/MultiArchStaticLibrary/LUSummaryEncoding/MultiArchSharedLibrary files>
 // CHECK-EMPTY:
 // CHECK-NEXT: OPTIONS:
 // CHECK-NEXT:   -h                  - Alias for --help
@@ -20,9 +15,9 @@
 // CHECK-NEXT:   --help-hidden       - Display all available options
 // CHECK-NEXT:   --help-list         - Display list of available options (--help-list-hidden for more)
 // CHECK-NEXT:   --help-list-hidden  - Display list of all available options
+// CHECK-NEXT:   --namespace=<name>  - Namespace name for the bundle (defaults to output file stem); only applies when bundling StaticLibrary members, since a shared-library bundle's identity is inferred from its members' own namespace
 // CHECK-NEXT:   -o <path>           - Output file path
 // CHECK-NEXT:   --print-all-options - Print all option values after command line parsing
 // CHECK-NEXT:   --print-options     - Print non-default options after command line parsing
 // CHECK-NEXT:   --time              - Enable timing
 // CHECK-NEXT:   --verbose           - Enable verbose output
-// CHECK-NEXT:   --version           - Display the version of this program
