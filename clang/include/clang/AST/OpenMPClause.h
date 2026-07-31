@@ -10019,6 +10019,19 @@ public:
     return false;
   }
 
+  /// Check if this trait info contains any user conditions.
+  bool hasUserCondition() const {
+    for (const OMPTraitSet &Set : Sets) {
+      if (Set.Kind != llvm::omp::TraitSet::user)
+        continue;
+      for (const OMPTraitSelector &Selector : Set.Selectors) {
+        if (Selector.Kind == llvm::omp::TraitSelector::user_condition)
+          return true;
+      }
+    }
+    return false;
+  }
+
   /// Print a human readable representation into \p OS.
   void print(llvm::raw_ostream &OS, const PrintingPolicy &Policy) const;
 };
@@ -10052,6 +10065,7 @@ class OMPChildren final
   friend TrailingObjects;
   friend class OMPClauseReader;
   friend class OMPExecutableDirective;
+  friend class OMPMetaDirective;
   template <typename T> friend class OMPDeclarativeDirective;
 
   /// Numbers of clauses.

@@ -260,23 +260,73 @@ void OMPLoopDirective::setFinalsConditions(ArrayRef<Expr *> A) {
   llvm::copy(A, getFinalsConditions().begin());
 }
 
-OMPMetaDirective *OMPMetaDirective::Create(const ASTContext &C,
-                                           SourceLocation StartLoc,
-                                           SourceLocation EndLoc,
-                                           ArrayRef<OMPClause *> Clauses,
-                                           Stmt *AssociatedStmt, Stmt *IfStmt) {
-  auto *Dir = createDirective<OMPMetaDirective>(
-      C, Clauses, AssociatedStmt, /*NumChildren=*/1, StartLoc, EndLoc);
+std::pair<void *, void *>
+OMPMetaDirective::allocateMemory(const ASTContext &C, unsigned NumVariants,
+                                 unsigned NumClauses, unsigned NumChildren) {
+  size_t ArraysSize = OMPMetaDirective::sizeOfTrailingArrays(NumVariants);
+  void *Mem = C.Allocate(
+      sizeof(OMPMetaDirective) + ArraysSize +
+          llvm::alignTo(OMPChildren::totalSizeToAlloc<OMPClause *, Stmt *>(
+                            NumClauses, NumChildren),
+                        alignof(OMPChildren)),
+      alignof(OMPMetaDirective));
+  void *ChildrenMem =
+      reinterpret_cast<char *>(Mem) + sizeof(OMPMetaDirective) + ArraysSize;
+  return {Mem, ChildrenMem};
+}
+
+OMPMetaDirective *OMPMetaDirective::Create(
+    const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+    ArrayRef<OMPClause *> Clauses, Stmt *AssociatedStmt, Stmt *IfStmt,
+    ArrayRef<OpenMPDirectiveKind> DirectiveKinds, ArrayRef<Expr *> Conditions,
+    ArrayRef<Stmt *> VariantDirectives) {
+  assert(DirectiveKinds.size() == Conditions.size() &&
+         "DirectiveKinds and Conditions must have the same size");
+  assert((VariantDirectives.empty() ||
+          DirectiveKinds.size() == VariantDirectives.size()) &&
+         "VariantDirectives, if provided, must match DirectiveKinds size");
+  unsigned NumVariants = DirectiveKinds.size();
+
+  // Allocate memory for OMPMetaDirective with trailing arrays and OMPChildren.
+  // Layout:
+  // [OMPMetaDirective][DirectiveKinds...][padding][Conditions...][VariantDirectives...][OMPChildren]
+  auto [Mem, ChildrenMem] =
+      allocateMemory(C, NumVariants, Clauses.size(),
+                     /*NumChildren=*/1 + (AssociatedStmt ? 1 : 0));
+  auto *Data = OMPChildren::Create(ChildrenMem, Clauses, AssociatedStmt,
+                                   /*NumChildren=*/1);
+  auto *Dir = new (Mem) OMPMetaDirective(StartLoc, EndLoc, NumVariants);
+  Dir->Data = Data;
   Dir->setIfStmt(IfStmt);
+  if (NumVariants > 0) {
+    std::copy(DirectiveKinds.begin(), DirectiveKinds.end(),
+              Dir->getDirectiveKinds().begin());
+    std::copy(Conditions.begin(), Conditions.end(),
+              Dir->getConditions().begin());
+
+    if (!VariantDirectives.empty())
+      std::copy(VariantDirectives.begin(), VariantDirectives.end(),
+                Dir->getVariantDirectives().begin());
+    else
+      // Initialize VariantDirectives to nullptr.
+      std::fill_n(Dir->getVariantDirectives().data(), NumVariants, nullptr);
+  }
   return Dir;
 }
 
 OMPMetaDirective *OMPMetaDirective::CreateEmpty(const ASTContext &C,
                                                 unsigned NumClauses,
+                                                unsigned NumVariants,
                                                 EmptyShell) {
-  return createEmptyDirective<OMPMetaDirective>(C, NumClauses,
-                                                /*HasAssociatedStmt=*/true,
-                                                /*NumChildren=*/1);
+  // Allocate memory for empty OMPMetaDirective.
+  auto [Mem, ChildrenMem] =
+      allocateMemory(C, NumVariants, NumClauses, /*NumChildren=*/1 + 1);
+  auto *Data =
+      OMPChildren::CreateEmpty(ChildrenMem, NumClauses,
+                               /*HasAssociatedStmt=*/true, /*NumChildren=*/1);
+  auto *Dir = new (Mem) OMPMetaDirective(NumVariants);
+  Dir->Data = Data;
+  return Dir;
 }
 
 OMPParallelDirective *OMPParallelDirective::Create(

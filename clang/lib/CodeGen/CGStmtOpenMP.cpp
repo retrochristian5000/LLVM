@@ -2189,7 +2189,16 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
 }
 
 void CodeGenFunction::EmitOMPMetaDirective(const OMPMetaDirective &S) {
-  EmitStmt(S.getIfStmt());
+  // Runtime metadirectives are transformed to if-else in Sema.
+  // For compile-time selection, just emit the associated statement (the
+  // selected variant).
+  if (Stmt *IfStmt = S.getIfStmt()) {
+    EmitStmt(IfStmt);
+    return;
+  }
+
+  // Compile-time selection: emit the selected variant's statement
+  EmitStmt(S.getAssociatedStmt());
 }
 
 namespace {

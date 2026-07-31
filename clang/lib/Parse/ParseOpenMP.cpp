@@ -325,6 +325,21 @@ Parser::ParseOpenMPDeclareReductionDirective(AccessSpecifier AS) {
       getCurScope(), DRD, IsCorrect);
 }
 
+void Parser::skipToMatchingParen() {
+  int ParenDepth = 0;
+  while ((Tok.isNot(tok::r_paren) || ParenDepth != 0) &&
+         Tok.isNot(tok::annot_pragma_openmp_end) && Tok.isNot(tok::eof)) {
+    if (Tok.is(tok::l_paren))
+      ParenDepth++;
+    if (Tok.is(tok::r_paren)) {
+      if (ParenDepth == 0)
+        break;
+      ParenDepth--;
+    }
+    ConsumeAnyToken();
+  }
+}
+
 void Parser::ParseOpenMPReductionInitializerForDecl(VarDecl *OmpPrivParm) {
   // Parse declarator '=' initializer.
   // If a '==' or '+=' is found, suggest a fixit to '='.
@@ -2287,7 +2302,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenMPDeclarativeDirectiveWithExtDecl(
 
 StmtResult Parser::ParseOpenMPExecutableDirective(
     ParsedStmtContext StmtCtx, OpenMPDirectiveKind DKind, SourceLocation Loc,
-    bool ReadDirectiveWithinMetadirective) {
+    bool ReadDirectiveWithinMetadirective,
+    bool ConsumeDirectiveOnlyInMetadirective) {
   assert(isOpenMPExecutableDirective(DKind) && "Unexpected directive category");
   unsigned OMPVersion = Actions.getLangOpts().OpenMP;
 
@@ -2360,9 +2376,15 @@ StmtResult Parser::ParseOpenMPExecutableDirective(
     // If we are parsing for a directive within a metadirective, the directive
     // ends with a ')'.
     if (ReadDirectiveWithinMetadirective && Tok.is(tok::r_paren)) {
-      while (Tok.isNot(tok::annot_pragma_openmp_end))
-        ConsumeAnyToken();
-      break;
+      if (ConsumeDirectiveOnlyInMetadirective) {
+        // Runtime path: stop at ')' - let the caller handle it.
+        break;
+      } else {
+        // Compile-time path: consume everything to pragma end (old behavior).
+        while (Tok.isNot(tok::annot_pragma_openmp_end))
+          ConsumeAnyToken();
+        break;
+      }
     }
     bool HasImplicitClause = false;
     if (ImplicitClauseAllowed && Tok.is(tok::l_paren)) {
@@ -2415,7 +2437,11 @@ StmtResult Parser::ParseOpenMPExecutableDirective(
   // End location of the directive.
   EndLoc = Tok.getLocation();
   // Consume final annot_pragma_openmp_end.
-  ConsumeAnnotationToken();
+  // For compile-time metadirective path, we consumed up to
+  // annot_pragma_openmp_end and need to consume it. For runtime path, we
+  // stopped at ')'.
+  if (!ReadDirectiveWithinMetadirective || !ConsumeDirectiveOnlyInMetadirective)
+    ConsumeAnnotationToken();
 
   if (DKind == OMPD_ordered) {
     // If the depend or doacross clause is specified, the ordered construct
@@ -2484,7 +2510,8 @@ StmtResult Parser::ParseOpenMPExecutableDirective(
 
 StmtResult Parser::ParseOpenMPInformationalDirective(
     ParsedStmtContext StmtCtx, OpenMPDirectiveKind DKind, SourceLocation Loc,
-    bool ReadDirectiveWithinMetadirective) {
+    bool ReadDirectiveWithinMetadirective,
+    bool ConsumeDirectiveOnlyInMetadirective) {
   assert(isOpenMPInformationalDirective(DKind) &&
          "Unexpected directive category");
 
@@ -2502,6 +2529,11 @@ StmtResult Parser::ParseOpenMPInformationalDirective(
 
   while (Tok.isNot(tok::annot_pragma_openmp_end)) {
     if (ReadDirectiveWithinMetadirective && Tok.is(tok::r_paren)) {
+      if (ConsumeDirectiveOnlyInMetadirective) {
+        // Runtime path: stop at ')' - let the caller handle it.
+        break;
+      }
+      // Compile-time path: consume everything to pragma end.
       while (Tok.isNot(tok::annot_pragma_openmp_end))
         ConsumeAnyToken();
       break;
@@ -2523,7 +2555,10 @@ StmtResult Parser::ParseOpenMPInformationalDirective(
   }
 
   SourceLocation EndLoc = Tok.getLocation();
-  ConsumeAnnotationToken();
+  // For compile-time: consumed up to annot_pragma_openmp_end, need to consume
+  // it. For runtime: stopped at ')', don't consume anything.
+  if (!ReadDirectiveWithinMetadirective || !ConsumeDirectiveOnlyInMetadirective)
+    ConsumeAnnotationToken();
 
   StmtResult AssociatedStmt;
   if (HasAssociatedStatement) {
@@ -2547,7 +2582,8 @@ StmtResult Parser::ParseOpenMPInformationalDirective(
 }
 
 StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
-    ParsedStmtContext StmtCtx, bool ReadDirectiveWithinMetadirective) {
+    ParsedStmtContext StmtCtx, bool ReadDirectiveWithinMetadirective,
+    bool ConsumeDirectiveOnlyInMetadirective) {
   if (!ReadDirectiveWithinMetadirective)
     assert(Tok.isOneOf(tok::annot_pragma_openmp, tok::annot_attr_openmp) &&
            "Not an OpenMP directive!");
@@ -2574,7 +2610,8 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
 
   if (IsExecutable) {
     Directive = ParseOpenMPExecutableDirective(
-        StmtCtx, DKind, Loc, ReadDirectiveWithinMetadirective);
+        StmtCtx, DKind, Loc, ReadDirectiveWithinMetadirective,
+        ConsumeDirectiveOnlyInMetadirective);
     assert(!Directive.isUnset() && "Executable directive remained unprocessed");
     return Directive;
   }
@@ -2596,6 +2633,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
   case OMPD_metadirective: {
     ConsumeToken();
     SmallVector<VariantMatchInfo, 4> VMIs;
+    SmallVector<OMPTraitInfo *, 4> TraitInfos;
 
     // First iteration of parsing all clauses of metadirective.
     // This iteration only parses and collects all context selector ignoring the
@@ -2652,20 +2690,14 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
         }
       }
 
-      // Skip Directive for now. We will parse directive in the second iteration
-      int paren = 0;
-      while (Tok.isNot(tok::r_paren) || paren != 0) {
-        if (Tok.is(tok::l_paren))
-          paren++;
-        if (Tok.is(tok::r_paren))
-          paren--;
-        if (Tok.is(tok::annot_pragma_openmp_end)) {
-          Diag(Tok, diag::err_omp_expected_punc)
-              << getOpenMPClauseName(CKind) << 0;
-          TPA.Commit();
-          return Directive;
-        }
-        ConsumeAnyToken();
+      // Skip Directive for now. We will parse directive in the second
+      // iteration.
+      skipToMatchingParen();
+      if (Tok.is(tok::annot_pragma_openmp_end)) {
+        Diag(Tok, diag::err_omp_expected_punc)
+            << getOpenMPClauseName(CKind) << 0;
+        TPA.Commit();
+        return Directive;
       }
       // Parse ')'
       if (Tok.is(tok::r_paren))
@@ -2675,6 +2707,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       TI.getAsVariantMatchInfo(ASTContext, VMI);
 
       VMIs.push_back(VMI);
+      TraitInfos.push_back(&TI);
     }
 
     TPA.Revert();
@@ -2694,6 +2727,88 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
     // A single match is returned for OpenMP 5.0
     int BestIdx = getBestVariantMatchForContext(VMIs, OMPCtx);
 
+    // Check if we have any user conditions.
+    bool HasUserCondition = false;
+    for (OMPTraitInfo *TI : TraitInfos) {
+      if (TI && TI->hasUserCondition()) {
+        HasUserCondition = true;
+        break;
+      }
+    }
+    // If we have user conditions, collect all variants.
+    if (HasUserCondition) {
+      // Collect all variants with their conditions.
+      SmallVector<OpenMPDirectiveKind, 4> DirectiveKinds;
+      SmallVector<Expr *, 4> Conditions;
+      SmallVector<OpenMPClauseKind, 4> ClauseKinds;
+      SmallVector<Stmt *, 4> VariantDirectives;
+
+      while (Tok.isNot(tok::annot_pragma_openmp_end)) {
+        OpenMPClauseKind CKind = Tok.isAnnotation()
+                                     ? OMPC_unknown
+                                     : getOpenMPClauseKind(PP.getSpelling(Tok));
+        SourceLocation ClauseLoc = ConsumeToken();
+
+        // Parse '('.
+        T.consumeOpen();
+
+        Expr *Condition = nullptr;
+        if (CKind == OMPC_when) {
+          OMPTraitInfo &TI = Actions.getASTContext().getNewOMPTraitInfo();
+          parseOMPContextSelectors(ClauseLoc, TI);
+
+          // Extract user condition if present.
+          TI.anyScoreOrCondition([&](Expr *&E, bool IsScore) {
+            if (!IsScore && E) {
+              Condition = E;
+              return true;
+            }
+            return false;
+          });
+          // Parse ':'.
+          if (Tok.is(tok::colon))
+            ConsumeAnyToken();
+        }
+
+        // Parse only the directive kind (not the full statement with body).
+        // The body will be shared across all variants and parsed after the
+        // metadirective.
+        OpenMPDirectiveKind DKind = OMPD_unknown;
+        Stmt *VariantDirective = nullptr;
+
+        if (!Tok.is(tok::r_paren)) {
+          DKind = parseOpenMPDirectiveKind(*this);
+          skipToMatchingParen();
+        }
+
+        // Parse ')'.
+        if (Tok.is(tok::r_paren))
+          T.consumeClose();
+
+        DirectiveKinds.push_back(DKind);
+        Conditions.push_back(Condition);
+        ClauseKinds.push_back(CKind);
+        VariantDirectives.push_back(VariantDirective);
+      }
+
+      SourceLocation EndLoc = Tok.getLocation();
+      ConsumeAnnotationToken();
+
+      StmtResult AssocStmt = ParseStatement();
+      if (AssocStmt.isInvalid())
+        return StmtError();
+
+      // For runtime metadirectives, pass empty VariantDirectives.
+      // The transformation to if-else happens in Sema.
+      SmallVector<Stmt *, 4> EmptyVariantDirectives(DirectiveKinds.size(),
+                                                    nullptr);
+
+      // Pass to Sema to build the runtime metadirective.
+      return Actions.OpenMP().ActOnOpenMPMetaDirective(
+          Loc, EndLoc, TraitInfos, ClauseKinds, Conditions, DirectiveKinds,
+          AssocStmt.get(), EmptyVariantDirectives);
+    }
+
     int Idx = 0;
     // In OpenMP 5.0 metadirective is either replaced by another directive or
     // ignored.
@@ -2704,15 +2819,8 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       if (Idx++ != BestIdx) {
         ConsumeToken();  // Consume clause name
         T.consumeOpen(); // Consume '('
-        int paren = 0;
         // Skip everything inside the clause
-        while (Tok.isNot(tok::r_paren) || paren != 0) {
-          if (Tok.is(tok::l_paren))
-            paren++;
-          if (Tok.is(tok::r_paren))
-            paren--;
-          ConsumeAnyToken();
-        }
+        skipToMatchingParen();
         // Parse ')'
         if (Tok.is(tok::r_paren))
           T.consumeClose();
@@ -2917,7 +3025,8 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
   case OMPD_assume: {
     ConsumeToken();
     Directive = ParseOpenMPInformationalDirective(
-        StmtCtx, DKind, Loc, ReadDirectiveWithinMetadirective);
+        StmtCtx, DKind, Loc, ReadDirectiveWithinMetadirective,
+        ConsumeDirectiveOnlyInMetadirective);
     assert(!Directive.isUnset() &&
            "Informational directive remains unprocessed");
     return Directive;
