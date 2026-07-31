@@ -602,22 +602,41 @@ void SILowerControlFlow::findMaskOperands(MachineInstr &MI, unsigned OpNo,
 // One of the operands is exec mask.
 void SILowerControlFlow::combineMasks(MachineInstr &MI) {
   assert(MI.getNumExplicitOperands() == 3);
-  SmallVector<MachineOperand, 4> Ops;
-  unsigned OpToReplace = 1;
-  findMaskOperands(MI, 1, Ops);
-  if (Ops.size() == 1) OpToReplace = 2; // First operand can be exec or its copy
-  findMaskOperands(MI, 2, Ops);
-  if (Ops.size() != 3) return;
+  SmallVector<MachineOperand, 2> Src1, Src2;
+  findMaskOperands(MI, 1, Src1);
+  findMaskOperands(MI, 2, Src2);
 
-  unsigned UniqueOpndIdx;
-  if (Ops[0].isIdenticalTo(Ops[1])) UniqueOpndIdx = 2;
-  else if (Ops[0].isIdenticalTo(Ops[2])) UniqueOpndIdx = 1;
-  else if (Ops[1].isIdenticalTo(Ops[2])) UniqueOpndIdx = 1;
-  else return;
+  // Exactly one of the two operands must resolve to the nested LHS and RHS.
+  // Another one must resolve to a single value, exec or its copy.
+  unsigned OpToReplace;
+  MachineOperand *Leaf, *NestedLHS, *NestedRHS;
+  if (Src1.size() == 2 && Src2.size() == 1) {
+    OpToReplace = 1;
+    NestedLHS = &Src1[0];
+    NestedRHS = &Src1[1];
+    Leaf = &Src2[0];
+  } else if (Src1.size() == 1 && Src2.size() == 2) {
+    OpToReplace = 2;
+    Leaf = &Src1[0];
+    NestedLHS = &Src2[0];
+    NestedRHS = &Src2[1];
+  } else {
+    return;
+  }
+
+  // Always keep a nested operand, never the leaf operand.
+  MachineOperand *KeepOp;
+  if (Leaf->isIdenticalTo(*NestedLHS))
+    KeepOp = NestedRHS;
+  else if (Leaf->isIdenticalTo(*NestedRHS) ||
+           NestedLHS->isIdenticalTo(*NestedRHS))
+    KeepOp = NestedLHS;
+  else
+    return;
 
   Register Reg = MI.getOperand(OpToReplace).getReg();
   MI.removeOperand(OpToReplace);
-  MI.addOperand(Ops[UniqueOpndIdx]);
+  MI.addOperand(*KeepOp);
   if (MRI->use_empty(Reg))
     MRI->getUniqueVRegDef(Reg)->eraseFromParent();
 }
