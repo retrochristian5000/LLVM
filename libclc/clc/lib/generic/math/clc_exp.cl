@@ -11,7 +11,9 @@
 #include "clc/internal/clc.h"
 #include "clc/math/clc_exp_helper.h"
 #include "clc/math/clc_fma.h"
+#include "clc/math/clc_ldexp.h"
 #include "clc/math/clc_mad.h"
+#include "clc/math/clc_subnormal_config.h"
 #include "clc/math/math.h"
 #include "clc/relational/clc_isnan.h"
 

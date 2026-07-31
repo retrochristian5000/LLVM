@@ -41,8 +41,21 @@ _CLC_OVERLOAD _CLC_DEF __CLC_GENTYPE __clc_exp2(__CLC_GENTYPE x) {
 
   const __CLC_GENTYPE ulim = 128.0f;
   const __CLC_GENTYPE llim = -126.0f;
+  // smallest subnormal is 2^-149
+  const __CLC_GENTYPE subnorm_llim = -149.0f;
 
-  r = x < llim ? 0.0f : r;
+  // The integer scaling above (as_int(y) + (p << 23)) cannot represent
+  // subnormal results, so inputs in [subnorm_llim, llim) whose result is a
+  // subnormal are flushed to zero by the plain "x < llim ? 0" path below.
+  // When subnormals are supported, recompute those via __clc_ldexp so the
+  // subnormal result is preserved. Inputs below subnorm_llim (including -inf)
+  // genuinely underflow to zero and must not go through ldexp, whose exponent
+  // argument would be ill-formed for such extreme inputs.
+  r = x < llim ? (__CLC_GENTYPE)0.0f : r;
+  if (__clc_fp32_subnormals_supported()) {
+    __CLC_GENTYPE sub = __clc_ldexp(y, p);
+    r = (x < llim & x >= subnorm_llim) ? sub : r;
+  }
   r = x < ulim ? r : __CLC_AS_FLOATN((__CLC_UINTN)0x7f800000);
   return __clc_isnan(x) ? x : r;
 }
