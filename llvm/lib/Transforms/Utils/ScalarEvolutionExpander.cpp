@@ -2239,6 +2239,8 @@ Value *SCEVExpander::expandCodeForPredicate(const SCEVPredicate *Pred,
     auto *AddRecPred = cast<SCEVWrapPredicate>(Pred);
     return expandWrapPredicate(AddRecPred, IP);
   }
+  case SCEVPredicate::P_TripCountInvariant:
+    return ConstantInt::getFalse(IP->getContext());
   }
   llvm_unreachable("Unknown SCEV predicate type");
 }
