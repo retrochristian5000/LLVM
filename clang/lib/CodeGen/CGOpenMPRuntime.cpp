@@ -3029,6 +3029,16 @@ struct PrivateHelpersTy {
 typedef std::pair<CharUnits /*Align*/, PrivateHelpersTy> PrivateDataTy;
 } // anonymous namespace
 
+/// For BindingDecls, returns the VarDecl of the decomposed declaration.
+/// For VarDecls, returns the VarDecl itself.
+static const VarDecl *getVarDeclForPrivate(const ValueDecl *D) {
+  if (const auto *VD = dyn_cast<VarDecl>(D))
+    return VD;
+  if (const auto *BD = dyn_cast<BindingDecl>(D))
+    return cast<VarDecl>(BD->getDecomposedDecl());
+  return nullptr;
+}
+
 static bool isAllocatableDecl(const VarDecl *VD) {
   const VarDecl *CVD = VD->getCanonicalDecl();
   if (!CVD->hasAttr<OMPAllocateDeclAttr>())
@@ -3331,7 +3341,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3342,7 +3352,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3353,7 +3363,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3779,32 +3789,32 @@ CGOpenMPRuntime::emitTaskInit(CodeGenFunction &CGF, SourceLocation Loc,
   // Aggregate privates and sort them by the alignment.
   const auto *I = Data.PrivateCopies.begin();
   for (const Expr *E : Data.PrivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-                         /*PrivateElemInit=*/nullptr));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD,
+                                           /*PrivateElemInit=*/nullptr));
     ++I;
   }
   I = Data.FirstprivateCopies.begin();
   const auto *IElemInitRef = Data.FirstprivateInits.begin();
   for (const Expr *E : Data.FirstprivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(
-            E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-            cast<VarDecl>(cast<DeclRefExpr>(*IElemInitRef)->getDecl())));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    const auto *InitVD =
+        cast<VarDecl>(cast<DeclRefExpr>(*IElemInitRef)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD, InitVD));
     ++I;
     ++IElemInitRef;
   }
   I = Data.LastprivateCopies.begin();
   for (const Expr *E : Data.LastprivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-                         /*PrivateElemInit=*/nullptr));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD,
+                                           /*PrivateElemInit=*/nullptr));
     ++I;
   }
   for (const VarDecl *VD : Data.PrivateLocals) {
