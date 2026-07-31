@@ -226,6 +226,9 @@ extern char &AMDGPUMarkLastScratchLoadID;
 void initializeAMDGPUAssignIdxToM0LegacyPass(PassRegistry &);
 extern char &AMDGPUAssignIdxToM0ID;
 
+void initializeAMDGPULowerIdxOpsLegacyPass(PassRegistry &);
+extern char &AMDGPULowerIdxOpsID;
+
 void initializeSILowerSGPRSpillsLegacyPass(PassRegistry &);
 extern char &SILowerSGPRSpillsLegacyID;
 
@@ -441,6 +444,12 @@ public:
 };
 
 class AMDGPUAssignIdxToM0Pass : public PassInfoMixin<AMDGPUAssignIdxToM0Pass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
+
+class AMDGPULowerIdxOpsPass : public PassInfoMixin<AMDGPULowerIdxOpsPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

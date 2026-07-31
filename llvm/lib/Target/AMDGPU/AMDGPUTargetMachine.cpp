@@ -669,6 +669,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeSILowerWWMCopiesLegacyPass(*PR);
   initializeAMDGPUMarkLastScratchLoadLegacyPass(*PR);
   initializeAMDGPUAssignIdxToM0LegacyPass(*PR);
+  initializeAMDGPULowerIdxOpsLegacyPass(*PR);
   initializeSILowerSGPRSpillsLegacyPass(*PR);
   initializeSIFixSGPRCopiesLegacyPass(*PR);
   initializeSIFixVGPRCopiesLegacyPass(*PR);
@@ -1780,6 +1781,11 @@ void GCNPassConfig::addFastRegAlloc() {
 }
 
 void GCNPassConfig::addPreRegAlloc() {
+  // Expand the sub-dword VGPR "as memory" pseudos into a whole-dword access
+  // plus a bit-field extract/insert, so that the M0 setup below sees the
+  // indexed accesses this creates.
+  addPass(&AMDGPULowerIdxOpsID);
+
   // Copy the VGPR "as memory" load/store index into M0 before register
   // allocation; the movrel emitted later by AMDGPULowerVGPREncoding reads it.
   addPass(&AMDGPUAssignIdxToM0ID);
@@ -2600,6 +2606,10 @@ Error AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
 }
 
 void AMDGPUCodeGenPassBuilder::addPreRegAlloc(PassManagerWrapper &PMW) const {
+  // Expand the sub-dword VGPR "as memory" pseudos into a whole-dword access
+  // plus a bit-field extract/insert, before the M0 setup below.
+  addMachineFunctionPass(AMDGPULowerIdxOpsPass(), PMW);
+
   // Set up M0 for the movrel that expands a VGPR "as memory" indexed access.
   // Run before allocation so the index computation coalesces into M0.
   addMachineFunctionPass(AMDGPUAssignIdxToM0Pass(), PMW);
