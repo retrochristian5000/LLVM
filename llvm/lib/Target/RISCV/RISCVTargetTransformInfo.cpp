@@ -673,12 +673,14 @@ InstructionCost RISCVTTIImpl::getSlideCost(FixedVectorType *Tp,
   return FirstSlideCost + SecondSlideCost + MaskCost;
 }
 
-InstructionCost
-RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind, VectorType *DstTy,
-                             VectorType *SrcTy, ArrayRef<int> Mask,
-                             TTI::TargetCostKind CostKind, int Index,
-                             VectorType *SubTp, ArrayRef<const Value *> Args,
-                             const Instruction *CxtI) const {
+InstructionCost RISCVTTIImpl::getShuffleCost(
+    TTI::ShuffleKind Kind, VectorType *DstTy, VectorType *SrcTy,
+    ArrayRef<int> Mask, TTI::TargetCostKind CostKind, int Index,
+    VectorType *SubTp, ArrayRef<const Value *> Args, const Instruction *CxtI,
+    TTI::VectorInstrContext VIC) const {
+  if (VIC == TTI::VectorInstrContext::SplatOpFolded)
+    return TTI::TCC_Free;
+
   assert((Mask.empty() || DstTy->isScalableTy() ||
           Mask.size() == DstTy->getElementCount().getKnownMinValue()) &&
          "Expected the Mask to match the return size if given");
@@ -2560,6 +2562,12 @@ InstructionCost RISCVTTIImpl::getVectorInstrCost(
       Opcode != Instruction::InsertElement)
     return BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1,
                                      VIC);
+
+  // Scalar splat operand can be folded for vector ops that support splatting
+  // the scalar operand, so the explicit insertelement is free in this context.
+  if (Opcode == Instruction::InsertElement &&
+      VIC == TTI::VectorInstrContext::SplatOpFolded)
+    return TTI::TCC_Free;
 
   // Legalize the type.
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Val);

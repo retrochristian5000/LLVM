@@ -179,7 +179,9 @@ public:
   getShuffleCost(TTI::ShuffleKind Kind, VectorType *DstTy, VectorType *SrcTy,
                  ArrayRef<int> Mask, TTI::TargetCostKind CostKind, int Index,
                  VectorType *SubTp, ArrayRef<const Value *> Args = {},
-                 const Instruction *CxtI = nullptr) const override;
+                 const Instruction *CxtI = nullptr,
+                 TTI::VectorInstrContext VIC =
+                     TTI::VectorInstrContext::None) const override;
 
   InstructionCost
   getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
@@ -545,7 +547,7 @@ public:
   bool canSplatOperand(Instruction *I, int Operand) const;
   /// Return true if a vector instruction will lower to a target instruction
   /// able to splat the given operand.
-  bool canSplatOperand(unsigned Opcode, int Operand) const;
+  bool canSplatOperand(unsigned Opcode, int Operand) const override;
 
   bool isProfitableToSinkOperands(Instruction *I,
                                   SmallVectorImpl<Use *> &Ops) const override;

@@ -6310,7 +6310,8 @@ static InstructionCost getScalarizationOverhead(
 static InstructionCost getVectorInstrCost(
     const TargetTransformInfo &TTI, Type *ScalarTy, unsigned Opcode, Type *Val,
     TTI::TargetCostKind CostKind, unsigned Index, Value *Scalar,
-    ArrayRef<std::tuple<Value *, User *, int>> ScalarUserAndIdx) {
+    ArrayRef<std::tuple<Value *, User *, int>> ScalarUserAndIdx,
+    TTI::VectorInstrContext VIC = TTI::VectorInstrContext::None) {
   if (Opcode == Instruction::ExtractElement) {
     if (auto *VecTy = dyn_cast<FixedVectorType>(ScalarTy)) {
       assert(SLPReVec && "Only supported by REVEC.");
@@ -6321,7 +6322,7 @@ static InstructionCost getVectorInstrCost(
     }
   }
   return TTI.getVectorInstrCost(Opcode, Val, CostKind, Index, Scalar,
-                                ScalarUserAndIdx);
+                                ScalarUserAndIdx, VIC);
 }
 
 /// This is similar to TargetTransformInfo::getExtractWithExtendCost, but if Dst
@@ -15321,6 +15322,7 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
   /// May help better estimate the cost if same nodes must be permuted + allows
   /// to move most of the long shuffles cost estimation to TTI.
   bool SameNodesEstimated = true;
+  TTI::VectorInstrContext ContextHint = TTI::VectorInstrContext::None;
 
   static Constant *getAllOnesValue(const DataLayout &DL, Type *Ty) {
     if (Ty->getScalarType()->isPointerTy()) {
@@ -15361,7 +15363,8 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
         }
         return TTI.getVectorInstrCost(Instruction::InsertElement, VecTy,
                                       CostKind, std::distance(VL.begin(), It),
-                                      PoisonValue::get(VecTy), *It);
+                                      PoisonValue::get(VecTy), *It,
+                                      ContextHint);
       }
 
       SmallVector<int> ShuffleMask(VL.size(), PoisonMaskElem);
@@ -15370,11 +15373,11 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
       });
       InstructionCost InsertCost =
           TTI.getVectorInstrCost(Instruction::InsertElement, VecTy, CostKind, 0,
-                                 PoisonValue::get(VecTy), *It);
+                                 PoisonValue::get(VecTy), *It, ContextHint);
       return InsertCost + getShuffleCost(TTI, TargetTransformInfo::SK_Broadcast,
                                          VecTy, ShuffleMask, CostKind,
                                          /*Index=*/0, /*SubTp=*/nullptr,
-                                         /*Args=*/*It);
+                                         /*Args=*/*It, ContextHint);
     }
     return GatherCost +
            (all_of(Gathers, IsaPred<UndefValue>)
@@ -15580,6 +15583,7 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
 
   class ShuffleCostBuilder {
     const TargetTransformInfo &TTI;
+    const TTI::VectorInstrContext ContextHint;
 
     static bool isEmptyOrIdentity(ArrayRef<int> Mask, unsigned VF) {
       int Index = -1;
@@ -15591,7 +15595,9 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
     }
 
   public:
-    ShuffleCostBuilder(const TargetTransformInfo &TTI) : TTI(TTI) {}
+    ShuffleCostBuilder(const TargetTransformInfo &TTI,
+                       TTI::VectorInstrContext ContextHint)
+        : TTI(TTI), ContextHint(ContextHint) {}
     ~ShuffleCostBuilder() = default;
     InstructionCost createShuffleVector(Value *V1, Value *,
                                         ArrayRef<int> Mask) const {
@@ -15610,9 +15616,10 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
           cast<VectorType>(V1->getType())->getElementCount().getKnownMinValue();
       if (isEmptyOrIdentity(Mask, VF))
         return TTI::TCC_Free;
-      return getShuffleCost(
-          TTI, TTI::SK_PermuteSingleSrc, cast<VectorType>(V1->getType()), Mask,
-          TTI::TCK_RecipThroughput, /*Index=*/0, /*SubTp=*/nullptr, VL);
+      return getShuffleCost(TTI, TTI::SK_PermuteSingleSrc,
+                            cast<VectorType>(V1->getType()), Mask,
+                            TTI::TCK_RecipThroughput, /*Index=*/0,
+                            /*SubTp=*/nullptr, VL, ContextHint);
     }
     InstructionCost createIdentity(Value *) const { return TTI::TCC_Free; }
     InstructionCost createPoison(Type *Ty, unsigned VF) const {
@@ -15628,7 +15635,7 @@ class BoUpSLP::ShuffleCostEstimator : public BaseShuffleAnalysis {
   createShuffle(const PointerUnion<Value *, const TreeEntry *> &P1,
                 const PointerUnion<Value *, const TreeEntry *> &P2,
                 ArrayRef<int> Mask, ArrayRef<Value *> VL = {}) {
-    ShuffleCostBuilder Builder(TTI);
+    ShuffleCostBuilder Builder(TTI, ContextHint);
     SmallVector<int> CommonMask(Mask);
     Value *V1 = P1.dyn_cast<Value *>(), *V2 = P2.dyn_cast<Value *>();
     unsigned CommonVF = Mask.size();
@@ -15984,6 +15991,35 @@ public:
     VectorizedVals.clear();
     SameNodesEstimated = true;
   }
+  void checkForFoldingSplat(const TreeEntry *E, ArrayRef<int> ReuseMask) {
+    // Backends may have a fast path for splatting scalar operands (i.e. rather
+    // than generating the splat vector, the vector instruction may be able to
+    // take a scalar operand), for example RISCV vfoo.vx instructions. Pass a
+    // hint to the TTI when costing the insert/shuffle sequence in such cases.
+    if (!ShuffleVectorInst::isZeroEltSplatMask(ReuseMask, ReuseMask.size()))
+      return;
+    Value *SplatVal = E->Scalars.front();
+    if (isa<VectorType>(SplatVal->getType()) ||
+        isa<ExtractElementInst>(SplatVal))
+      return;
+    SmallVector<TreeEntry *> MatchingTEs;
+    for (const auto &TE : R.VectorizableTree) {
+      if (R.DeletedNodes.contains(TE.get()))
+        continue;
+      if (TE->isGather() && E->isSame(TE->Scalars))
+        MatchingTEs.emplace_back(TE.get());
+    }
+    assert(MatchingTEs.size() && "Ought to at least match with current entry");
+    if (all_of(MatchingTEs, [this](auto *TE) {
+          auto *UserTE = TE->UserTreeIndex.UserTE;
+          if (!UserTE || !UserTE->hasState() || UserTE->isAltShuffle())
+            return false;
+          return TTI.canSplatOperand(UserTE->getOpcode(),
+                                     TE->UserTreeIndex.EdgeIdx);
+        }))
+      ContextHint = TTI::VectorInstrContext::SplatOpFolded;
+  }
+
   void add(const TreeEntry &E1, const TreeEntry &E2, ArrayRef<int> Mask) {
     BVValues.reset();
     if (&E1 == &E2) {
@@ -16136,6 +16172,7 @@ public:
         getAllOnesValue(*R.DL, ScalarTy->getScalarType()));
   }
   InstructionCost createFreeze(InstructionCost Cost) { return Cost; }
+
   /// Finalize emission of the shuffles.
   InstructionCost finalize(
       ArrayRef<int> ExtMask,
@@ -22858,6 +22895,9 @@ ResTy BoUpSLP::processBuildVector(const TreeEntry *E, Type *ScalarTy,
     // Gather unique scalars and all constants.
     SmallVector<int> ReuseMask(GatheredScalars.size(), PoisonMaskElem);
     TryPackScalars(GatheredScalars, ReuseMask, /*IsRootPoison=*/true);
+    if constexpr (std::is_same_v<BVTy, ShuffleCostEstimator>)
+      ShuffleBuilder.checkForFoldingSplat(E, ReuseMask);
+
     Value *BV = ShuffleBuilder.gather(GatheredScalars, ReuseMask.size());
     ShuffleBuilder.add(BV, ReuseMask);
     Res = ShuffleBuilder.finalize(E->ReuseShuffleIndices, SubVectors,
