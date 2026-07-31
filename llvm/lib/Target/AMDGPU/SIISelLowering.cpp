@@ -7809,7 +7809,8 @@ static SDValue adjustLoadValueTypeImpl(SDValue Result, EVT LoadVT,
 SDValue SITargetLowering::adjustLoadValueType(unsigned Opcode, MemSDNode *M,
                                               SelectionDAG &DAG,
                                               ArrayRef<SDValue> Ops,
-                                              bool IsIntrinsic) const {
+                                              bool IsIntrinsic,
+                                              bool IsTFE) const {
   SDLoc DL(M);
 
   bool Unpacked = Subtarget->hasUnpackedD16VMem();
@@ -7826,6 +7827,40 @@ SDValue SITargetLowering::adjustLoadValueType(unsigned Opcode, MemSDNode *M,
           EVT::getVectorVT(*DAG.getContext(), LoadVT.getVectorElementType(),
                            LoadVT.getVectorNumElements() + 1);
     }
+  }
+
+  if (IsTFE) {
+    // The hardware always returns TFE results at dword granularity: the data
+    // dwords followed by one status dword. Load that combined vector, then
+    // split it into the status and the D16 data before packing/truncating
+    // the data the same way as the non-TFE case.
+    unsigned NumValueDWords = divideCeil(EquivLoadVT.getSizeInBits(), 32);
+    unsigned NumLoadDWords = NumValueDWords + 1;
+    EVT LoadVTList =
+        EVT::getVectorVT(*DAG.getContext(), MVT::i32, NumLoadDWords);
+    SDVTList VTList = DAG.getVTList(LoadVTList, MVT::Other);
+    SDValue Load = DAG.getMemIntrinsicNode(
+        Opcode, DL, VTList, Ops, M->getMemoryVT(), M->getMemOperand());
+    SDValue Status = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, MVT::i32, Load,
+                                 DAG.getVectorIdxConstant(NumValueDWords, DL));
+    SDValue ZeroIdx = DAG.getVectorIdxConstant(0, DL);
+    SDValue ValueDWords =
+        NumValueDWords == 1
+            ? DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, MVT::i32, Load, ZeroIdx)
+            : DAG.getNode(
+                  ISD::EXTRACT_SUBVECTOR, DL,
+                  EVT::getVectorVT(*DAG.getContext(), MVT::i32, NumValueDWords),
+                  Load, ZeroIdx);
+    // A scalar D16 result (f16/i16) occupies less than a full dword, so
+    // truncate before bitcasting to the final scalar type.
+    if (!EquivLoadVT.isVector() && EquivLoadVT.getSizeInBits() < 32)
+      ValueDWords = DAG.getNode(ISD::TRUNCATE, DL,
+                                EquivLoadVT.changeTypeToInteger(), ValueDWords);
+    SDValue Value = DAG.getNode(ISD::BITCAST, DL, EquivLoadVT, ValueDWords);
+    SDValue Adjusted =
+        adjustLoadValueTypeImpl(Value, LoadVT, DL, DAG, Unpacked);
+    return DAG.getMergeValues({Adjusted, Status, SDValue(Load.getNode(), 1)},
+                              DL);
   }
 
   // Change from v4f16/v2f16 to EquivLoadVT.
@@ -7860,13 +7895,24 @@ SDValue SITargetLowering::lowerIntrinsicLoad(MemSDNode *M, bool IsFormat,
   assert(M->getNumValues() == 2 || M->getNumValues() == 3);
   bool IsTFE = M->getNumValues() == 3;
 
+  if (IsD16 && IsTFE && Subtarget->hasGFX90AInsts()) {
+    DAG.getContext()->diagnose(DiagnosticInfoUnsupported(
+        DAG.getMachineFunction().getFunction(),
+        "TFE D16 format buffer load is not supported on this GPU",
+        DL.getDebugLoc()));
+    return DAG.getMergeValues(
+        {DAG.getPOISON(LoadVT), DAG.getPOISON(MVT::i32), M->getOperand(0)}, DL);
+  }
+
   unsigned Opc = IsFormat ? (IsTFE ? AMDGPUISD::BUFFER_LOAD_FORMAT_TFE
                                    : AMDGPUISD::BUFFER_LOAD_FORMAT)
                  : IsTFE  ? AMDGPUISD::BUFFER_LOAD_TFE
                           : AMDGPUISD::BUFFER_LOAD;
 
   if (IsD16) {
-    return adjustLoadValueType(AMDGPUISD::BUFFER_LOAD_FORMAT_D16, M, DAG, Ops);
+    return adjustLoadValueType(IsTFE ? AMDGPUISD::BUFFER_LOAD_FORMAT_D16_TFE
+                                     : AMDGPUISD::BUFFER_LOAD_FORMAT_D16,
+                               M, DAG, Ops, /*IsIntrinsic=*/false, IsTFE);
   }
 
   // Handle BUFFER_LOAD_BYTE/UBYTE/SHORT/USHORT overloaded intrinsics
@@ -7880,12 +7926,15 @@ SDValue SITargetLowering::lowerIntrinsicLoad(MemSDNode *M, bool IsFormat,
   }
 
   EVT CastVT = getEquivalentMemType(*DAG.getContext(), LoadVT);
-  SDVTList VTList = DAG.getVTList(CastVT, MVT::Other);
+  SDVTList VTList = IsTFE ? DAG.getVTList(CastVT, MVT::i32, MVT::Other)
+                          : DAG.getVTList(CastVT, MVT::Other);
   SDValue MemNode = getMemIntrinsicNode(Opc, DL, VTList, Ops, CastVT,
                                         M->getMemOperand(), DAG);
-  return DAG.getMergeValues(
-      {DAG.getNode(ISD::BITCAST, DL, LoadVT, MemNode), MemNode.getValue(1)},
-      DL);
+  SDValue Data = DAG.getNode(ISD::BITCAST, DL, LoadVT, MemNode);
+  if (IsTFE)
+    return DAG.getMergeValues({Data, MemNode.getValue(1), MemNode.getValue(2)},
+                              DL);
+  return DAG.getMergeValues({Data, MemNode.getValue(1)}, DL);
 }
 
 static SDValue lowerICMPIntrinsic(const SITargetLowering &TLI, SDNode *N,
@@ -8433,8 +8482,8 @@ void SITargetLowering::ReplaceNodeResults(SDNode *N,
           Results.push_back(Res.getOperand(I));
         }
       } else {
-        Results.push_back(Res);
-        Results.push_back(Res.getValue(1));
+        for (unsigned I = 0; I < N->getNumValues(); ++I)
+          Results.push_back(Res.getValue(I));
       }
       return;
     }
