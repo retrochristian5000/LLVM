@@ -257,10 +257,11 @@ private:
 
   /// Generates the implicit data ops for a compute construct.
   template <typename OpT>
-  void generateImplicitDataOps(
-      ModuleOp &module, OpT computeConstructOp,
-      std::optional<acc::ClauseDefaultValue> &defaultClause,
-      acc::OpenACCSupport &accSupport, SmallVector<Value> &dominatingDataClauses);
+  void
+  generateImplicitDataOps(ModuleOp &module, OpT computeConstructOp,
+                          std::optional<acc::ClauseDefaultValue> &defaultClause,
+                          acc::OpenACCSupport &accSupport,
+                          SmallVector<Value> &dominatingDataClauses);
 
   /// Generates a private recipe for a variable.
   acc::PrivateRecipeOp generatePrivateRecipe(ModuleOp &module, Value var,
@@ -771,7 +772,8 @@ template <typename OpT>
 void ACCImplicitData::generateImplicitDataOps(
     ModuleOp &module, OpT computeConstructOp,
     std::optional<acc::ClauseDefaultValue> &defaultClause,
-    acc::OpenACCSupport &accSupport, SmallVector<Value> &dominatingDataClauses) {
+    acc::OpenACCSupport &accSupport,
+    SmallVector<Value> &dominatingDataClauses) {
   // Implicit data attributes are only applied if "[t]here is no default(none)
   // clause visible at the compute construct", unless ignoreDefaultNone is set.
   if (!ignoreDefaultNone && defaultClause.has_value() &&
@@ -868,9 +870,9 @@ void ACCImplicitData::runOnOperation() {
                   op, getAnalysis<DominanceInfo>(),
                   getAnalysis<PostDominanceInfo>());
               foldPresentDeviceValue(op, dominatingDataClauses,
-                                    getAnalysis<AliasAnalysis>());
+                                     getAnalysis<AliasAnalysis>());
               generateImplicitDataOps(module, op, defaultClause, accSupport,
-                                     dominatingDataClauses);
+                                      dominatingDataClauses);
             })
         .Default([&](Operation *) {});
   }
