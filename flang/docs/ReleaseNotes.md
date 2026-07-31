@@ -34,6 +34,11 @@ page](https://llvm.org/releases/).
 ## Non-comprehensive list of changes in this release
 
 ## New Compiler Flags
+- Added the gfortran-compatible `-ffpe-trap=` flag, which sets the initial
+  floating-point exception halting mode of the main program. It takes a
+  comma-separated list of `invalid`, `zero`, `overflow`, `underflow`, `inexact`,
+  and the extension `denormal`, or `none` to disable halting. See the Flang
+  command line reference for the supported targets and details.
 
 ## Windows Support
 
