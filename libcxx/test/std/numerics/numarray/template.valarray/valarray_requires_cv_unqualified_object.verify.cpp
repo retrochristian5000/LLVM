@@ -43,7 +43,7 @@ private:
 };
 
 void test() {
-  // expected-error-re@valarray:* {{static assertion failed{{.*}}std::valarray<T> requires T to be a cv-unqualified object type}}
+  // expected-error-re@+1 {{static assertion failed{{.*}}std::valarray<T> requires T to be a cv-unqualified object type}}
   (void)sizeof(std::valarray<const int>);
   // expected-error-re@valarray:* {{static assertion failed{{.*}}std::valarray<T> requires T to be a cv-unqualified object type}}
   (void)sizeof(std::valarray<volatile int>);
