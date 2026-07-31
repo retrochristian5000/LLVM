@@ -4577,6 +4577,46 @@ Instruction *InstCombinerImpl::visitSwitchInst(SwitchInst &SI) {
     if (Value *V =
             simplifySwitchOnSelectUsingRanges(SI, Select, /*IsTrueArm=*/false))
       return replaceOperand(SI, 0, V);
+
+    // Fold switch(select(icmp eq X, C, K, X)) into switch(X), retargeting
+    // (or adding) the case for C to wherever K currently dispatches to:
+    //   %cmp = icmp eq T %x, C
+    //   %key = select i1 %cmp, T K, T %x
+    //   switch T %key, label %default [ T K, label %case_k ... ]
+    // becomes
+    //   switch T %x, label %default [ T C, label %case_k
+    //                                  T K, label %case_k ... ]
+    CmpPredicate Pred;
+    Value *X;
+    ConstantInt *C;
+
+    if (match(Select->getCondition(),
+              m_c_ICmp(Pred, m_Value(X), m_ConstantInt(C))) &&
+        ICmpInst::isEquality(Pred)) {
+      Value *TrueVal = Select->getTrueValue();
+      Value *FalseVal = Select->getFalseValue();
+
+      // Normalize to select(icmp eq X, C, K, X).
+      if (Pred == ICmpInst::ICMP_NE)
+        std::swap(TrueVal, FalseVal);
+      if (FalseVal == X) {
+        if (auto *K = dyn_cast<ConstantInt>(TrueVal)) {
+          // X == C is redirected to K, so case C should go where K does.
+          BasicBlock *DestFork = SI.findCaseValue(K)->getCaseSuccessor();
+          auto CaseC = SI.findCaseValue(C);
+
+          if (CaseC == SI.case_default()) {
+            if (DestFork != SI.getDefaultDest()) {
+              SwitchInstProfUpdateWrapper SIW(SI);
+              SIW.addCase(C, DestFork, std::nullopt);
+            }
+          } else {
+            CaseC->setSuccessor(DestFork);
+          }
+          return replaceOperand(SI, 0, X);
+        }
+      }
+    }
   }
 
   KnownBits Known = computeKnownBits(Cond, &SI);
