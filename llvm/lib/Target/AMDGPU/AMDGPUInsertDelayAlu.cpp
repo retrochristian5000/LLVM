@@ -125,8 +125,8 @@ public:
 
     DelayInfo() = default;
 
-    DelayInfo(DelayType Type, unsigned Cycles, bool FFProd = false) {
-      IsFFProducer = FFProd;
+    DelayInfo(DelayType Type, unsigned Cycles, bool IsFFProducer = false)
+        : IsFFProducer(IsFFProducer) {
       switch (Type) {
       default:
         llvm_unreachable("unexpected type");
@@ -384,13 +384,8 @@ public:
       case AMDGPU::V_DIV_SCALE_F64_e64:
         return true;
       default:
-        if (MI.isCompare()) {
-          // V_CMPX produces EXEC (implicit)
-          if (AMDGPU::isVCMPX(MI.getOpcode()))
-            return TRI->isSubRegisterEq(Reg, ExecReg);
-          // V_CMP* produces condition masks
+        if (MI.isCompare())
           return true;
-        }
       }
     }
     return false;
@@ -490,19 +485,6 @@ public:
       case AMDGPU::V_CNDMASK_B16_fake16_e32:
       case AMDGPU::V_CNDMASK_B16_t16_e32:
         return MO.isImplicit();
-
-      // VOP3 explicit carry-in consumers
-      case AMDGPU::V_ADDC_U32_e64:
-      case AMDGPU::V_SUBB_U32_e64:
-      case AMDGPU::V_SUBBREV_U32_e64:
-      // VOP3 explicit condition mask consumers
-      case AMDGPU::V_CNDMASK_B32_e64:
-      case AMDGPU::V_CNDMASK_B16_fake16_e64:
-      case AMDGPU::V_CNDMASK_B16_t16_e64:
-        int Src2Idx =
-            AMDGPU::getNamedOperandIdx(MIOpCode, AMDGPU::OpName::src2);
-        assert(Src2Idx >= 0 && "Unexpected source index");
-        return OpNo == static_cast<unsigned>(Src2Idx);
       }
     } else if (TRI->isSubRegisterEq(Reg, ExecReg)) {
       switch (MIOpCode) {
@@ -514,7 +496,9 @@ public:
         // Any other VALU
         return MO.isImplicit();
       }
-    } else if (AMDGPU::isSGPR(Reg, TRI)) {
+    }
+
+    if (AMDGPU::isSGPR(Reg, TRI)) {
       switch (MIOpCode) {
       // VOP3 explicit carry-in consumers
       case AMDGPU::V_ADDC_U32_e64:
