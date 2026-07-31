@@ -712,12 +712,12 @@ bool LoopVectorizationPlanner::isMoreProfitable(const VectorizationFactor &A,
   // represented in the cost. TODO: Reconsider this restriction for predicated
   // epilogues (once supported).
   if (IsEpilogue && A.Width.isScalable() != B.Width.isScalable() &&
-      A.Cost.isValid()) {
+      A.Cost.isValid() && B.Cost.isValid()) {
     auto [FixedCost, ScalableCost] = std::make_pair(CostA, CostB);
     if (B.Width.isFixed())
       std::swap(FixedCost, ScalableCost);
 
-    if (FixedCost / ScalableCost <= 1)
+    if (FixedCost / ScalableCost <= 2)
       return A.Width.isFixed();
   }
 
