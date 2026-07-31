@@ -3041,13 +3041,13 @@ LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
       MaxPowerOf2RuntimeVF = std::nullopt; // Stick with tail-folding for now.
   }
 
-  auto NoScalarEpilogueNeeded = [this, &UserIC](unsigned MaxVF) {
+  auto NoScalarEpilogueNeeded = [this](unsigned MaxVF, unsigned EffectiveIC) {
     // Return false if the loop is neither a single-latch-exit loop nor an
     // early-exit loop as tail-folding is not supported in that case.
     if (TheLoop->getExitingBlock() != TheLoop->getLoopLatch() &&
         !Legal->hasUncountableEarlyExit())
       return false;
-    unsigned MaxVFtimesIC = UserIC ? MaxVF * UserIC : MaxVF;
+    unsigned MaxVFtimesIC = MaxVF * EffectiveIC;
     ScalarEvolution *SE = PSE.getSE();
     // Calling getSymbolicMaxBackedgeTakenCount enables support for loops
     // with uncountable exits. For countable loops, the symbolic maximum must
@@ -3064,10 +3064,11 @@ LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
     return Rem->isZero();
   };
 
+  unsigned EffectiveIC = UserIC > 0 ? UserIC : 1;
   if (MaxPowerOf2RuntimeVF > 0u) {
     assert((UserVF.isNonZero() || isPowerOf2_32(*MaxPowerOf2RuntimeVF)) &&
            "MaxFixedVF must be a power of 2");
-    if (NoScalarEpilogueNeeded(*MaxPowerOf2RuntimeVF)) {
+    if (NoScalarEpilogueNeeded(*MaxPowerOf2RuntimeVF, EffectiveIC)) {
       // Accept MaxFixedVF if we do not have a tail.
       LLVM_DEBUG(dbgs() << "LV: No tail will remain for any chosen VF.\n");
       return MaxFactors;
@@ -3083,11 +3084,34 @@ LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
       // the trip count but the scalable factor does not, use the fixed-width
       // factor in preference to allow the generation of a non-predicated loop.
       if (EpilogueLoweringStatus == CM_EpilogueNotAllowedLowTripLoop &&
-          NoScalarEpilogueNeeded(MaxFactors.FixedVF.getFixedValue())) {
+          NoScalarEpilogueNeeded(MaxFactors.FixedVF.getFixedValue(),
+                                 EffectiveIC)) {
         LLVM_DEBUG(dbgs() << "LV: Picking a fixed-width so that no tail will "
                              "remain for any chosen VF.\n");
         MaxFactors.ScalableVF = ElementCount::getScalable(0);
         return MaxFactors;
+      }
+      // Allow cases where the ExactTC == VF + 1. VF can be any power of
+      // 2 between 2 and MaxVF.
+      //
+      // This produces 1 vector iteration, and 1 scalar iteration with
+      // no remainder. Later passes will eliminate the loop and leave
+      // straight-line code as the both iteration counts are statically known.
+      ElementCount ExactTC = getSmallConstantTripCount(PSE.getSE(), TheLoop);
+      if (EpilogueLoweringStatus == CM_EpilogueNotAllowedLowTripLoop &&
+          ExactTC.getFixedValue() > 1) {
+        unsigned TC = ExactTC.getFixedValue();
+        unsigned MaxFixedVF = MaxFactors.FixedVF.getFixedValue();
+        if ((TC - 1) % EffectiveIC == 0) {
+          unsigned VF = (TC - 1) / EffectiveIC;
+          if (VF >= 2 && VF <= MaxFixedVF && isPowerOf2_32(VF)) {
+            LLVM_DEBUG(dbgs() << "LV: Picking MaxVF=" << VF
+                              << " with 1 scalar iteration remaining.\n");
+            MaxFactors.FixedVF = ElementCount::getFixed(VF);
+            MaxFactors.ScalableVF = ElementCount::getScalable(0);
+            return MaxFactors;
+          }
+        }
       }
     }
 
@@ -5830,6 +5854,81 @@ InstructionCost LoopVectorizationPlanner::cost(VPlan &Plan, ElementCount VF,
   return Cost;
 }
 
+bool LoopVectorizationPlanner::isProfitableOneScalarTail(
+    const VectorizationFactor &CurrentFactor, const ElementCount &ExactTC,
+    unsigned int UserIC) {
+  if (!ExactTC.isFixed() || CurrentFactor.Width.isScalable())
+    return true;
+
+  unsigned TC = ExactTC.getFixedValue();
+  if (TC == 0 || TC > TTI.getMinTripCountTailFoldingThreshold())
+    return true;
+
+  unsigned EstimatedWidth =
+      estimateElementCount(CurrentFactor.Width, Config.getVScaleForTuning());
+  if (TC % (EstimatedWidth * UserIC) != 1)
+    return true;
+
+  // On certain Instructions or Intrinsics, where Type Promotion is used
+  // for v2i8, v4i8 and v2i16 types for legalization. These are not
+  // beneficial for Vectorization due to CodeGen of Type Promotion so
+  // the Scalar loop is preffered.
+  for (BasicBlock *BB : OrigLoop->blocks()) {
+    for (Instruction &Inst : *BB) {
+      FixedVectorType *VTy =
+          dyn_cast<FixedVectorType>(toVectorTy(Inst.getType(), EstimatedWidth));
+      if (!VTy)
+        continue;
+
+      bool IsUndesirableType =
+          (VTy->getScalarSizeInBits() == 8 &&
+           (EstimatedWidth * UserIC == 2 || EstimatedWidth * UserIC == 4)) ||
+          (VTy->getScalarSizeInBits() == 16 && EstimatedWidth * UserIC == 2);
+      if (auto Opcode = Inst.getOpcode();
+          Opcode == Instruction::Xor && IsUndesirableType) {
+        LLVM_DEBUG(
+            dbgs()
+            << "LV: Rejecting VF " << CurrentFactor.Width
+            << " for one-scalar-tail low trip count. Vectorizing "
+               "with Type Promotion is unprofitable for Xor operations.\n");
+        return false;
+      }
+      if (auto *II = dyn_cast<IntrinsicInst>(&Inst)) {
+        Intrinsic::ID IID = II->getIntrinsicID();
+        if ((IID == Intrinsic::smin || IID == Intrinsic::smax ||
+             IID == Intrinsic::umin || IID == Intrinsic::umax) &&
+            IsUndesirableType) {
+          LLVM_DEBUG(
+              dbgs()
+              << "LV: Rejecting VF " << CurrentFactor.Width
+              << " for one-scalar-tail low trip count. Vectorizing with "
+                 "Type Promotion is unprofitable for Min/Max intrinsics.\n");
+          return false;
+        }
+      }
+    }
+  }
+
+  // VectorCost reflects the cost of the requried vector iteration(s) and the
+  // one remaining scalar iteration cost
+  InstructionCost VectorCost =
+      getCostForKnownTripCount(CurrentFactor, TC, /*HasTail=*/true);
+  InstructionCost ScalarCostForTC = CurrentFactor.ScalarCost * TC;
+  if (!VectorCost.isValid() || VectorCost < ScalarCostForTC) {
+    LLVM_DEBUG(dbgs() << "LV: Accepting VF " << CurrentFactor.Width
+                      << " for one-scalar-tail low trip count: vector cost "
+                      << VectorCost << " < scalar cost " << ScalarCostForTC
+                      << ".\n");
+    return true;
+  }
+
+  LLVM_DEBUG(dbgs() << "LV: Rejecting VF " << CurrentFactor.Width
+                    << " for one-scalar-tail low trip count: vector cost "
+                    << VectorCost << " >= scalar cost " << ScalarCostForTC
+                    << ".\n");
+  return false;
+}
+
 std::pair<VectorizationFactor, VPlan *>
 LoopVectorizationPlanner::computeBestVF() {
   if (VPlans.empty())
@@ -5885,6 +5984,7 @@ LoopVectorizationPlanner::computeBestVF() {
   }
 
   VPlan *PlanForBestVF = &FirstPlan;
+  ElementCount ExactTC = getSmallConstantTripCount(PSE.getSE(), OrigLoop);
 
   for (auto &P : VPlans) {
     ArrayRef<ElementCount> VFs(P->vectorFactors().begin(),
@@ -5920,6 +6020,12 @@ LoopVectorizationPlanner::computeBestVF() {
       InstructionCost Cost =
           cost(*P, VF, ConsiderRegPressure ? &RUs[I] : nullptr);
       VectorizationFactor CurrentFactor(VF, Cost, ScalarCost);
+
+      unsigned int UserIC =
+          Hints.getInterleave() != 0 ? Hints.getInterleave() : 1;
+      if (!ForceVectorization && P->hasScalarTail() &&
+          !isProfitableOneScalarTail(CurrentFactor, ExactTC, UserIC))
+        continue;
 
       if (isMoreProfitable(CurrentFactor, BestFactor, P->hasScalarTail())) {
         BestFactor = CurrentFactor;
