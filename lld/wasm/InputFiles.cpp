@@ -551,6 +551,8 @@ void ObjFile::parse(bool ignoreComdats) {
       uint32_t alignment = getCustomSectionAlignment(section);
       if (shouldMerge(section))
         customSec = make<MergeInputChunk>(section, this, alignment);
+      else if (section.Name == "metadata.code.branch_hint")
+        customSec = make<CodeMetaDataInputSection>(section, this, alignment);
       else
         customSec = make<InputSection>(section, this, alignment);
       customSec->discarded = isExcludedByComdat(customSec);
