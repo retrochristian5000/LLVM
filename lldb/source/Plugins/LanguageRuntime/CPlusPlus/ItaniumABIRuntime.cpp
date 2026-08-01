@@ -14,6 +14,9 @@
 #include "lldb/Expression/FunctionCaller.h"
 #include "lldb/Utility/LLDBLog.h"
 
+#include "lldb/Symbol/VariableList.h"
+#include "lldb/ValueObject/ValueObjectVariable.h"
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -26,6 +29,70 @@ bool ItaniumABIRuntime::IsVTableSymbol(Mangled &mangled) const {
       vtable_demangled_prefix);
 }
 
+/// clang emits a `DW_TAG_variable` called `__clang_vtable` inside the
+/// enclosing class this function uses that to resolve the dynamic type of
+/// `in_value`
+TypeAndOrName ItaniumABIRuntime::FindTypeInfoWithClangVTable(
+    ValueObject &in_value,
+    const LanguageRuntime::VTableInfo &vtable_info) const {
+  ModuleSP module_sp = vtable_info.symbol->CalculateSymbolContextModule();
+  if (!module_sp)
+    return TypeAndOrName();
+
+  auto vtableBase = vtable_info.symbol->GetLoadAddress(&m_process->GetTarget());
+
+  VariableList vars;
+
+  // SymbolFile doesn't provide an API to lookup a global variable with a
+  // specific location, so we have to resort to an unbounded name lookup
+  module_sp->FindGlobalVariables(ConstString("__clang_vtable"),
+                                 CompilerDeclContext(), -1, vars);
+
+  Log *log = GetLog(LLDBLog::Object);
+  LLDB_LOGF(log, "0x%16.16" PRIx64 ": found %zu __clang_vtable variables\n",
+            in_value.GetPointerValue().address, vars.GetSize());
+
+  for (lldb::VariableSP var : vars) {
+    auto valobj = ValueObjectVariable::Create(m_process, var);
+    if (valobj->GetLoadAddress() != vtableBase)
+      continue;
+
+    auto type_sp = var->GetEnclosingType();
+    if (!type_sp) {
+      LLDB_LOGF(log,
+                "0x%16.16" PRIx64 ": Found __clang_vtable at 0x%16.16" PRIx64
+                ", but not the enclosing type!\n",
+                in_value.GetPointerValue().address, valobj->GetLoadAddress());
+
+      // Failure to find the type is either an error in the debug info, or the
+      // symptom of a module with debug kind info which doesn't support this
+      // sort of lookup. Carry on
+      continue;
+    }
+
+    if (!TypeSystemClang::IsCXXClassType(type_sp->GetForwardCompilerType())) {
+      LLDB_LOGF(log,
+                "0x%16.16" PRIx64 ": Found __clang_vtable at 0x%16.16" PRIx64
+                " for '%s' which is not a CXXClassType. Ignoring\n",
+                in_value.GetPointerValue().address, valobj->GetLoadAddress(),
+                type_sp->GetQualifiedName().AsCString(""));
+      continue;
+    }
+
+    LLDB_LOGF(log,
+              "0x%16.16" PRIx64
+              ": static-type = '%s' has dynamic type: uid={0x%" PRIx64
+              "}, type-name='%s'\n",
+              in_value.GetPointerValue().address,
+              in_value.GetTypeName().AsCString(""), type_sp->GetID(),
+              type_sp->GetName().GetCString());
+
+    return TypeAndOrName(type_sp);
+  }
+
+  return TypeAndOrName();
+}
+
 TypeAndOrName
 ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
                                const LanguageRuntime::VTableInfo &vtable_info) {
@@ -36,6 +103,29 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
       return type_info;
 
     if (vtable_info.symbol) {
+      type_info = FindTypeInfoWithDemangling(in_value, vtable_info);
+      if (type_info) {
+        SetDynamicTypeInfo(vtable_info.addr, type_info);
+        return type_info;
+      }
+
+      type_info = FindTypeInfoWithClangVTable(in_value, vtable_info);
+      if (type_info) {
+        SetDynamicTypeInfo(vtable_info.addr, type_info);
+        return type_info;
+      }
+    }
+  }
+  return TypeAndOrName();
+}
+
+TypeAndOrName ItaniumABIRuntime::FindTypeInfoWithDemangling(
+    ValueObject &in_value,
+    const LanguageRuntime::VTableInfo &vtable_info) const {
+  if (vtable_info.addr.IsSectionOffset()) {
+    if (vtable_info.symbol) {
+      TypeAndOrName type_info;
+
       Log *log = GetLog(LLDBLog::Object);
       llvm::StringRef symbol_name =
           vtable_info.symbol->GetMangled().GetDemangledName().GetStringRef();
@@ -44,6 +134,7 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
                 ": static-type = '%s' has vtable symbol '%s'\n",
                 in_value.GetPointerValue().address,
                 in_value.GetTypeName().GetCString(), symbol_name.str().c_str());
+
       // We are a C++ class, that's good.  Get the class name and look it
       // up:
       llvm::StringRef class_name = symbol_name;
@@ -142,8 +233,6 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
                   in_value.GetPointerValue().address,
                   in_value.GetTypeName().AsCString(""));
       }
-      if (type_info)
-        SetDynamicTypeInfo(vtable_info.addr, type_info);
       return type_info;
     }
   }
