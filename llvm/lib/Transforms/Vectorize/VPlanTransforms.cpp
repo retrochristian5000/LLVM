@@ -2234,6 +2234,10 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 
   /// Returns true if recipe \p Def can be safely handed for CSE.
   static bool canHandle(const VPSingleDefRecipe *Def) {
+    // Widened loads are handled explicitly by getHashValue/isEqual below.
+    if (isa<VPWidenLoadRecipe>(Def))
+      return true;
+
     // We can extend the list of handled recipes in the future,
     // provided we account for the data embedded in them while checking for
     // equality or hashing.
@@ -2252,6 +2256,12 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 
   /// Hash the underlying data of \p Def.
   static unsigned getHashValue(const VPSingleDefRecipe *Def) {
+    // Hash a widened load from its state.
+    if (auto *Load = dyn_cast<VPWidenLoadRecipe>(Def))
+      return hash_combine(Load->getVPRecipeID(), Load->getScalarType(),
+                          Load->getAlign().value(), Load->isConsecutive(),
+                          Load->isMasked(),
+                          hash_combine_range(Load->operands()));
     hash_code Result = hash_combine(
         Def->getVPRecipeID(), vputils::getOpcodeOrIntrinsicID(Def),
         getGEPSourceElementType(Def), Def->getScalarType(),
@@ -2266,6 +2276,18 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 
   /// Check equality of underlying data of \p L and \p R.
   static bool isEqual(const VPSingleDefRecipe *L, const VPSingleDefRecipe *R) {
+    // Compare two widened loads by their state.
+    if (auto *LL = dyn_cast<VPWidenLoadRecipe>(L)) {
+      auto *RL = dyn_cast<VPWidenLoadRecipe>(R);
+      return RL && LL->getScalarType() == RL->getScalarType() &&
+             LL->getAlign() == RL->getAlign() &&
+             LL->isConsecutive() == RL->isConsecutive() &&
+             LL->isMasked() == RL->isMasked() &&
+             equal(LL->operands(), RL->operands());
+    }
+    if (isa<VPWidenLoadRecipe>(R))
+      return false;
+
     if (L->getVPRecipeID() != R->getVPRecipeID() ||
         vputils::getOpcodeOrIntrinsicID(L) !=
             vputils::getOpcodeOrIntrinsicID(R) ||
@@ -2303,7 +2325,26 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {
 };
 } // end anonymous namespace
 
-/// Perform a common-subexpression-elimination of VPSingleDefRecipes on the \p
+/// Return true if no memory-writing recipe between \p From and \p To may alias
+/// \p MemLoc. \p From and \p To must be in the same block.
+static bool noAliasingWriteBetween(const MemoryLocation &MemLoc,
+                                   VPRecipeBase *From, VPRecipeBase *To) {
+  if (From->getParent() != To->getParent())
+    return false;
+
+  for (VPRecipeBase &R :
+       make_range(std::next(From->getIterator()), To->getIterator())) {
+    if (!R.mayWriteToMemory())
+      continue;
+    auto Loc = vputils::getMemoryLocation(R);
+    if (!Loc ||
+        ScopedNoAliasAAResult::alias(*Loc, MemLoc) != AliasResult::NoAlias)
+      return false;
+  }
+  return true;
+}
+
+/// Perform a common-subexpression-elimination of single-def recipes on the \p
 /// Plan.
 void VPlanTransforms::cse(VPlan &Plan) {
   VPDominatorTree VPDT(Plan);
@@ -2312,7 +2353,7 @@ void VPlanTransforms::cse(VPlan &Plan) {
   ReversePostOrderTraversal<VPBlockDeepTraversalWrapper<VPBlockBase *>> RPOT(
       Plan.getEntry());
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(RPOT)) {
-    for (VPRecipeBase &R : *VPBB) {
+    for (VPRecipeBase &R : make_early_inc_range(*VPBB)) {
       auto *Def = dyn_cast<VPSingleDefRecipe>(&R);
       if (!Def || !VPCSEDenseMapInfo::canHandle(Def))
         continue;
@@ -2320,6 +2361,18 @@ void VPlanTransforms::cse(VPlan &Plan) {
         // V must dominate Def for a valid replacement.
         if (!VPDT.dominates(V->getParent(), VPBB))
           continue;
+        // Reuse an earlier widened load only if no aliasing write lies between
+        // the two loads.
+        if (auto *Load = dyn_cast<VPWidenLoadRecipe>(Def)) {
+          auto *EarlierLoad = cast<VPWidenLoadRecipe>(V);
+          std::optional<MemoryLocation> Loc = vputils::getMemoryLocation(*Load);
+          if (!Loc || !noAliasingWriteBetween(*Loc, EarlierLoad, Load))
+            continue;
+          // Keep only metadata common to both loads on the survivor.
+          EarlierLoad->intersect(*Load);
+          Load->replaceAllUsesWith(EarlierLoad);
+          continue;
+        }
         // Only keep flags present on both V and Def.
         if (auto *RFlags = dyn_cast<VPRecipeWithIRFlags>(V))
           RFlags->intersectFlags(*cast<VPRecipeWithIRFlags>(Def));
