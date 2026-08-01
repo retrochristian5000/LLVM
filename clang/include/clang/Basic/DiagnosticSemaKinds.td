@@ -13580,6 +13580,14 @@ def note_sycl_kernel_launch_overload_resolution_here : Note<
 def err_sycl_entry_point_device_use : Error<
   "function %0 cannot be used in device code because it is declared with the"
   " %1 attribute">;
+def warn_sycl_kernel_param_has_ptr: Warning<
+  "pointers used in parameters to a SYCL kernel require a device that supports Unified Shared Memory (USM)">,
+  InGroup<NonPortableSYCL>, DefaultIgnore;
+def err_sycl_kernel_bad_param_type : Error<
+  "%0 %enum_select<InvalidSYCLKernelParamReason>{"
+      "%FAM{contains a flexible array member}|"
+      "%VirtualBases{inherits virtual base classes}|"
+      "}1 and cannot be used as the type of a SYCL kernel parameter">;
 
 def warn_cuda_maxclusterrank_sm_90 : Warning<
   "maxclusterrank requires sm_90 or higher, CUDA arch provided: %0, ignoring "
