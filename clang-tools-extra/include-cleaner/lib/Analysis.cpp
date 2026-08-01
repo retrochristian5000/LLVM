@@ -20,8 +20,10 @@
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Tooling/Core/Replacement.h"
+#include "clang/Tooling/Inclusions/HeaderIncludes.h"
 #include "clang/Tooling/Inclusions/StandardLibrary.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -31,7 +33,6 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <cassert>
-#include <climits>
 #include <string>
 
 namespace clang::include_cleaner {
@@ -163,18 +164,52 @@ analyze(llvm::ArrayRef<Decl *> ASTRoots,
   return Results;
 }
 
+bool isAngled(const std::string &String) {
+  return !String.empty() && String[0] == '<';
+}
+
 std::string fixIncludes(const AnalysisResults &Results,
                         llvm::StringRef FileName, llvm::StringRef Code,
                         const format::FormatStyle &Style) {
   assert(Style.isCpp() && "Only C++ style supports include insertions!");
   tooling::Replacements R;
-  // Encode insertions/deletions in the magic way clang-format understands.
-  for (const Include *I : Results.Unused)
-    cantFail(R.add(tooling::Replacement(FileName, UINT_MAX, 1, I->quote())));
-  for (auto &[Spelled, _] : Results.Missing)
-    cantFail(R.add(
-        tooling::Replacement(FileName, UINT_MAX, 0, "#include " + Spelled)));
-  // "cleanup" actually turns the UINT_MAX replacements into concrete edits.
+  tooling::HeaderIncludes HeaderIncludes(FileName, Code, Style.IncludeStyle);
+
+  for (const Include *I : Results.Unused) {
+    auto Deletion = HeaderIncludes.remove(I->Spelled, I->Angled);
+    for (const auto &Del : Deletion) {
+      cantFail(R.add(Del));
+    }
+  }
+
+  struct InsertionInfo {
+    std::string Text;
+    unsigned Length = 0;
+  };
+  llvm::DenseMap<unsigned, InsertionInfo> InsertionsByOffset;
+
+  for (auto &[Spelled, _] : Results.Missing) {
+    auto Insertion = HeaderIncludes.insert(
+        llvm::StringRef{Spelled}.trim("\"<>"), isAngled(Spelled),
+        tooling::IncludeDirective::Include);
+    if (Insertion) {
+      auto &Info = InsertionsByOffset[Insertion->getOffset()];
+      Info.Text += Insertion->getReplacementText();
+      if (Insertion->getLength() > 0) {
+        // We can concatenate pure insertions (length 0), but at most one
+        // true replacement (length > 0) to avoid overwriting the length.
+        assert(Info.Length == 0 && "Multiple replacements at same offset?");
+        Info.Length = Insertion->getLength();
+      }
+    }
+  }
+
+  for (const auto &Entry : InsertionsByOffset) {
+    const auto &Info = Entry.second;
+    const unsigned Offset = Entry.first;
+    cantFail(
+        R.add(tooling::Replacement(FileName, Offset, Info.Length, Info.Text)));
+  }
   auto Positioned = cantFail(format::cleanupAroundReplacements(Code, R, Style));
   return cantFail(tooling::applyAllReplacements(Code, Positioned));
 }
