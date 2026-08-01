@@ -143,7 +143,13 @@ private:
   friend bool has_facet(const locale&) _NOEXCEPT;
   template <class _Facet>
   friend const _Facet& use_facet(const locale&);
+
+  friend void swap(locale&, locale&);
 };
+
+inline void swap(locale& __lhs, locale& __rhs) {
+  std::swap(__lhs.__locale_, __rhs.__locale_);
+}
 
 class _LIBCPP_EXPORTED_FROM_ABI locale::facet : public __shared_count {
 protected:
