@@ -1532,6 +1532,11 @@ static void computeKnownBitsFromOperator(const Operator *I,
       if (FPClasses == fcNone)
         break;
 
+      // The position of the sign bit for ppc_fp128 is endian-dependent.
+      if (!APFloat::hasSignBitInMSB(FPType->getFltSemantics()) ||
+          FPType->isPPC_FP128Ty())
+        break;
+
       if (Result.isKnownNever(fcNormal | fcSubnormal | fcNan)) {
         Known.setAllConflict();
 
