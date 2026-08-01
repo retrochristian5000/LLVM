@@ -41,10 +41,13 @@ public:
     /// @returns The inner size of blocks in the list containing this node.
     LIBC_INLINE size_t size() const { return block().inner_size(); }
 
+    /// @returns The next node in the list containing this node.
+    LIBC_INLINE Node *next() const { return next_; }
+
   private:
     // Circularly linked pointers to adjacent nodes.
-    Node *prev;
-    Node *next;
+    Node *prev_;
+    Node *next_;
     friend class FreeList;
   };
 
