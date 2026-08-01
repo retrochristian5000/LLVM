@@ -243,6 +243,7 @@ add_header_library(
     simd.h
   DEPENDS
     libc.src.__support.macros.optimization
+    libc.src.__support.macros.properties.cpu_features
     .utility
     .tuple
 )
