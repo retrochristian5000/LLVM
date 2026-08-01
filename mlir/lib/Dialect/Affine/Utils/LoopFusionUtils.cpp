@@ -18,6 +18,7 @@
 #include "mlir/Dialect/Affine/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
+#include "mlir/Dialect/MemRef/Utils/MemRefUtils.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -37,10 +38,14 @@ static void getLoadAndStoreMemRefAccesses(Operation *opA,
                                           DenseMap<Value, bool> &values) {
   opA->walk([&](Operation *op) {
     if (auto loadOp = dyn_cast<AffineReadOpInterface>(op)) {
-      if (values.count(loadOp.getMemRef()) == 0)
-        values[loadOp.getMemRef()] = false;
+      Value memref = memref::skipFullyAliasingOperations(
+          cast<MemrefValue>(loadOp.getMemRef()));
+      if (values.count(memref) == 0)
+        values[memref] = false;
     } else if (auto storeOp = dyn_cast<AffineWriteOpInterface>(op)) {
-      values[storeOp.getMemRef()] = true;
+      Value memref = memref::skipFullyAliasingOperations(
+          cast<MemrefValue>(storeOp.getMemRef()));
+      values[memref] = true;
     }
   });
 }
@@ -50,10 +55,16 @@ static void getLoadAndStoreMemRefAccesses(Operation *opA,
 /// Returns false otherwise.
 static bool isDependentLoadOrStoreOp(Operation *op,
                                      DenseMap<Value, bool> &values) {
-  if (auto loadOp = dyn_cast<AffineReadOpInterface>(op))
-    return values.count(loadOp.getMemRef()) > 0 && values[loadOp.getMemRef()];
-  if (auto storeOp = dyn_cast<AffineWriteOpInterface>(op))
-    return values.count(storeOp.getMemRef()) > 0;
+  if (auto loadOp = dyn_cast<AffineReadOpInterface>(op)) {
+    Value memref = memref::skipFullyAliasingOperations(
+        cast<MemrefValue>(loadOp.getMemRef()));
+    return values.count(memref) > 0 && values[memref];
+  }
+  if (auto storeOp = dyn_cast<AffineWriteOpInterface>(op)) {
+    Value memref = memref::skipFullyAliasingOperations(
+        cast<MemrefValue>(storeOp.getMemRef()));
+    return values.count(memref) > 0;
+  }
   return false;
 }
 
@@ -200,7 +211,10 @@ static unsigned getMaxLoopDepth(ArrayRef<Operation *> srcOps,
     auto loadOp = dyn_cast<AffineReadOpInterface>(dstOp);
     Value memref = loadOp ? loadOp.getMemRef()
                           : cast<AffineWriteOpInterface>(dstOp).getMemRef();
-    if (producerConsumerMemrefs.count(memref) > 0)
+    if (llvm::any_of(producerConsumerMemrefs, [&](Value producerMemref) {
+          return memref::isSameViewOrTrivialAlias(
+              cast<MemrefValue>(producerMemref), cast<MemrefValue>(memref));
+        }))
       targetDstOps.push_back(dstOp);
   }
 
@@ -222,6 +236,19 @@ static unsigned getMaxLoopDepth(ArrayRef<Operation *> srcOps,
     for (unsigned j = 0; j < e; ++j) {
       auto *dstOpInst = targetDstOps[j];
       MemRefAccess dstAccess(dstOpInst);
+
+      if (!memref::isSameViewOrTrivialAlias(
+              cast<MemrefValue>(srcAccess.memref),
+              cast<MemrefValue>(dstAccess.memref)))
+        continue;
+      // Affine maps are expressed in the raw view coordinates. Do not run
+      // precise dependence analysis across different views without a
+      // translation between those coordinate systems.
+      if (srcAccess.memref != dstAccess.memref) {
+        if (srcAccess.isStore() || dstAccess.isStore())
+          return 0;
+        continue;
+      }
 
       unsigned numCommonLoops =
           getNumCommonSurroundingLoops(*srcOpInst, *dstOpInst);
@@ -328,7 +355,10 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
     // to 'memref' in 'srcForOp' to compute the slice union.
     for (Operation *op : opsA) {
       auto load = dyn_cast<AffineReadOpInterface>(op);
-      if (load && load.getMemRef() == fusionStrategy.getSiblingFusionMemRef())
+      if (load && memref::isSameViewOrTrivialAlias(
+                      cast<MemrefValue>(load.getMemRef()),
+                      cast<MemrefValue>(
+                          fusionStrategy.getSiblingFusionMemRef())))
         strategyOpsA.push_back(op);
     }
     break;
@@ -652,6 +682,10 @@ void mlir::affine::gatherProducerConsumerMemrefs(
   // memrefs from loads in 'dstOps'.
   for (Operation *op : dstOps)
     if (auto loadOp = dyn_cast<AffineReadOpInterface>(op))
-      if (srcStoreMemRefs.count(loadOp.getMemRef()) > 0)
+      if (llvm::any_of(srcStoreMemRefs, [&](Value storeMemref) {
+            return memref::isSameViewOrTrivialAlias(
+                cast<MemrefValue>(storeMemref),
+                cast<MemrefValue>(loadOp.getMemRef()));
+          }))
         producerConsumerMemrefs.insert(loadOp.getMemRef());
 }

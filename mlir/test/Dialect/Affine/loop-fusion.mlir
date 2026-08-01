@@ -1574,5 +1574,44 @@ func.func @producer_consumer_with_outmost_user(%arg0 : f16) {
   return
 }
 
-// Add further tests in mlir/test/Transforms/loop-fusion-4.mlir
+// -----
 
+// Unknown operations nested in an affine loop may access their memref
+// operands. Dependence checking must handle them without assuming a load/store
+// operation class.
+
+// CHECK-LABEL: func @nested_unknown_call
+// CHECK:       func.call @escape_nested
+// CHECK:       return
+func.func @nested_unknown_call(%m: memref<8xf32>, %out: memref<8xf32>) {
+  affine.for %i = 0 to 8 {
+    func.call @escape_nested(%m) : (memref<8xf32>) -> ()
+  }
+  affine.for %i = 0 to 8 {
+    %v = affine.load %m[%i] : memref<8xf32>
+    affine.store %v, %out[%i] : memref<8xf32>
+  }
+  return
+}
+func.func private @escape_nested(memref<8xf32>)
+
+// -----
+
+// Multi-memref operations must follow the same arbitrary-operation path.
+
+// CHECK-LABEL: func @nested_memref_copy
+// CHECK:       memref.copy
+// CHECK:       return
+func.func @nested_memref_copy(
+    %src: memref<8xf32>, %dst: memref<8xf32>, %out: memref<8xf32>) {
+  affine.for %i = 0 to 8 {
+    memref.copy %src, %dst : memref<8xf32> to memref<8xf32>
+  }
+  affine.for %i = 0 to 8 {
+    %v = affine.load %dst[%i] : memref<8xf32>
+    affine.store %v, %out[%i] : memref<8xf32>
+  }
+  return
+}
+
+// Add further tests in mlir/test/Transforms/loop-fusion-4.mlir

@@ -128,9 +128,9 @@ public:
     // 'Node.outEdges[i].id' is the identifier of the dest node of the edge.
     unsigned id;
     // The SSA value on which this edge represents a dependence.
-    // If the value is a memref, then the dependence is between graph nodes
-    // which contain accesses to the same memref 'value'. If the value is a
-    // non-memref value, then the dependence is between a graph node which
+    // If the value is a memref, then it is the canonical representative of
+    // the trivial alias class on which the dependence is based. If the value
+    // is a non-memref value, then the dependence is between a graph node which
     // defines an SSA value and another graph node which uses the SSA value
     // (e.g. a constant or load operation defining a value which is used inside
     // a loop nest).

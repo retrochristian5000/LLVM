@@ -921,3 +921,91 @@ func.func @cast_alias_external_call(
   return
 }
 func.func private @escape(memref<?xf64>)
+
+// -----
+
+// Affine accesses may use the fully aliasing view while the external call uses
+// the source value. The call must remain between the two loop nests.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_reverse
+// PRODUCER-CONSUMER-MAXIMAL:      memref.cast
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape_static
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @cast_alias_reverse(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  %view = memref.cast %comm : memref<32xf64> to memref<?xf64>
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %view[%i] : memref<?xf64>
+  }
+  func.call @escape_static(%comm) : (memref<32xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %view[%j] : memref<?xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_static(memref<32xf64>)
+
+// -----
+
+// Two distinct fully aliasing views must be placed in the same dependence
+// class as their source value.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_sibling
+// PRODUCER-CONSUMER-MAXIMAL:      memref.cast
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @cast_alias_sibling(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  %view0 = memref.cast %comm : memref<32xf64> to memref<?xf64>
+  %view1 = memref.cast %comm : memref<32xf64> to memref<?xf64>
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %view0[%i] : memref<?xf64>
+  }
+  func.call @escape(%view1) : (memref<?xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %view0[%j] : memref<?xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape(memref<?xf64>)
+
+// -----
+
+// An external call on a distinct memref must not block an otherwise legal
+// producer-consumer fusion.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_non_alias_call
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+// PRODUCER-CONSUMER-MAXIMAL:       call @escape_other
+// PRODUCER-CONSUMER-MAXIMAL:       affine.for
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+// PRODUCER-CONSUMER-MAXIMAL:       return
+func.func @cast_alias_non_alias_call(
+    %in: memref<32xf64>, %out: memref<32xf64>) {
+  %comm = memref.alloc() : memref<32xf64>
+  %other = memref.alloc() : memref<32xf64>
+  %view = memref.cast %other : memref<32xf64> to memref<?xf64>
+  %cst = arith.constant 1.0 : f64
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %cst : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  func.call @escape_other(%view) : (memref<?xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    affine.store %c, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_other(memref<?xf64>)
