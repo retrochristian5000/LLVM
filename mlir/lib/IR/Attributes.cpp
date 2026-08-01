@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 using namespace mlir;
@@ -71,4 +72,31 @@ bool NamedAttribute::operator<(const NamedAttribute &rhs) const {
 
 bool NamedAttribute::operator<(StringRef rhs) const {
   return getName().getValue().compare(rhs) < 0;
+}
+
+//===----------------------------------------------------------------------===//
+// Symbol-reference containment bit synthesis
+//===----------------------------------------------------------------------===//
+
+/// Synthesize the interning-time "contains a SymbolRefAttr" bit for a newly
+/// uniqued attribute. The bit is set when this attribute is a SymbolRefAttr
+/// (including FlatSymbolRefAttr), when it carries a mutable component, or when
+/// any immediate sub-element already carries the bit.
+void mlir::detail::populateAttrContainsSymbolReferences(
+    AttributeStorage *storage) {
+  Attribute attr(storage);
+  const AbstractAttribute &abstractAttr = storage->getAbstractAttribute();
+  bool mayContain = isa<SymbolRefAttr>(attr) ||
+                    abstractAttr.hasTrait<StorageUserTrait::IsMutable>();
+  if (!mayContain) {
+    abstractAttr.walkImmediateSubElements(
+        attr,
+        [&](Attribute subAttr) {
+          mayContain |= subAttr && subAttr.mayContainSymbolRefs();
+        },
+        [&](Type subType) {
+          mayContain |= subType && subType.mayContainSymbolRefs();
+        });
+  }
+  storage->setMayContainSymbolRefs(mayContain);
 }

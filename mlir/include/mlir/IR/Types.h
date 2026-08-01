@@ -192,6 +192,14 @@ public:
   /// Return the Type implementation.
   ImplType *getImpl() const { return impl; }
 
+  /// Return whether this type may transitively contain a SymbolRefAttr. False
+  /// is authoritative: no SymbolRefAttr is reachable through the sub-element
+  /// tree. True may be conservative: mutable-storage kinds, and anything
+  /// containing them, report true. A pure function of the interned structure;
+  /// not part of the unique key, hashing, or equality. Symbol-table
+  /// verification uses it to skip types that cannot hold a symbol reference.
+  bool mayContainSymbolRefs() const { return impl->mayContainSymbolRefs(); }
+
   /// Walk all of the immediately nested sub-attributes and sub-types. This
   /// method does not recurse into sub elements.
   void walkImmediateSubElements(function_ref<void(Attribute)> walkAttrsFn,

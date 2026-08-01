@@ -159,9 +159,21 @@ private:
 // AttributeStorage
 //===----------------------------------------------------------------------===//
 
+class AttributeStorage;
+
 namespace detail {
 class AttributeUniquer;
 class DistinctAttributeUniquer;
+
+/// Compute, and record on `storage`, whether this attribute transitively
+/// contains a SymbolRefAttr, i.e. whether it is one or has a sub-element that
+/// is. Kinds carrying the mutable-storage trait, and anything containing them,
+/// report true conservatively. Called once per newly uniqued instance, after
+/// its abstract descriptor and sub-elements are set and before it is published,
+/// so that the bits of its immediate sub-elements (interned first) are final.
+/// Runs under the uniquer lock; walk implementations must not create new
+/// attributes or types.
+void populateAttrContainsSymbolReferences(AttributeStorage *storage);
 } // namespace detail
 
 /// Base storage class appearing in an attribute. Derived storage classes should
@@ -170,6 +182,7 @@ class alignas(8) AttributeStorage : public StorageUniquer::BaseStorage {
   friend detail::AttributeUniquer;
   friend detail::DistinctAttributeUniquer;
   friend StorageUniquer;
+  friend void detail::populateAttrContainsSymbolReferences(AttributeStorage *);
 
 public:
   /// Return the abstract descriptor for this attribute.
@@ -177,6 +190,14 @@ public:
     assert(abstractAttribute && "Malformed attribute storage object.");
     return *abstractAttribute;
   }
+
+  /// Return whether this attribute may transitively contain a SymbolRefAttr.
+  /// False is authoritative: no SymbolRefAttr is reachable through the
+  /// sub-element tree. True may be conservative: mutable-storage kinds, and
+  /// anything containing them, report true. A pure function of the attribute's
+  /// interned structure, synthesized at uniquing; not part of the unique key
+  /// and taking no part in hashing or equality.
+  bool mayContainSymbolRefs() const { return mayContainSymbolRefsBit; }
 
 protected:
   /// Set the abstract attribute for this storage instance. This is used by the
@@ -190,8 +211,18 @@ protected:
   void initialize(MLIRContext *context) {}
 
 private:
+  /// Record the symbol-reference containment bit. Set once at uniquing.
+  void setMayContainSymbolRefs(bool mayContain) {
+    mayContainSymbolRefsBit = mayContain;
+  }
+
   /// The abstract descriptor for this attribute.
   const AbstractAttribute *abstractAttribute = nullptr;
+
+  /// Whether this attribute may transitively contain a SymbolRefAttr; a pure
+  /// function of the interned structure, taking no part in the unique key,
+  /// hashing, or equality.
+  bool mayContainSymbolRefsBit = false;
 };
 
 /// Default storage type for attributes that require no additional
@@ -243,6 +274,8 @@ public:
           // Execute any additional attribute storage initialization with the
           // context.
           static_cast<typename T::ImplType *>(storage)->initialize(ctx);
+
+          populateAttrContainsSymbolReferences(storage);
         },
         typeID, std::forward<Args>(args)...);
   }
@@ -299,6 +332,7 @@ public:
         .registerSingletonStorageType<typename T::ImplType>(
             typeID, [ctx, typeID](AttributeStorage *storage) {
               initializeAttributeStorage(storage, ctx, typeID);
+              populateAttrContainsSymbolReferences(storage);
             });
   }
 

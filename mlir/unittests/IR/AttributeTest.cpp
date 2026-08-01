@@ -475,15 +475,17 @@ TEST(CopyCountAttr, CopyCountGet) {
   int counter1 = test::CopyCount::counter;
   test::CopyCount::counter = 0;
   test::TestCopyCountAttr::get(&context, std::move(copyCount));
+  // Synthesizing the "contains a symbol reference" bit for a newly uniqued
+  // attribute walks its immediate sub-elements once, which reconstructs the
+  // storage key and copies the payload.
 #ifndef NDEBUG
-  // One verification enabled only in assert-mode requires two copies: one for
-  // calling 'verifyInvariants' and one for calling 'verify' inside
-  // 'verifyInvariants'.
-  EXPECT_EQ(counter1, 2);
-  EXPECT_EQ(test::CopyCount::counter, 2);
+  // Two further copies come from the assert-mode verification: one for calling
+  // 'verifyInvariants' and one for calling 'verify' inside 'verifyInvariants'.
+  EXPECT_EQ(counter1, 3);
+  EXPECT_EQ(test::CopyCount::counter, 3);
 #else
-  EXPECT_EQ(counter1, 0);
-  EXPECT_EQ(test::CopyCount::counter, 0);
+  EXPECT_EQ(counter1, 1);
+  EXPECT_EQ(test::CopyCount::counter, 1);
 #endif
 }
 
@@ -500,9 +502,11 @@ TEST(CopyCountAttr, CopyCountGetChecked) {
   test::CopyCount::counter = 0;
   test::TestCopyCountAttr::getChecked(loc, &context, std::move(copyCount));
   // The verifiers require two copies: one for calling 'verifyInvariants' and
-  // one for calling 'verify' inside 'verifyInvariants'.
-  EXPECT_EQ(counter1, 2);
-  EXPECT_EQ(test::CopyCount::counter, 2);
+  // one for calling 'verify' inside 'verifyInvariants'. Uniquing a new instance
+  // adds a third: synthesizing its "contains a symbol reference" bit walks its
+  // immediate sub-elements once, reconstructing the storage key.
+  EXPECT_EQ(counter1, 3);
+  EXPECT_EQ(test::CopyCount::counter, 3);
 }
 
 // Test stripped printing using test dialect attribute.

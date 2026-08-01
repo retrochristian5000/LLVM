@@ -300,6 +300,10 @@ public:
         context, std::forward<Args>(args)...);
     storage->initializeAbstractAttribute(
         AbstractAttribute::lookup(DistinctAttr::getTypeID(), context));
+    // Distinct attributes bypass the uniquer, so synthesize their
+    // "contains a SymbolRefAttr" bit here from the already-final bit of the
+    // referenced attribute.
+    populateAttrContainsSymbolReferences(storage);
     return storage;
   }
 
