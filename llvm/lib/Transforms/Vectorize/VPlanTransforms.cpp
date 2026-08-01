@@ -5341,6 +5341,34 @@ void VPlanTransforms::createPartialReductions(VPlan &Plan,
       transformToPartialReduction(Chain, Plan, Phi);
 }
 
+/// Check if \p VPI is a bounded (i % 2^N) load we can widen. This requires the
+/// vector factor to divide the bound, so that each VF-wide load stays within a
+/// single 2^N window.
+static bool canCreateBoundedLoad(VPInstruction *VPI, VFRange &Range,
+                                 VPCostContext &Ctx) {
+  if (VPI->getOpcode() != Instruction::Load)
+    return false;
+
+  Type *ScalarTy = VPI->getScalarType();
+  if (hasIrregularType(ScalarTy, Ctx.L->getHeader()->getDataLayout()))
+    return false;
+
+  const SCEV *PtrSCEV =
+      vputils::getSCEVExprForVPValue(VPI->getOperand(0), Ctx.PSE, Ctx.L);
+  uint64_t Bound =
+      getBoundForConsecutiveLoad(PtrSCEV, ScalarTy, Ctx.L, *Ctx.PSE.getSE());
+  if (Bound == 0)
+    return false;
+
+  // Only widen for VFs that divide the bound, so each VF-wide load stays within
+  // a single window and does not wrap.
+  auto DividesBound = [&](ElementCount VF) {
+    return ElementCount::getFixed(Bound).isKnownMultipleOf(VF);
+  };
+  return LoopVectorizationPlanner::getDecisionAndClampRange(DividesBound,
+                                                            Range);
+}
+
 void VPlanTransforms::makeMemOpWideningDecisions(VPlan &Plan, VFRange &Range,
                                                  VPRecipeBuilder &RecipeBuilder,
                                                  VPCostContext &CostCtx) {
@@ -5361,6 +5389,9 @@ void VPlanTransforms::makeMemOpWideningDecisions(VPlan &Plan, VFRange &Range,
   }
 
   // Few helpers to process different kinds of memory operations.
+
+  bool LoopHasStore = any_of(
+      MemOps, [](VPInstruction *VPI) { return VPI->mayWriteToMemory(); });
 
   // To be used as argument to `VPlanTransforms::runPass` which explicitly
   // specified pass name, hence `VPlan &` parameter.
@@ -5459,7 +5490,18 @@ void VPlanTransforms::makeMemOpWideningDecisions(VPlan &Plan, VFRange &Range,
   VPlanTransforms::runPass(
       "widenConsecutiveMemOps", ProcessSubset, Plan, [&](VPInstruction *VPI) {
         Instruction *I = VPI->getUnderlyingInstr();
+
+        VPBuilder Builder(VPI);
         bool IsLoad = VPI->getOpcode() == Instruction::Load;
+        if (IsLoad && !LoopHasStore &&
+            canCreateBoundedLoad(VPI, Range, CostCtx)) {
+          auto *Load = cast<LoadInst>(VPI->getUnderlyingInstr());
+          auto *LoadR = Builder.createWidenLoad(
+              *Load, VPI->getOperand(0), /*Mask=*/nullptr,
+              /*Consecutive=*/true, *VPI, Load->getDebugLoc());
+          return ReplaceWith(VPI, LoadR);
+        }
+
         VPValue *Ptr = VPI->getOperand(!IsLoad);
         Type *ScalarTy =
             IsLoad ? VPI->getScalarType() : VPI->getOperand(0)->getScalarType();
@@ -5478,7 +5520,6 @@ void VPlanTransforms::makeMemOpWideningDecisions(VPlan &Plan, VFRange &Range,
                                 getLoadStoreAddressSpace(I)))
           return false;
 
-        VPBuilder Builder(VPI);
         VPSingleDefRecipe *VectorPtr = Builder.createConsecutiveVectorPointer(
             Ptr, ScalarTy, Reverse, VPI->getDebugLoc());
 

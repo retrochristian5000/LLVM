@@ -1708,6 +1708,36 @@ llvm::getPtrStride(PredicatedScalarEvolution &PSE, Type *AccessTy, Value *Ptr,
   return Stride;
 }
 
+uint64_t llvm::getBoundForConsecutiveLoad(const SCEV *PtrSCEV, Type *AccessTy,
+                                          const Loop *L, ScalarEvolution &SE) {
+  if (AccessTy->isScalableTy())
+    return 0;
+
+  // `A[i % 2^N]` is modeled as `Base + ElemSize * zext({0,+,1}<iN>)`by SCEV,
+  // with N being the bitwidth of the induction. For a byte element (ElemSize ==
+  // 1) the multiply folds away.
+  const SCEV *Base, *Start;
+  const APInt *Scale = nullptr;
+  auto Index = m_scev_ZExt(
+      m_scev_AffineAddRec(m_SCEV(Start), m_scev_One(), m_SpecificLoop(L)));
+  if (!match(
+          PtrSCEV,
+          m_scev_Add(m_CombineOr(Index, m_scev_Mul(m_scev_APInt(Scale), Index)),
+                     m_SCEV(Base))))
+    return 0;
+
+  uint64_t AllocSize =
+      SE.getDataLayout().getTypeAllocSize(AccessTy).getFixedValue();
+  if (!Start->isZero() || !SE.isLoopInvariant(Base, L) ||
+      (Scale ? *Scale != AllocSize : AllocSize != 1))
+    return 0;
+
+  unsigned NarrowWidth = SE.getTypeSizeInBits(Start->getType());
+  if (NarrowWidth >= 64)
+    return 0;
+  return uint64_t(1) << NarrowWidth;
+}
+
 std::optional<int64_t> llvm::getPointersDiff(Type *ElemTyA, Value *PtrA,
                                              Type *ElemTyB, Value *PtrB,
                                              const DataLayout &DL,

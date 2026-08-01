@@ -874,7 +874,8 @@ public:
   /// Decision that was taken during cost calculation for memory instruction.
   enum InstWidening {
     CM_Unknown,
-    CM_Widen,         // For consecutive accesses with stride +1.
+    CM_Widen,         // For consecutive accesses with stride +1 and bounded
+                      // (i % 2^N) loads in read-only loops.
     CM_Widen_Reverse, // For consecutive accesses with stride -1.
     CM_Interleave,
     CM_GatherScatter,
@@ -2427,8 +2428,10 @@ bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I,
   }
   case Instruction::Load:
   case Instruction::Store: {
-    bool IsConsecutive = Legal->isConsecutivePtr(getLoadStoreType(I),
-                                                 getLoadStorePointerOperand(I));
+    bool IsConsecutive =
+        Legal->getBoundForConsecutiveLoad(I) != 0 ||
+        Legal->isConsecutivePtr(getLoadStoreType(I),
+                                getLoadStorePointerOperand(I)) != 0;
     return !(IsConsecutive && isLegalMaskedLoadOrStore(I, VF)) &&
            !Config.isLegalGatherOrScatter(I, VF);
   }
@@ -2668,20 +2671,27 @@ LoopVectorizationCostModel::memoryInstructionCanBeWidened(Instruction *I,
   auto *Ptr = getLoadStorePointerOperand(I);
   auto *ScalarTy = getLoadStoreType(I);
 
-  // In order to be widened, the pointer should be consecutive, first of all.
-  int Stride = Legal->isConsecutivePtr(ScalarTy, Ptr);
-  if (!Stride)
-    return std::nullopt;
-
-  // If the instruction is a store located in a predicated block, it will be
-  // scalarized.
-  if (isScalarWithPredication(I, VF))
-    return std::nullopt;
-
   // If the instruction's allocated size doesn't equal it's type size, it
   // requires padding and will be scalarized.
   auto &DL = I->getDataLayout();
   if (hasIrregularType(ScalarTy, DL))
+    return std::nullopt;
+
+  // If the instruction is located in a predicated block, it will be scalarized.
+  if (isScalarWithPredication(I, VF))
+    return std::nullopt;
+
+  // Widen a bounded (i % 2^N) load in a read-only loop as a consecutive
+  // vector load when VF divides the bound, so each VF-wide load stays within a
+  // single window and does not wrap.
+  uint64_t Bound = Legal->getBoundForConsecutiveLoad(I);
+  if (Bound != 0 && VF.isFixed())
+    return ElementCount::getFixed(Bound).isKnownMultipleOf(VF)
+               ? std::optional(CM_Widen)
+               : std::nullopt;
+
+  int Stride = Legal->isConsecutivePtr(ScalarTy, Ptr);
+  if (!Stride)
     return std::nullopt;
 
   return Stride == 1 ? CM_Widen : CM_Widen_Reverse;
@@ -6231,6 +6241,9 @@ VPRecipeBase *VPRecipeBuilder::tryToWidenMemory(VPInstruction *VPI,
   // reverse consecutive.
   LoopVectorizationCostModel::InstWidening Decision =
       CM.getWideningDecision(I, Range.Start);
+  assert(!(Legal->getBoundForConsecutiveLoad(I) &&
+           Decision == LoopVectorizationCostModel::CM_Widen) &&
+         "bounded loads must be widened in makeMemOpWideningDecisions");
   bool Reverse = Decision == LoopVectorizationCostModel::CM_Widen_Reverse;
   bool Consecutive =
       Reverse || Decision == LoopVectorizationCostModel::CM_Widen;
