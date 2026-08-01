@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <detail/program_manager.hpp>
-
 #include <sycl/__impl/exception.hpp>
 
+#include <detail/consume_binary_error.hpp>
 #include <detail/device_impl.hpp>
 #include <detail/offload/offload_utils.hpp>
 
@@ -50,7 +50,7 @@ void ProgramAndKernelManager::registerFatBin(const void *BinaryStart,
       /*Identifier=*/"");
   auto BinOrErr = llvm::object::OffloadBinary::create(MBR);
   if (!BinOrErr) {
-    llvm::consumeError(BinOrErr.takeError());
+    consumeBinaryError(BinOrErr);
     throw sycl::exception(sycl::make_error_code(sycl::errc::runtime),
                           "Failed to parse OffloadBinary");
   }

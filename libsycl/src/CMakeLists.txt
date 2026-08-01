@@ -1,7 +1,7 @@
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../runtimes/cmake/Modules")
 include(WarningFlags)
 function(add_sycl_rt_library LIB_TARGET_NAME LIB_OBJ_NAME LIB_OUTPUT_NAME)
-  cmake_parse_arguments(ARG "" "" "COMPILE_OPTIONS;SOURCES" ${ARGN})
+  cmake_parse_arguments(ARG "" "" "COMPILE_OPTIONS;SOURCES;NO_RTTI_SOURCES" ${ARGN})
 
   add_library(${LIB_OBJ_NAME} OBJECT ${ARG_SOURCES})
 
@@ -9,6 +9,7 @@ function(add_sycl_rt_library LIB_TARGET_NAME LIB_OBJ_NAME LIB_OUTPUT_NAME)
   target_compile_definitions(${LIB_OBJ_NAME} PRIVATE
               $<$<STREQUAL:${CMAKE_SYSTEM_NAME},Windows>:_LIBSYCL_BUILDING_LIBRARY>)
   cxx_add_warning_flags(${LIB_OBJ_NAME} ${LIBSYCL_ENABLE_WERROR} ${LIBSYCL_ENABLE_PEDANTIC})
+  set_source_files_properties(${ARG_NO_RTTI_SOURCES} PROPERTIES COMPILE_FLAGS -fno-rtti)
 
   add_library(${LIB_TARGET_NAME} SHARED
               $<TARGET_OBJECTS:${LIB_OBJ_NAME}>)
@@ -98,6 +99,7 @@ set(LIBSYCL_SOURCES
     "detail/device_image_wrapper.cpp"
     "detail/device_impl.cpp"
     "detail/global_objects.cpp"
+    "detail/consume_binary_error.cpp"
     "detail/platform_impl.cpp"
     "detail/program_manager.cpp"
     "detail/queue_impl.cpp"
@@ -105,11 +107,16 @@ set(LIBSYCL_SOURCES
     "detail/offload/offload_topology.cpp"
 )
 
+set(LIBSYCL_NO_RTTI_SOURCES "detail/consume_binary_error.cpp")
+
 add_sycl_rt_library(${LIBSYCL_LIB_NAME}
   ${LIBSYCL_OBJ_TARGET}
   ${LIBSYCL_SHARED_OUTPUT_NAME}
   SOURCES
-    ${LIBSYCL_SOURCES})
+    ${LIBSYCL_SOURCES}
+  NO_RTTI_SOURCES
+    ${LIBSYCL_NO_RTTI_SOURCES}
+    )
 
 install(TARGETS ${LIBSYCL_RT_LIBS}
   ARCHIVE DESTINATION ${LIBSYCL_INSTALL_LIBRARY_DIR} COMPONENT libsycl
