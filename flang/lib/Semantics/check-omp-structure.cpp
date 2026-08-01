@@ -2659,7 +2659,7 @@ void OmpStructureChecker::Leave(const parser::OmpDeclareTargetDirective &x) {
       context_.Say(x.source,
           "If the DECLARE TARGET directive has a clause, it must contain at least one ENTER clause or LINK clause"_err_en_US);
     }
-    if (indirectClause && !enterClause) {
+    if (indirectClause && !enterClause && !toClause) {
       context_.Say(x.source,
           "The INDIRECT clause cannot be used without the ENTER clause with the DECLARE TARGET directive."_err_en_US);
     }
@@ -2667,6 +2667,21 @@ void OmpStructureChecker::Leave(const parser::OmpDeclareTargetDirective &x) {
     if (toClause && version >= 52) {
       context_.Warn(common::UsageWarning::OpenMPUsage, toClause->source,
           "The usage of TO clause on DECLARE TARGET directive has been deprecated. Use ENTER clause instead."_warn_en_US);
+    }
+    if (indirectClause) {
+      // The INDIRECT clause is only allowed together with DEVICE_TYPE(ANY) (an
+      // absent DEVICE_TYPE clause also implies ANY). A host- or device-only
+      // procedure cannot be the target of an indirect device invocation.
+      if (const parser::OmpClause *deviceTypeClause{
+              FindClause(llvm::omp::Clause::OMPC_device_type)}) {
+        const auto &deviceType{
+            std::get<parser::OmpClause::DeviceType>(deviceTypeClause->u)};
+        if (deviceType.v.v !=
+            parser::OmpDeviceTypeClause::DeviceTypeDescription::Any) {
+          context_.Say(x.source,
+              "Only the DEVICE_TYPE(ANY) clause is allowed with the INDIRECT clause on the DECLARE TARGET directive"_err_en_US);
+        }
+      }
     }
   }
 

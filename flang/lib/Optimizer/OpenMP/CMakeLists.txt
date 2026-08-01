@@ -5,6 +5,7 @@ add_flang_library(FlangOpenMPTransforms
   DoConcurrentConversion.cpp
   FunctionFiltering.cpp
   GenericLoopConversion.cpp
+  IndirectCallLookup.cpp
   MapsForPrivatizedSymbols.cpp
   MapInfoFinalization.cpp
   DeleteUnreachableTargets.cpp

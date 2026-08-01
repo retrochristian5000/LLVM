@@ -58,11 +58,16 @@ class MarkDeclareTargetPass
           currentDt != omp::DeclareTargetDeviceType::any) {
         current.setDeclareTarget(omp::DeclareTargetDeviceType::any,
                                  current.getDeclareTargetCaptureClause(),
-                                 current.getDeclareTargetAutomap());
+                                 current.getDeclareTargetAutomap(),
+                                 current.getDeclareTargetIndirect());
       }
     } else {
+      // The `indirect` modifier is a property of the specific declare target
+      // declaration; it is not inherited by functions that are reached only
+      // through (direct) calls. Such implicitly captured functions are marked
+      // declare target, but must not be registered as indirect call targets.
       current.setDeclareTarget(parentInfo.devTy, parentInfo.capClause,
-                               parentInfo.automap);
+                               parentInfo.automap, /*indirect=*/false);
     }
 
     markNestedFuncs(parentInfo, symOp, visited);
