@@ -13,6 +13,7 @@
 
 #include "SparcISelLowering.h"
 #include "MCTargetDesc/SparcMCTargetDesc.h"
+#include "SparcFrameLowering.h"
 #include "SparcMachineFunctionInfo.h"
 #include "SparcRegisterInfo.h"
 #include "SparcSelectionDAGInfo.h"
@@ -38,7 +39,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
-
 
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
@@ -2069,6 +2069,12 @@ SparcTargetLowering::SparcTargetLowering(const TargetMachine &TM,
   setMinFunctionAlignment(Align(4));
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
+}
+
+void SparcTargetLowering::finalizeLowering(MachineFunction &MF) const {
+  static_cast<const SparcFrameLowering *>(Subtarget->getFrameLowering())
+      ->finalizeLeafProc(MF);
+  TargetLoweringBase::finalizeLowering(MF);
 }
 
 bool SparcTargetLowering::useSoftFloat() const {

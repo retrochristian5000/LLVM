@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -460,6 +461,20 @@ bool MachineRegisterInfo::isLiveIn(Register Reg) const {
     if ((Register)LI.first == Reg || LI.second == Reg)
       return true;
   return false;
+}
+
+void MachineRegisterInfo::replaceLiveInPhysReg(MCRegister FromReg,
+                                               MCRegister ToReg) {
+  assert(FromReg.isPhysical() && ToReg.isPhysical() && FromReg != ToReg);
+  auto From = llvm::find_if(LiveIns, [FromReg](const auto &LiveIn) {
+    return LiveIn.first == FromReg;
+  });
+  if (From == LiveIns.end())
+    return;
+  assert(llvm::none_of(
+      LiveIns, [ToReg](const auto &LiveIn) { return LiveIn.first == ToReg; }));
+  From->first = ToReg;
+  llvm::sort(LiveIns);
 }
 
 /// getLiveInPhysReg - If VReg is a live-in virtual register, return the
