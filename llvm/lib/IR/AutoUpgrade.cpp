@@ -1289,6 +1289,150 @@ static bool consumeNVVMPtrAddrSpace(StringRef &Name) {
          Name.consume_front("param");
 }
 
+static unsigned getFunctionalOpcodeForVP(StringRef Name) {
+  if (!Name.consume_front("vp."))
+    return 0;
+  if (Name.starts_with("select"))
+    return Instruction::Select;
+  if (Name.starts_with("add"))
+    return Instruction::Add;
+  if (Name.starts_with("sub"))
+    return Instruction::Sub;
+  if (Name.starts_with("mul"))
+    return Instruction::Mul;
+  if (Name.starts_with("ashr"))
+    return Instruction::AShr;
+  if (Name.starts_with("lshr"))
+    return Instruction::LShr;
+  if (Name.starts_with("shl"))
+    return Instruction::Shl;
+  if (Name.starts_with("or"))
+    return Instruction::Or;
+  if (Name.starts_with("and"))
+    return Instruction::And;
+  if (Name.starts_with("xor"))
+    return Instruction::Xor;
+  if (Name.starts_with("fadd"))
+    return Instruction::FAdd;
+  if (Name.starts_with("fsub"))
+    return Instruction::FSub;
+  if (Name.starts_with("fmul") && !Name.starts_with("fmuladd"))
+    return Instruction::FMul;
+  if (Name.starts_with("fdiv"))
+    return Instruction::FDiv;
+  if (Name.starts_with("frem"))
+    return Instruction::FRem;
+  if (Name.starts_with("fneg"))
+    return Instruction::FNeg;
+  if (Name.starts_with("trunc"))
+    return Instruction::Trunc;
+  if (Name.starts_with("zext"))
+    return Instruction::ZExt;
+  if (Name.starts_with("sext"))
+    return Instruction::SExt;
+  if (Name.starts_with("fptrunc"))
+    return Instruction::FPTrunc;
+  if (Name.starts_with("fpext"))
+    return Instruction::FPExt;
+  if (Name.starts_with("fptoui"))
+    return Instruction::FPToUI;
+  if (Name.starts_with("fptosi"))
+    return Instruction::FPToSI;
+  if (Name.starts_with("uitofp"))
+    return Instruction::UIToFP;
+  if (Name.starts_with("sitofp"))
+    return Instruction::SIToFP;
+  if (Name.starts_with("ptrtoint"))
+    return Instruction::PtrToInt;
+  if (Name.starts_with("inttoptr"))
+    return Instruction::IntToPtr;
+  if (Name.starts_with("icmp"))
+    return Instruction::ICmp;
+  if (Name.starts_with("fcmp"))
+    return Instruction::FCmp;
+  return 0;
+}
+
+static Intrinsic::ID getFunctionalIntrinsicIDForVP(StringRef Name) {
+  if (!Name.consume_front("vp."))
+    return 0;
+  if (Name.starts_with("abs"))
+    return Intrinsic::abs;
+  if (Name.starts_with("smax"))
+    return Intrinsic::smax;
+  if (Name.starts_with("smin"))
+    return Intrinsic::smin;
+  if (Name.starts_with("umax"))
+    return Intrinsic::umax;
+  if (Name.starts_with("umin"))
+    return Intrinsic::umin;
+  if (Name.starts_with("copysign"))
+    return Intrinsic::copysign;
+  if (Name.starts_with("minnum"))
+    return Intrinsic::minnum;
+  if (Name.starts_with("maxnum"))
+    return Intrinsic::maxnum;
+  if (Name.starts_with("minimum"))
+    return Intrinsic::minimum;
+  if (Name.starts_with("maximum"))
+    return Intrinsic::maximum;
+  if (Name.starts_with("fabs"))
+    return Intrinsic::fabs;
+  if (Name.starts_with("sqrt"))
+    return Intrinsic::sqrt;
+  if (Name.starts_with("fma"))
+    return Intrinsic::fma;
+  if (Name.starts_with("fmuladd"))
+    return Intrinsic::fmuladd;
+  if (Name.starts_with("ceil"))
+    return Intrinsic::ceil;
+  if (Name.starts_with("floor"))
+    return Intrinsic::floor;
+  if (Name.starts_with("rint"))
+    return Intrinsic::rint;
+  if (Name.starts_with("nearbyint"))
+    return Intrinsic::nearbyint;
+  if (Name.starts_with("roundeven"))
+    return Intrinsic::roundeven;
+  if (Name.starts_with("roundtozero"))
+    return Intrinsic::trunc;
+  if (Name.starts_with("round"))
+    return Intrinsic::round;
+  if (Name.starts_with("lrint"))
+    return Intrinsic::lrint;
+  if (Name.starts_with("llrint"))
+    return Intrinsic::llrint;
+  if (Name.starts_with("bitreverse"))
+    return Intrinsic::bitreverse;
+  if (Name.starts_with("bswap"))
+    return Intrinsic::bswap;
+  if (Name.starts_with("ctpop"))
+    return Intrinsic::ctpop;
+  if (Name.starts_with("ctlz"))
+    return Intrinsic::ctlz;
+  if (Name.starts_with("cttz") && !Name.starts_with("cttz.elts"))
+    return Intrinsic::cttz;
+  if (Name.starts_with("sadd.sat"))
+    return Intrinsic::sadd_sat;
+  if (Name.starts_with("uadd.sat"))
+    return Intrinsic::uadd_sat;
+  if (Name.starts_with("ssub.sat"))
+    return Intrinsic::ssub_sat;
+  if (Name.starts_with("usub.sat"))
+    return Intrinsic::usub_sat;
+  if (Name.starts_with("fshl"))
+    return Intrinsic::fshl;
+  if (Name.starts_with("fshr"))
+    return Intrinsic::fshr;
+  if (Name.starts_with("is.fpclass"))
+    return Intrinsic::is_fpclass;
+  return 0;
+}
+
+static bool shouldUpgradeVPIntrinsic(StringRef Name) {
+  return getFunctionalOpcodeForVP(Name) || getFunctionalIntrinsicIDForVP(Name);
+}
+
 static bool convertIntrinsicValidType(StringRef Name,
                                       const FunctionType *FuncTy) {
   Type *HalfTy = Type::getHalfTy(FuncTy->getContext());
@@ -1919,6 +2063,8 @@ static bool upgradeIntrinsicFunction1(Function *F, Function *&NewFn,
         break;
       return true;
     }
+    if (shouldUpgradeVPIntrinsic(Name))
+      return true;
     break;
   }
 
@@ -5126,6 +5272,77 @@ static Value *upgradeConvertIntrinsicCall(StringRef Name, CallBase *CI,
   return nullptr;
 }
 
+static ICmpInst::Predicate getVPIntPredicateFromMD(const Value *Op) {
+  Metadata *MD = cast<MetadataAsValue>(Op)->getMetadata();
+  if (!MD || !isa<MDString>(MD))
+    return ICmpInst::BAD_ICMP_PREDICATE;
+  return StringSwitch<ICmpInst::Predicate>(cast<MDString>(MD)->getString())
+      .Case("eq", ICmpInst::ICMP_EQ)
+      .Case("ne", ICmpInst::ICMP_NE)
+      .Case("ugt", ICmpInst::ICMP_UGT)
+      .Case("uge", ICmpInst::ICMP_UGE)
+      .Case("ult", ICmpInst::ICMP_ULT)
+      .Case("ule", ICmpInst::ICMP_ULE)
+      .Case("sgt", ICmpInst::ICMP_SGT)
+      .Case("sge", ICmpInst::ICMP_SGE)
+      .Case("slt", ICmpInst::ICMP_SLT)
+      .Case("sle", ICmpInst::ICMP_SLE)
+      .Default(ICmpInst::BAD_ICMP_PREDICATE);
+}
+
+static FCmpInst::Predicate getVPFPPredicateFromMD(const Value *Op) {
+  Metadata *MD = cast<MetadataAsValue>(Op)->getMetadata();
+  if (!MD || !isa<MDString>(MD))
+    return FCmpInst::BAD_FCMP_PREDICATE;
+  return StringSwitch<FCmpInst::Predicate>(cast<MDString>(MD)->getString())
+      .Case("oeq", FCmpInst::FCMP_OEQ)
+      .Case("ogt", FCmpInst::FCMP_OGT)
+      .Case("oge", FCmpInst::FCMP_OGE)
+      .Case("olt", FCmpInst::FCMP_OLT)
+      .Case("ole", FCmpInst::FCMP_OLE)
+      .Case("one", FCmpInst::FCMP_ONE)
+      .Case("ord", FCmpInst::FCMP_ORD)
+      .Case("uno", FCmpInst::FCMP_UNO)
+      .Case("ueq", FCmpInst::FCMP_UEQ)
+      .Case("ugt", FCmpInst::FCMP_UGT)
+      .Case("uge", FCmpInst::FCMP_UGE)
+      .Case("ult", FCmpInst::FCMP_ULT)
+      .Case("ule", FCmpInst::FCMP_ULE)
+      .Case("une", FCmpInst::FCMP_UNE)
+      .Default(FCmpInst::BAD_FCMP_PREDICATE);
+}
+
+static Value *upgradeVPIntrinsicCall(StringRef Name, CallBase *CI,
+                                     IRBuilder<> &Builder) {
+  Value *Rep;
+  unsigned Opcode = getFunctionalOpcodeForVP(Name);
+  if (Opcode && Instruction::isUnaryOp(Opcode))
+    Rep =
+        Builder.CreateUnOp((Instruction::UnaryOps)Opcode, CI->getArgOperand(0));
+  else if (Opcode && Instruction::isBinaryOp(Opcode))
+    Rep = Builder.CreateBinOp((Instruction::BinaryOps)Opcode,
+                              CI->getArgOperand(0), CI->getArgOperand(1));
+  else if (Opcode && Instruction::isCast(Opcode))
+    Rep = Builder.CreateCast((Instruction::CastOps)Opcode, CI->getArgOperand(0),
+                             CI->getType());
+  else if (Opcode == Instruction::ICmp)
+    Rep = Builder.CreateICmp(getVPIntPredicateFromMD(CI->getArgOperand(2)),
+                             CI->getArgOperand(0), CI->getArgOperand(1));
+  else if (Opcode == Instruction::FCmp)
+    Rep = Builder.CreateFCmp(getVPFPPredicateFromMD(CI->getArgOperand(2)),
+                             CI->getArgOperand(0), CI->getArgOperand(1));
+  else if (Opcode == Instruction::Select)
+    Rep = Builder.CreateSelect(CI->getArgOperand(0), CI->getArgOperand(1),
+                               CI->getArgOperand(2));
+  else if (auto IntrinsicID = getFunctionalIntrinsicIDForVP(Name)) {
+    SmallVector<Value *, 2> Args(drop_end(CI->args(), 2));
+    Rep = Builder.CreateIntrinsic(CI->getType(), IntrinsicID, Args, {});
+  } else
+    llvm_unreachable("Unexpected vp intrinsic");
+  Rep->takeName(CI);
+  return Rep;
+}
+
 static bool upgradeIntrinsicCallWithDefaultArgs(CallBase *CI, Function *NewFn,
                                                 IRBuilder<> &Builder) {
   Intrinsic::ID IID = NewFn->getIntrinsicID();
@@ -5234,6 +5451,8 @@ void llvm::UpgradeIntrinsicCall(CallBase *CI, Function *NewFn) {
     } else if (Name == "lifetime.start.i64" || Name == "lifetime.end.i64") {
       // Delete calls to invalid @llvm.lifetime.{start,end}.i64 intrinsics.
       Rep = nullptr;
+    } else if (shouldUpgradeVPIntrinsic(Name)) {
+      Rep = upgradeVPIntrinsicCall(Name, CI, Builder);
     } else {
       llvm_unreachable("Unknown function for CallBase upgrade.");
     }
