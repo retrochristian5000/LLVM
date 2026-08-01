@@ -1889,7 +1889,11 @@ void CGOpenMPRuntime::registerVTable(const OMPExecutableDirective &D) {
 
     const VarDecl *VD = nullptr;
     if (auto *DRE = dyn_cast<DeclRefExpr>(E)) {
-      VD = cast<VarDecl>(DRE->getDecl());
+      // Handle BindingDecls by redirecting to their DecompositionDecl.
+      if (auto *BD = dyn_cast<BindingDecl>(DRE->getDecl()))
+        VD = cast<VarDecl>(BD->getDecomposedDecl());
+      else
+        VD = cast<VarDecl>(DRE->getDecl());
     } else if (auto *MRE = dyn_cast<MemberExpr>(E)) {
       if (auto *BaseDRE = dyn_cast<DeclRefExpr>(MRE->getBase())) {
         if (auto *BaseVD = dyn_cast<VarDecl>(BaseDRE->getDecl()))
@@ -3028,6 +3032,16 @@ struct PrivateHelpersTy {
 typedef std::pair<CharUnits /*Align*/, PrivateHelpersTy> PrivateDataTy;
 } // anonymous namespace
 
+/// For BindingDecls, returns the VarDecl of the decomposed declaration.
+/// For VarDecls, returns the VarDecl itself.
+static const VarDecl *getVarDeclForPrivate(const ValueDecl *D) {
+  if (const auto *VD = dyn_cast<VarDecl>(D))
+    return VD;
+  if (const auto *BD = dyn_cast<BindingDecl>(D))
+    return cast<VarDecl>(BD->getDecomposedDecl());
+  return nullptr;
+}
+
 static bool isAllocatableDecl(const VarDecl *VD) {
   const VarDecl *CVD = VD->getCanonicalDecl();
   if (!CVD->hasAttr<OMPAllocateDeclAttr>())
@@ -3330,7 +3344,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3341,7 +3355,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3352,7 +3366,7 @@ emitTaskPrivateMappingFunction(CodeGenModule &CGM, SourceLocation Loc,
             .withConst()
             .withRestrict(),
         ImplicitParamKind::Other));
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
     PrivateVarsPos[VD] = Counter;
     ++Counter;
   }
@@ -3778,32 +3792,32 @@ CGOpenMPRuntime::emitTaskInit(CodeGenFunction &CGF, SourceLocation Loc,
   // Aggregate privates and sort them by the alignment.
   const auto *I = Data.PrivateCopies.begin();
   for (const Expr *E : Data.PrivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-                         /*PrivateElemInit=*/nullptr));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD,
+                                           /*PrivateElemInit=*/nullptr));
     ++I;
   }
   I = Data.FirstprivateCopies.begin();
   const auto *IElemInitRef = Data.FirstprivateInits.begin();
   for (const Expr *E : Data.FirstprivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(
-            E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-            cast<VarDecl>(cast<DeclRefExpr>(*IElemInitRef)->getDecl())));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    const auto *InitVD =
+        cast<VarDecl>(cast<DeclRefExpr>(*IElemInitRef)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD, InitVD));
     ++I;
     ++IElemInitRef;
   }
   I = Data.LastprivateCopies.begin();
   for (const Expr *E : Data.LastprivateVars) {
-    const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-    Privates.emplace_back(
-        C.getDeclAlign(VD),
-        PrivateHelpersTy(E, VD, cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl()),
-                         /*PrivateElemInit=*/nullptr));
+    const auto *VD = getVarDeclForPrivate(cast<DeclRefExpr>(E)->getDecl());
+    const auto *CopyVD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
+    Privates.emplace_back(C.getDeclAlign(VD),
+                          PrivateHelpersTy(E, VD, CopyVD,
+                                           /*PrivateElemInit=*/nullptr));
     ++I;
   }
   for (const VarDecl *VD : Data.PrivateLocals) {
@@ -5679,8 +5693,15 @@ static std::string generateUniqueName(CodeGenModule &CGM, StringRef Prefix,
   llvm::raw_svector_ostream Out(Buffer);
   const clang::DeclRefExpr *DE;
   const VarDecl *D = ::getBaseDecl(Ref, DE);
-  if (!D)
-    D = cast<VarDecl>(cast<DeclRefExpr>(Ref)->getDecl());
+  if (!D) {
+    auto *DRE = cast<DeclRefExpr>(Ref);
+    if (const auto *BD = dyn_cast<BindingDecl>(DRE->getDecl())) {
+      // For BindingDecls, use the decomposed declaration as the base.
+      D = cast<VarDecl>(BD->getDecomposedDecl());
+    } else {
+      D = cast<VarDecl>(DRE->getDecl());
+    }
+  }
   D = D->getCanonicalDecl();
   std::string Name = CGM.getOpenMPRuntime().getName(
       {D->isLocalVarDeclOrParm() ? D->getName() : CGM.getMangledName(D)});
@@ -10234,7 +10255,29 @@ public:
   /// record field declaration \a RI and captured value \a CV.
   void generateDefaultMapInfo(const CapturedStmt::Capture &CI,
                               const FieldDecl &RI, llvm::Value *CV,
-                              MapCombinedInfoTy &CombinedInfo) const {
+                              MapCombinedInfoTy &CombinedInfo,
+                              ArrayRef<MapData> DeclComponentLists) const {
+    // Check if this is a DecompositionDecl whose original variable has been
+    // explicitly mapped. If so, skip this default mapping to avoid redundancy.
+    if (CI.capturesVariable() || CI.capturesVariableByCopy()) {
+      const VarDecl *VD = CI.getCapturedVar();
+      if (auto *DD = dyn_cast<DecompositionDecl>(VD)) {
+        if (const VarDecl *OrigVar = DD->getOriginalVar().Var) {
+          // Check if the original variable has been explicitly mapped.
+          for (const MapData &L : DeclComponentLists) {
+            OMPClauseMappableExprCommon::MappableExprComponentListRef
+                Components = std::get<0>(L);
+            for (const OMPClauseMappableExprCommon::MappableComponent &MC :
+                 Components) {
+              if (MC.getAssociatedDeclaration() == OrigVar)
+                // Original variable is explicitly mapped, skip this default
+                // map.
+                return;
+            }
+          }
+        }
+      }
+    }
     bool IsImplicit = true;
     // Do the default mapping.
     if (CI.capturesThis()) {
@@ -10801,7 +10844,8 @@ static void genMapInfoForCaptures(
       // the base-variable, or attach pointer.
       if (DeclComponentLists.empty() ||
           (!HasEntryWithCVAsAttachPtr && !HasEntryWithoutAttachPtr))
-        MEHandler.generateDefaultMapInfo(*CI, **RI, *CV, CurInfo);
+        MEHandler.generateDefaultMapInfo(*CI, **RI, *CV, CurInfo,
+                                         DeclComponentLists);
 
       // If we have any information in the map clause, we use it, otherwise we
       // just do a default mapping.
