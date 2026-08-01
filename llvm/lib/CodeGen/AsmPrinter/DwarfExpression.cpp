@@ -13,18 +13,33 @@
 #include "DwarfExpression.h"
 #include "DwarfCompileUnit.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallBitVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include <algorithm>
 
 using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
+
+/// Labels and tag offsets don't add operations to the DWARF expression. Look
+/// past them so an expression that otherwise contains only a fragment still
+/// uses the simple register path.
+static bool hasComplexExpression(const DIExpressionCursor &ExprCursor) {
+  for (DIExpression::ExprOperand Op : ExprCursor) {
+    if (Op.isNonEmitting())
+      continue;
+    return !Op.is(dwarf::DW_OP_LLVM_fragment);
+  }
+  return false;
+}
 
 void DwarfExpression::emitConstu(uint64_t Value) {
   if (Value < 32)
@@ -302,10 +317,8 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     return false;
   }
 
-  bool HasComplexExpression = false;
   auto Op = ExprCursor.peek();
-  if (Op && Op->getOp() != dwarf::DW_OP_LLVM_fragment)
-    HasComplexExpression = true;
+  bool HasComplexExpression = hasComplexExpression(ExprCursor);
 
   // If the register can only be described by a complex expression (i.e.,
   // multiple subregisters) it doesn't safely compose with another complex
@@ -355,9 +368,7 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     DwarfRegs.clear();
     // If we need to mask out a subregister, do it now, unless the next
     // operation would emit an OpPiece anyway.
-    auto NextOp = ExprCursor.peek();
-    if (SubRegisterSizeInBits && NextOp &&
-        (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+    if (SubRegisterSizeInBits && hasComplexExpression(ExprCursor))
       maskSubRegister();
     return true;
   }
@@ -422,9 +433,7 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
 
   // If we need to mask out a subregister, do it now, unless the next
   // operation would emit an OpPiece anyway.
-  auto NextOp = ExprCursor.peek();
-  if (SubRegisterSizeInBits && NextOp &&
-      (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+  if (SubRegisterSizeInBits && hasComplexExpression(ExprCursor))
     maskSubRegister();
 
   return true;
@@ -537,8 +546,30 @@ bool DwarfExpression::addExpression(
   // and not any other parts of the following DWARF expression.
   assert(!IsEmittingEntryValue && "Can't emit entry value around expression");
 
-  std::optional<DIExpression::ExprOperand> PrevConvertOp;
+  struct LabelOffset {
+    uint64_t ID;
+    uint64_t Offset;
+  };
+  struct BranchFixup {
+    uint64_t LabelID;
+    uint64_t PlaceholderOffset;
+  };
+  constexpr unsigned BranchOffsetByteSize = 2;
 
+  // Iterating over ExprCursor doesn't consume it.
+  bool HasSymbolicBranches =
+      llvm::any_of(ExprCursor, [](DIExpression::ExprOperand Op) {
+        return Op.isOneOf(dwarf::DW_OP_LLVM_bra, dwarf::DW_OP_LLVM_skip);
+      });
+
+  SmallVector<LabelOffset, 4> Labels;
+  SmallVector<BranchFixup, 4> Fixups;
+  // Buffer the expression until every label has a byte offset, then patch the
+  // branches.
+  if (HasSymbolicBranches)
+    enableTemporaryBuffer();
+
+  std::optional<DIExpression::ExprOperand> PrevConvertOp;
   while (ExprCursor) {
     auto Op = ExprCursor.take();
     uint64_t OpNum = Op->getOp();
@@ -552,9 +583,27 @@ bool DwarfExpression::addExpression(
     }
 
     switch (OpNum) {
+    case dwarf::DW_OP_LLVM_label:
+    case dwarf::DW_OP_LLVM_bra:
+    case dwarf::DW_OP_LLVM_skip:
+      if (PrevConvertOp)
+        report_fatal_error(Twine("cannot lower DW_OP_LLVM_convert across ") +
+                           dwarf::OperationEncodingString(OpNum) +
+                           " without DW_OP_convert support");
+      if (Op->is(dwarf::DW_OP_LLVM_label)) {
+        Labels.push_back({Op->getArg(0), getTemporaryBufferSize()});
+        break;
+      }
+      emitOp(Op->is(dwarf::DW_OP_LLVM_bra) ? dwarf::DW_OP_bra
+                                           : dwarf::DW_OP_skip);
+      Fixups.push_back({Op->getArg(0), getTemporaryBufferSize()});
+      emitData2(0);
+      break;
     case dwarf::DW_OP_LLVM_arg:
       if (!InsertArg(Op->getArg(0), ExprCursor)) {
         LocationKind = Unknown;
+        if (HasSymbolicBranches)
+          disableTemporaryBuffer();
         return false;
       }
       break;
@@ -586,7 +635,10 @@ bool DwarfExpression::addExpression(
       setSubRegisterPiece(0, 0);
       // Reset the location description kind.
       LocationKind = Unknown;
-      return true;
+      if (!HasSymbolicBranches)
+        return true;
+      // Keep going so we apply the branch fixups before returning.
+      break;
     }
     case dwarf::DW_OP_LLVM_extract_bits_sext:
     case dwarf::DW_OP_LLVM_extract_bits_zext: {
@@ -751,9 +803,12 @@ bool DwarfExpression::addExpression(
       break;
     case dwarf::DW_OP_LLVM_implicit_pointer:
       // Handled in DwarfCompileUnit::emitImplicitPointerLocation for
-      // Loc::Single variables. If we reach here, the variable has a
-      // location list or other unsupported path. Drop the
-      // location rather than crashing.
+      // Loc::Single variables. If we reach here, the variable has a location
+      // list or another unsupported path, so stop emitting the expression.
+      // We buffer expressions with symbolic branches, so disable the buffer
+      // before returning.
+      if (HasSymbolicBranches)
+        disableTemporaryBuffer();
       return false;
     default:
       llvm_unreachable("unhandled opcode found in expression");
@@ -764,6 +819,32 @@ bool DwarfExpression::addExpression(
     // Turn this into an implicit location description.
     addStackValue();
 
+  if (!HasSymbolicBranches)
+    return true;
+
+  for (const BranchFixup &Fixup : Fixups) {
+    auto Label = llvm::find_if(Labels, [&](const LabelOffset &Candidate) {
+      return Candidate.ID == Fixup.LabelID;
+    });
+    if (Label == Labels.end())
+      report_fatal_error(Twine("DWARF expression branch to label ") +
+                         Twine(Fixup.LabelID) + " has no matching label");
+
+    // DW_OP_bra and DW_OP_skip apply the displacement after reading their
+    // two-byte operand, so use the byte after the placeholder as the base.
+    int64_t Displacement =
+        static_cast<int64_t>(Label->Offset) -
+        static_cast<int64_t>(Fixup.PlaceholderOffset + BranchOffsetByteSize);
+    if (!isInt<16>(Displacement))
+      report_fatal_error(Twine("DWARF expression branch offset ") +
+                         Twine(Displacement) + " is outside [-32768, 32767]");
+
+    replaceTemporaryBufferData2(Fixup.PlaceholderOffset,
+                                static_cast<uint16_t>(Displacement));
+  }
+
+  disableTemporaryBuffer();
+  commitTemporaryBuffer();
   return true;
 }
 
