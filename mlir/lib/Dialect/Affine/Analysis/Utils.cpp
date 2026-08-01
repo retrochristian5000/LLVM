@@ -55,8 +55,8 @@ static void getMayEffectedValues(Operation *op,
     // Memref operands have to be considered as being affected.
     for (Value operand : op->getOperands()) {
       if (isa<MemRefType>(operand.getType()))
-        values.push_back(memref::skipFullyAliasingOperations(
-            cast<MemrefValue>(operand)));
+        values.push_back(
+            memref::skipFullyAliasingOperations(cast<MemrefValue>(operand)));
     }
     return;
   }
@@ -66,8 +66,8 @@ static void getMayEffectedValues(Operation *op,
     Value effectVal = effect.getValue();
     if (isa<EffectTys...>(effect.getEffect()) && effectVal &&
         isa<MemRefType>(effectVal.getType()))
-      values.push_back(memref::skipFullyAliasingOperations(
-          cast<MemrefValue>(effectVal)));
+      values.push_back(
+          memref::skipFullyAliasingOperations(cast<MemrefValue>(effectVal)));
   };
 }
 
