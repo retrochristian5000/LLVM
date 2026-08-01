@@ -178,6 +178,11 @@ public:
 class LLVM_LIBRARY_VISIBILITY LinkerWrapper final : public Tool {
   const Tool *Linker;
 
+  void constructJob(Compilation &C, const JobAction &JA,
+                    const InputInfoList &Outputs, const InputInfoList &Inputs,
+                    const llvm::opt::ArgList &TCArgs,
+                    const char *LinkingOutput) const;
+
 public:
   LinkerWrapper(const ToolChain &TC, const Tool *Linker)
       : Tool("Offload::Linker", "linker", TC), Linker(Linker) {}
@@ -187,6 +192,11 @@ public:
                     const InputInfo &Output, const InputInfoList &Inputs,
                     const llvm::opt::ArgList &TCArgs,
                     const char *LinkingOutput) const override;
+  void ConstructJobMultipleOutputs(Compilation &C, const JobAction &JA,
+                                   const InputInfoList &Outputs,
+                                   const InputInfoList &Inputs,
+                                   const llvm::opt::ArgList &TCArgs,
+                                   const char *LinkingOutput) const override;
 };
 
 // Calculate the output path of the module file when compiling a module unit

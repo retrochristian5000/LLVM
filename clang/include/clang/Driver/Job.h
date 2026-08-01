@@ -238,6 +238,13 @@ public:
 
   void replaceExecutable(const char *Exe) { Executable = Exe; }
 
+  void replaceOutputFilenames(ArrayRef<InputInfo> Outputs) {
+    OutputFilenames.clear();
+    for (const InputInfo &Output : Outputs)
+      if (Output.isFilename())
+        OutputFilenames.emplace_back(Output.getFilename());
+  }
+
   const char *getExecutable() const { return Executable; }
 
   const llvm::opt::ArgStringList &getArguments() const { return Arguments; }

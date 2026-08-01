@@ -17,6 +17,7 @@
 #include "clang/Basic/TargetID.h"
 #include "clang/Basic/Version.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/CodeGen/CommandFlags.h"
@@ -1085,13 +1086,24 @@ Error handleOverrideImages(
   return Error::success();
 }
 
+enum class DeviceOutputMode { Wrapped, FatBinary, Images };
+
+static Error writeOutputFile(StringRef Filename, StringRef Contents) {
+  Expected<std::unique_ptr<FileOutputBuffer>> FOBOrErr =
+      FileOutputBuffer::create(Filename, Contents.size());
+  if (!FOBOrErr)
+    return FOBOrErr.takeError();
+  std::unique_ptr<FileOutputBuffer> FOB = std::move(*FOBOrErr);
+  llvm::copy(Contents, FOB->getBufferStart());
+  return FOB->commit();
+}
+
 /// Transforms all the extracted offloading input files into an image that can
-/// be registered by the runtime. If NeedsWrapping is false, writes bundled
-/// output directly without wrapping or host linking.
+/// be registered by the runtime.
 Expected<SmallVector<StringRef>>
 linkAndWrapDeviceFiles(ArrayRef<SmallVector<OffloadFile>> LinkerInputFiles,
                        const InputArgList &Args, char **Argv, int Argc,
-                       bool NeedsWrapping) {
+                       DeviceOutputMode OutputMode) {
   llvm::TimeTraceScope TimeScope("Handle all device input");
 
   std::mutex ImageMtx;
@@ -1179,6 +1191,51 @@ linkAndWrapDeviceFiles(ArrayRef<SmallVector<OffloadFile>> LinkerInputFiles,
   if (Err)
     return std::move(Err);
 
+  if (OutputMode == DeviceOutputMode::Images) {
+    SmallVector<const OffloadingImage *> OutputImages;
+    for (auto &Entry : Images) {
+      for (const OffloadingImage &Image : Entry.second)
+        OutputImages.push_back(&Image);
+    }
+    if (OutputImages.empty())
+      return createStringError(
+          "expected at least one linked image for direct device image output");
+
+    bool HasExplicitOutput = Args.hasArg(OPT_o, OPT_out);
+    if (HasExplicitOutput && OutputImages.size() != 1)
+      return createStringError(
+          "cannot specify -o when emitting multiple device images");
+
+    StringMap<StringRef> DeviceOutputs;
+    for (const opt::Arg *Arg : Args.filtered(OPT_device_image_output)) {
+      if (!DeviceOutputs.try_emplace(Arg->getValue(0), Arg->getValue(1)).second)
+        return createStringError("duplicate output for device image '%s'",
+                                 Arg->getValue(0));
+    }
+    if (HasExplicitOutput && !DeviceOutputs.empty())
+      return createStringError(
+          "cannot combine -o with explicit device image outputs");
+    if (!HasExplicitOutput && DeviceOutputs.size() != OutputImages.size())
+      return createStringError(
+          "expected an output file for each linked device image");
+
+    for (const OffloadingImage *Image : OutputImages) {
+      SmallString<128> Target(Image->StringData.lookup("triple"));
+      Target += ",";
+      Target += Image->StringData.lookup("arch");
+      StringRef OutputFilename = HasExplicitOutput
+                                     ? StringRef(ExecutableName)
+                                     : DeviceOutputs.lookup(Target);
+      if (OutputFilename.empty())
+        return createStringError("missing output for device image '%s'",
+                                 Target.c_str());
+      if (Error E = writeOutputFile(OutputFilename, Image->Image->getBuffer()))
+        return std::move(E);
+    }
+
+    return SmallVector<StringRef>();
+  }
+
   // Create a binary image of each offloading image and either embed it into a
   // new object file, or if all inputs were direct offload binaries, emit the
   // fat binary directly (e.g. .hipfb / .fatbin).
@@ -1201,20 +1258,13 @@ linkAndWrapDeviceFiles(ArrayRef<SmallVector<OffloadFile>> LinkerInputFiles,
     if (!BundledImagesOrErr)
       return BundledImagesOrErr.takeError();
 
-    if (!NeedsWrapping) {
+    if (OutputMode == DeviceOutputMode::FatBinary) {
       if (BundledImagesOrErr->size() != 1)
         return createStringError(
             "Expected a single bundled image for direct fat binary output");
 
-      Expected<std::unique_ptr<FileOutputBuffer>> FOBOrErr =
-          FileOutputBuffer::create(
-              ExecutableName, BundledImagesOrErr->front()->getBufferSize());
-      if (!FOBOrErr)
-        return FOBOrErr.takeError();
-      std::unique_ptr<FileOutputBuffer> FOB = std::move(*FOBOrErr);
-      llvm::copy(BundledImagesOrErr->front()->getBuffer(),
-                 FOB->getBufferStart());
-      if (Error E = FOB->commit())
+      if (Error E = writeOutputFile(ExecutableName,
+                                    BundledImagesOrErr->front()->getBuffer()))
         return std::move(E);
 
       continue;
@@ -1577,19 +1627,25 @@ int main(int Argc, char **Argv) {
     if (!DeviceInputFiles)
       reportError(DeviceInputFiles.takeError());
 
-    // Check if we should emit fat binary directly without wrapping or host
-    // linking.
+    // Check if we should emit device output directly without host linking.
     bool EmitFatbinOnly = Args.hasArg(OPT_emit_fatbin_only);
+    bool EmitDeviceImagesOnly = Args.hasArg(OPT_emit_device_images_only);
+    if (EmitFatbinOnly && EmitDeviceImagesOnly)
+      reportError(createStringError(
+          "cannot emit a fat binary and raw device images together"));
 
-    // Link and process the device images. The function may emit a direct fat
-    // binary if --emit-fatbin-only is specified.
-    auto FilesOrErr = linkAndWrapDeviceFiles(*DeviceInputFiles, Args, Argv,
-                                             Argc, !EmitFatbinOnly);
+    DeviceOutputMode OutputMode = EmitFatbinOnly ? DeviceOutputMode::FatBinary
+                                  : EmitDeviceImagesOnly
+                                      ? DeviceOutputMode::Images
+                                      : DeviceOutputMode::Wrapped;
+
+    auto FilesOrErr =
+        linkAndWrapDeviceFiles(*DeviceInputFiles, Args, Argv, Argc, OutputMode);
     if (!FilesOrErr)
       reportError(FilesOrErr.takeError());
 
     // Run the host linking job with the rendered arguments.
-    if (!EmitFatbinOnly) {
+    if (OutputMode == DeviceOutputMode::Wrapped) {
       if (Error Err = runLinker(*FilesOrErr, Args))
         reportError(std::move(Err));
     }
