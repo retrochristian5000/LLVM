@@ -212,9 +212,11 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <type_traits>
 
@@ -258,7 +260,8 @@ private:
   void
   generateImplicitDataOps(ModuleOp &module, OpT computeConstructOp,
                           std::optional<acc::ClauseDefaultValue> &defaultClause,
-                          acc::OpenACCSupport &accSupport);
+                          acc::OpenACCSupport &accSupport,
+                          SmallVector<Value> &dominatingDataClauses);
 
   /// Generates a private recipe for a variable.
   acc::PrivateRecipeOp generatePrivateRecipe(ModuleOp &module, Value var,
@@ -702,11 +705,75 @@ static void insertInSortedOrder(SmallVector<Value> &sortedDataClauseOperands,
   }
 }
 
+static bool isCoveredByEnclosingDataClause(Value var,
+                                           ArrayRef<Value> enclosingDataClauses,
+                                           AliasAnalysis &aliasAnalysis) {
+  for (Value clause : enclosingDataClauses) {
+    Operation *entryOp = clause.getDefiningOp();
+    if (!entryOp)
+      continue;
+    if (isa<acc::CopyinOp, acc::CreateOp, acc::PresentOp, acc::NoCreateOp>(
+            entryOp) &&
+        aliasAnalysis.alias(acc::getVar(entryOp), var).isMust())
+      return true;
+  }
+  return false;
+}
+
+/// A present() clause on a device value always holds. Erase it to allow the
+/// implicit data to generate an acc.deviceptr for it, except if a dominating
+/// data clause mapped it to the device (valid for cuda `managed` allocations).
+template <typename OpT>
+static void foldPresentDeviceValue(OpT computeConstructOp,
+                                   SmallVector<Value> &dominatingDataClauses,
+                                   AliasAnalysis &aliasAnalysis) {
+  llvm::DenseSet<Value> ownClauses(
+      computeConstructOp.getDataClauseOperands().begin(),
+      computeConstructOp.getDataClauseOperands().end());
+  SmallVector<Value> enclosingClauses;
+  for (Value v : dominatingDataClauses)
+    if (!ownClauses.count(v))
+      enclosingClauses.push_back(v);
+
+  SmallVector<Value> remainingOperands;
+  SmallVector<acc::PresentOp> toErase;
+  for (Value var : computeConstructOp.getDataClauseOperands()) {
+    if (auto presentOp =
+            dyn_cast_if_present<acc::PresentOp>(var.getDefiningOp())) {
+      if (acc::isDeviceValue(presentOp.getVar()) &&
+          !isCoveredByEnclosingDataClause(presentOp.getVar(), enclosingClauses,
+                                          aliasAnalysis)) {
+        toErase.push_back(presentOp);
+        continue;
+      }
+    }
+    remainingOperands.push_back(var);
+  }
+  if (toErase.empty())
+    return;
+
+  llvm::DenseSet<Value> foldedAccVars;
+  for (acc::PresentOp presentOp : toErase)
+    foldedAccVars.insert(presentOp.getAccVar());
+  llvm::erase_if(dominatingDataClauses,
+                 [&](Value v) { return foldedAccVars.count(v); });
+
+  computeConstructOp.getDataClauseOperandsMutable().assign(remainingOperands);
+  for (acc::PresentOp presentOp : toErase) {
+    Operation *exitOp = findDataExitOp(presentOp);
+    assert(exitOp && exitOp->getNumResults() == 0);
+    presentOp.getAccVar().replaceAllUsesWith(presentOp.getVar());
+    exitOp->erase();
+    presentOp->erase();
+  }
+}
+
 template <typename OpT>
 void ACCImplicitData::generateImplicitDataOps(
     ModuleOp &module, OpT computeConstructOp,
     std::optional<acc::ClauseDefaultValue> &defaultClause,
-    acc::OpenACCSupport &accSupport) {
+    acc::OpenACCSupport &accSupport,
+    SmallVector<Value> &dominatingDataClauses) {
   // Implicit data attributes are only applied if "[t]here is no default(none)
   // clause visible at the compute construct", unless ignoreDefaultNone is set.
   if (!ignoreDefaultNone && defaultClause.has_value() &&
@@ -738,10 +805,6 @@ void ACCImplicitData::generateImplicitDataOps(
     LLVM_DEBUG(llvm::dbgs() << "== Generating clauses for ==\n"
                             << computeConstructOp << "\n");
   }
-  auto &domInfo = this->getAnalysis<DominanceInfo>();
-  auto &postDomInfo = this->getAnalysis<PostDominanceInfo>();
-  auto dominatingDataClauses =
-      acc::getDominatingDataClauses(computeConstructOp, domInfo, postDomInfo);
   for (auto var : candidateVars) {
     auto newDataClauseOp = generateDataClauseOpForCandidate(
         var, module, builder, computeConstructOp, dominatingDataClauses,
@@ -790,19 +853,29 @@ void ACCImplicitData::runOnOperation() {
 
   acc::OpenACCSupport &accSupport = getAnalysis<acc::OpenACCSupport>();
 
+  SmallVector<Operation *> computeConstructOps;
   module.walk([&](Operation *op) {
-    if (isa<ACC_COMPUTE_CONSTRUCT_OPS, acc::KernelEnvironmentOp>(op)) {
-      assert(op->getNumRegions() == 1 && "must have 1 region");
-
-      auto defaultClause = acc::getDefaultAttr(op);
-      llvm::TypeSwitch<Operation *, void>(op)
-          .Case<ACC_COMPUTE_CONSTRUCT_OPS, acc::KernelEnvironmentOp>(
-              [&](auto op) {
-                generateImplicitDataOps(module, op, defaultClause, accSupport);
-              })
-          .Default([&](Operation *) {});
-    }
+    if (isa<ACC_COMPUTE_CONSTRUCT_OPS, acc::KernelEnvironmentOp>(op))
+      computeConstructOps.push_back(op);
   });
+
+  for (Operation *op : computeConstructOps) {
+    assert(op->getNumRegions() == 1 && "must have 1 region");
+
+    auto defaultClause = acc::getDefaultAttr(op);
+    llvm::TypeSwitch<Operation *, void>(op)
+        .Case<ACC_COMPUTE_CONSTRUCT_OPS, acc::KernelEnvironmentOp>(
+            [&](auto op) {
+              auto dominatingDataClauses = acc::getDominatingDataClauses(
+                  op, getAnalysis<DominanceInfo>(),
+                  getAnalysis<PostDominanceInfo>());
+              foldPresentDeviceValue(op, dominatingDataClauses,
+                                     getAnalysis<AliasAnalysis>());
+              generateImplicitDataOps(module, op, defaultClause, accSupport,
+                                      dominatingDataClauses);
+            })
+        .Default([&](Operation *) {});
+  }
 }
 
 } // namespace
