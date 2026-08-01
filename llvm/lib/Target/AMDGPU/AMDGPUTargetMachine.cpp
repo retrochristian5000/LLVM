@@ -67,6 +67,7 @@
 #include "SIPostRABundler.h"
 #include "SIPreAllocateWWMRegs.h"
 #include "SIShrinkInstructions.h"
+#include "SISinkAsyncDMA.h"
 #include "SIWholeQuadMode.h"
 #include "TargetInfo/AMDGPUTargetInfo.h"
 #include "Utils/AMDGPUBaseInfo.h"
@@ -721,6 +722,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeSIModeRegisterLegacyPass(*PR);
   initializeSIWholeQuadModeLegacyPass(*PR);
   initializeSILowerControlFlowLegacyPass(*PR);
+  initializeSISinkAsyncDMALegacyPass(*PR);
   initializeSIPreEmitPeepholeLegacyPass(*PR);
   initializeSILateBranchLoweringLegacyPass(*PR);
   initializeSIMemoryLegalizerLegacyPass(*PR);
@@ -1823,6 +1825,7 @@ void GCNPassConfig::addFastRegAlloc() {
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
   insertPass(&PHIEliminationID, &SILowerControlFlowLegacyID);
+  insertPass(&SILowerControlFlowLegacyID, &SISinkAsyncDMALegacyID);
 
   insertPass(&TwoAddressInstructionPassID, &SIWholeQuadModeID);
 
@@ -1849,6 +1852,7 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
   insertPass(&PHIEliminationID, &SILowerControlFlowLegacyID);
+  insertPass(&SILowerControlFlowLegacyID, &SISinkAsyncDMALegacyID);
 
   if (EnableRewritePartialRegUses)
     insertPass(&RenameIndependentSubregsID, &GCNRewritePartialRegUsesID);
@@ -2556,6 +2560,7 @@ void AMDGPUCodeGenPassBuilder::addMachineSSAOptimization(
 
 Error AMDGPUCodeGenPassBuilder::addFastRegAlloc(PassManagerWrapper &PMW) const {
   insertPass<PHIEliminationPass>(SILowerControlFlowPass());
+  insertPass<PHIEliminationPass>(SISinkAsyncDMAPass());
 
   insertPass<TwoAddressInstructionPass>(SIWholeQuadModePass());
 
@@ -2618,6 +2623,7 @@ Error AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
   insertPass<PHIEliminationPass>(SILowerControlFlowPass());
+  insertPass<PHIEliminationPass>(SISinkAsyncDMAPass());
 
   if (EnableRewritePartialRegUses)
     insertPass<RenameIndependentSubregsPass>(GCNRewritePartialRegUsesPass());
