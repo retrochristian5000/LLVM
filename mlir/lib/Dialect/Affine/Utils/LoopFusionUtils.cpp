@@ -377,9 +377,8 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
           Value srcMemref = getMemref(srcOp);
           Value dstMemref = getMemref(dstOp);
           return srcMemref != dstMemref &&
-                 memref::isSameViewOrTrivialAlias(
-                     cast<MemrefValue>(srcMemref),
-                     cast<MemrefValue>(dstMemref));
+                 memref::isSameViewOrTrivialAlias(cast<MemrefValue>(srcMemref),
+                                                  cast<MemrefValue>(dstMemref));
         });
       })) {
     LDBG() << "Fusion across different trivial alias views is unsupported";
