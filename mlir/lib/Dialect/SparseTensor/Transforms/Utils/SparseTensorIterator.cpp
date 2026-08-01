@@ -102,6 +102,12 @@ public:
     Value posLo = MULI(p, lvlSize);
     return {posLo, lvlSize};
   }
+
+  ValuePair collapseRangeBetween(OpBuilder &b, Location l, ValueRange,
+                                 ValuePair parentRange) const override {
+    return {MULI(parentRange.first, lvlSize),
+            MULI(parentRange.second, lvlSize)};
+  }
 };
 
 class BatchLevel : public SparseTensorLevel {
@@ -168,6 +174,7 @@ public:
     ValueRange posRange = posRangeIf.getResults();
     return {posRange.front(), posRange.back()};
   }
+
 }; // namespace
 
 class LooseCompressedLevel : public SparseLevel</*hasPosBuf=*/true> {
