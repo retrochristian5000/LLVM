@@ -685,10 +685,26 @@ private:
     for (const Expr *CurrExpr : reverse(OriginExprChain.drop_back())) {
       if (!shouldShowInAliasChain(CurrExpr, LastExpr))
         continue;
-      S.Diag(CurrExpr->getBeginLoc(),
-             diag::note_lifetime_safety_aliases_storage)
-          << CurrExpr->getSourceRange() << getDiagSubjectDescription(CurrExpr)
-          << IssueStr;
+      std::optional<LifetimeBoundParamInfo> ParamInfo =
+          getTrackingInfoForCallArg(CurrExpr, LastExpr);
+      if (ParamInfo) {
+        bool IsImplicitObject = isa<const CXXMethodDecl *>(*ParamInfo);
+        std::string ParamName;
+        if (!IsImplicitObject) {
+          const auto *Param = cast<const ParmVarDecl *>(*ParamInfo);
+          ParamName = Param->getIdentifier()
+                          ? "'" + Param->getNameAsString() + "'"
+                          : "'<unnamed>'";
+        }
+        S.Diag(CurrExpr->getBeginLoc(),
+               diag::note_lifetime_safety_aliases_storage_lifetimebound)
+            << CurrExpr->getSourceRange() << getDiagSubjectDescription(CurrExpr)
+            << IssueStr << IsImplicitObject << ParamName;
+      } else
+        S.Diag(CurrExpr->getBeginLoc(),
+               diag::note_lifetime_safety_aliases_storage)
+            << CurrExpr->getSourceRange() << getDiagSubjectDescription(CurrExpr)
+            << IssueStr;
       LastExpr = CurrExpr;
     }
   }
