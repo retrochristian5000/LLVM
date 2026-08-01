@@ -694,6 +694,51 @@ exit:
   ret i64 %add
 }
 
+define i64 @count_invariant_cmp_i64_i64(ptr %dst, i64 %x) #0 {
+; CHECK-LABEL: define i64 @count_invariant_cmp_i64_i64(
+; CHECK-SAME: ptr [[DST:%.*]], i64 [[X:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br label [[VECTOR_PH:%.*]]
+; CHECK:       vector.ph:
+; CHECK-NEXT:    [[TMP0:%.*]] = icmp eq i64 [[X]], 0
+; CHECK-NEXT:    [[BROADCAST_SPLATINSERT:%.*]] = insertelement <16 x i1> poison, i1 [[TMP0]], i64 0
+; CHECK-NEXT:    [[BROADCAST_SPLAT:%.*]] = shufflevector <16 x i1> [[BROADCAST_SPLATINSERT]], <16 x i1> poison, <16 x i32> zeroinitializer
+; CHECK-NEXT:    [[TMP1:%.*]] = zext <16 x i1> [[BROADCAST_SPLAT]] to <16 x i64>
+; CHECK-NEXT:    br label [[VECTOR_BODY:%.*]]
+; CHECK:       vector.body:
+; CHECK-NEXT:    [[INDEX:%.*]] = phi i64 [ 0, [[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], [[VECTOR_BODY]] ]
+; CHECK-NEXT:    [[VEC_PHI:%.*]] = phi <16 x i64> [ zeroinitializer, [[VECTOR_PH]] ], [ [[TMP2:%.*]], [[VECTOR_BODY]] ]
+; CHECK-NEXT:    [[TMP2]] = add <16 x i64> [[VEC_PHI]], [[TMP1]]
+; CHECK-NEXT:    [[TMP3:%.*]] = getelementptr i8, ptr [[DST]], i64 [[INDEX]]
+; CHECK-NEXT:    store <16 x i8> zeroinitializer, ptr [[TMP3]], align 1
+; CHECK-NEXT:    [[INDEX_NEXT]] = add nuw i64 [[INDEX]], 16
+; CHECK-NEXT:    [[TMP4:%.*]] = icmp eq i64 [[INDEX_NEXT]], 1024
+; CHECK-NEXT:    br i1 [[TMP4]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], !llvm.loop [[LOOP18:![0-9]+]]
+; CHECK:       middle.block:
+; CHECK-NEXT:    [[TMP5:%.*]] = call i64 @llvm.vector.reduce.add.v16i64(<16 x i64> [[TMP2]])
+; CHECK-NEXT:    br label [[EXIT:%.*]]
+; CHECK:       exit:
+; CHECK-NEXT:    ret i64 [[TMP5]]
+;
+entry:
+  br label %for.body
+
+for.body:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %for.body ]
+  %count = phi i64 [ 0, %entry ], [ %add, %for.body ]
+  %cmp = icmp eq i64 %x, 0
+  %ext = zext i1 %cmp to i64
+  %add = add i64 %count, %ext
+  %gep = getelementptr i8, ptr %dst, i64 %iv
+  store i8 0, ptr %gep, align 1
+  %iv.next = add nuw i64 %iv, 1
+  %done = icmp eq i64 %iv.next, 1024
+  br i1 %done, label %exit, label %for.body
+
+exit:
+  ret i64 %add
+}
+
 attributes #0 = { "target-features"="+neon,+dotprod" }
 attributes #1 = { "target-features"="+sve" }
 attributes #2 = { "target-features"="+neon" }
