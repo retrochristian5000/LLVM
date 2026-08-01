@@ -1581,7 +1581,10 @@ func.func @producer_consumer_with_outmost_user(%arg0 : f16) {
 // operation class.
 
 // CHECK-LABEL: func @nested_unknown_call
-// CHECK:       func.call @escape_nested
+// CHECK:       affine.for
+// CHECK:         func.call @escape_nested
+// CHECK:       affine.for
+// CHECK:         affine.load
 // CHECK:       return
 func.func @nested_unknown_call(%m: memref<8xf32>, %out: memref<8xf32>) {
   affine.for %i = 0 to 8 {
@@ -1600,7 +1603,10 @@ func.func private @escape_nested(memref<8xf32>)
 // Multi-memref operations must follow the same arbitrary-operation path.
 
 // CHECK-LABEL: func @nested_memref_copy
-// CHECK:       memref.copy
+// CHECK:       affine.for
+// CHECK:         memref.copy
+// CHECK:       affine.for
+// CHECK:         affine.load
 // CHECK:       return
 func.func @nested_memref_copy(
     %src: memref<8xf32>, %dst: memref<8xf32>, %out: memref<8xf32>) {

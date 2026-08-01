@@ -881,7 +881,7 @@ public:
     if (removeSrcNode &&
         any_of(mdg->outEdges[producerId], [&](const auto &edge) {
           return edge.id != consumerId &&
-                 isa<MemRefType>(edge.value.getType()) &&
+                 isa<BaseMemRefType>(edge.value.getType()) &&
                  memref::isSameViewOrTrivialAlias(cast<MemrefValue>(edge.value),
                                                   cast<MemrefValue>(memref));
         }))

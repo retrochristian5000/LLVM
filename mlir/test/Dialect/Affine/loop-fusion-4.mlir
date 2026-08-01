@@ -924,6 +924,66 @@ func.func private @escape(memref<?xf64>)
 
 // -----
 
+// A ranked source cast to an unranked memref must retain the dependence on the
+// source used by the affine producer and consumer.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_ranked_to_unranked
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+// PRODUCER-CONSUMER-MAXIMAL:      memref.cast
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape_unranked
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.load
+func.func @cast_alias_ranked_to_unranked(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  %view = memref.cast %comm : memref<32xf64> to memref<*xf64>
+  func.call @escape_unranked(%view) : (memref<*xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_unranked(memref<*xf64>)
+
+// -----
+
+// An unranked source cast to a ranked memref must retain the dependence on the
+// source passed to the opaque call.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_unranked_to_ranked
+// PRODUCER-CONSUMER-MAXIMAL:      memref.cast
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape_ranked
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.load
+func.func @cast_alias_unranked_to_ranked(
+    %in: memref<32xf64>, %comm: memref<*xf64>, %out: memref<32xf64>) {
+  %view = memref.cast %comm : memref<*xf64> to memref<32xf64>
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %view[%i] : memref<32xf64>
+  }
+  func.call @escape_ranked(%comm) : (memref<*xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %view[%j] : memref<32xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_ranked(memref<*xf64>)
+
+// -----
+
 // Affine accesses may use the fully aliasing view while the external call uses
 // the source value. The call must remain between the two loop nests.
 
@@ -1009,3 +1069,68 @@ func.func @cast_alias_non_alias_call(
   return
 }
 func.func private @escape_other(memref<?xf64>)
+
+// -----
+
+// A zero-offset, unit-stride subview is a fully aliasing view and must retain
+// the same dependence as its source memref.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @subview_alias_external_call
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+// PRODUCER-CONSUMER-MAXIMAL:      memref.subview
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape_subview
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.load
+func.func @subview_alias_external_call(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  %view = memref.subview %comm[0] [32] [1]
+      : memref<32xf64> to memref<32xf64, strided<[1], offset: 0>>
+  func.call @escape_subview(%view)
+      : (memref<32xf64, strided<[1], offset: 0>>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_subview(memref<32xf64, strided<[1], offset: 0>>)
+
+// -----
+
+// A non-fully-aliasing subview of an unrelated memref must not block an
+// otherwise legal producer-consumer fusion.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @subview_non_alias_call
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+// PRODUCER-CONSUMER-MAXIMAL:       call @escape_subview_non_alias
+// PRODUCER-CONSUMER-MAXIMAL:       affine.for
+// PRODUCER-CONSUMER-MAXIMAL:         affine.load
+// PRODUCER-CONSUMER-MAXIMAL:       return
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+func.func @subview_non_alias_call(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  %other = memref.alloc() : memref<32xf64>
+  %view = memref.subview %other[1] [16] [1]
+      : memref<32xf64> to memref<16xf64, strided<[1], offset: 1>>
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  func.call @escape_subview_non_alias(%view)
+      : (memref<16xf64, strided<[1], offset: 1>>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    affine.store %c, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape_subview_non_alias(
+    memref<16xf64, strided<[1], offset: 1>>)

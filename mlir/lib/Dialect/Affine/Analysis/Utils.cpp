@@ -40,7 +40,7 @@ using llvm::SmallDenseMap;
 using Node = MemRefDependenceGraph::Node;
 
 static Value canonicalizeMemref(Value value) {
-  if (!value || !isa<MemRefType>(value.getType()))
+  if (!value || !isa<BaseMemRefType>(value.getType()))
     return value;
   return memref::skipFullyAliasingOperations(cast<MemrefValue>(value));
 }
@@ -64,7 +64,7 @@ static void getMayAffectedValues(Operation *op,
       return;
     // Memref operands have to be considered as being affected.
     for (Value operand : op->getOperands()) {
-      if (isa<MemRefType>(operand.getType()))
+      if (isa<BaseMemRefType>(operand.getType()))
         values.push_back(canonicalizeMemref(operand));
     }
     return;
@@ -74,7 +74,7 @@ static void getMayAffectedValues(Operation *op,
   for (auto &effect : effects) {
     Value effectVal = effect.getValue();
     if (isa<EffectTys...>(effect.getEffect()) && effectVal &&
-        isa<MemRefType>(effectVal.getType()))
+        isa<BaseMemRefType>(effectVal.getType()))
       values.push_back(canonicalizeMemref(effectVal));
   };
 }
@@ -108,7 +108,7 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
           return;
         // Check operands. E.g., ops like the `call` op are handled here.
         if (llvm::any_of(op->getOperands(), [](Value value) {
-              return isa<MemRefType>(value.getType());
+              return isa<BaseMemRefType>(value.getType());
             })) {
           // Conservatively, assume all memref operands are read and written.
           memrefLoads.push_back(op);
@@ -237,7 +237,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
     SmallVector<Value> affectedValues;
     getMayAffectedValues<MemoryEffects::Read>(op, affectedValues);
     if (llvm::any_of(((ValueRange)affectedValues).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
+                     [](Type type) { return !isa<BaseMemRefType>(type); }))
       // We do not know the interaction here.
       return nullptr;
     for (Value memref : affectedValues)
@@ -248,7 +248,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
     SmallVector<Value> affectedValues;
     getMayAffectedValues<MemoryEffects::Write>(op, affectedValues);
     if (llvm::any_of((ValueRange(affectedValues)).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
+                     [](Type type) { return !isa<BaseMemRefType>(type); }))
       return nullptr;
     for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
@@ -258,7 +258,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
     SmallVector<Value> affectedValues;
     getMayAffectedValues<MemoryEffects::Free>(op, affectedValues);
     if (llvm::any_of((ValueRange(affectedValues)).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
+                     [](Type type) { return !isa<BaseMemRefType>(type); }))
       return nullptr;
     for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
@@ -568,7 +568,7 @@ void MemRefDependenceGraph::addEdge(unsigned srcId, unsigned dstId,
   if (!hasEdge(srcId, dstId, value)) {
     outEdges[srcId].push_back({dstId, value});
     inEdges[dstId].push_back({srcId, value});
-    if (isa<MemRefType>(value.getType()))
+    if (isa<BaseMemRefType>(value.getType()))
       memrefEdgeCount[canonicalizeMemref(value)]++;
   }
 }
@@ -578,7 +578,7 @@ void MemRefDependenceGraph::removeEdge(unsigned srcId, unsigned dstId,
                                        Value value) {
   assert(inEdges.count(dstId) > 0);
   assert(outEdges.count(srcId) > 0);
-  if (isa<MemRefType>(value.getType())) {
+  if (isa<BaseMemRefType>(value.getType())) {
     Value canonicalValue = canonicalizeMemref(value);
     assert(memrefEdgeCount.count(canonicalValue) > 0);
     memrefEdgeCount[canonicalValue]--;
@@ -669,7 +669,7 @@ void MemRefDependenceGraph::gatherDefiningNodes(
     // By definition of edge, if the edge value is a non-memref value,
     // then the dependence is between a graph node which defines an SSA value
     // and another graph node which uses the SSA value.
-    if (!isa<MemRefType>(edge.value.getType()))
+    if (!isa<BaseMemRefType>(edge.value.getType()))
       definingNodes.insert(edge.id);
 }
 
@@ -861,7 +861,7 @@ void MemRefDependenceGraph::forEachMemRefEdge(
     ArrayRef<Edge> edges, const std::function<void(Edge)> &callback) {
   for (const auto &edge : edges) {
     // Skip if 'edge' is not a memref dependence edge.
-    if (!isa<MemRefType>(edge.value.getType()))
+    if (!isa<BaseMemRefType>(edge.value.getType()))
       continue;
     assert(nodes.count(edge.id) > 0);
     // Visit current input edge 'edge'.
