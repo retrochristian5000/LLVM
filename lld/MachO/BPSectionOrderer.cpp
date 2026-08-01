@@ -8,12 +8,15 @@
 
 #include "BPSectionOrderer.h"
 #include "InputSection.h"
+#include "ObjC.h"
 #include "OutputSegment.h"
 #include "Relocations.h"
 #include "Symbols.h"
+#include "SyntheticSections.h"
 #include "lld/Common/BPSectionOrdererBase.inc"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StableHashing.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/xxhash.h"
 
@@ -116,9 +119,11 @@ private:
 DenseMap<const InputSection *, int> lld::macho::runBalancedPartitioning(
     StringRef profilePath, ArrayRef<BPCompressionSortSpec> compressionSortSpecs,
     bool forFunctionCompression, bool forDataCompression,
-    bool compressionSortStartupFunctions, bool verbose) {
+    bool compressionSortStartupFunctions, bool sortInitializers,
+    bool sortObjCLoadMethods, bool verbose) {
   // Collect candidate sections and associated symbols.
   SmallVector<InputSection *> sections;
+  DenseMap<InputSection *, unsigned> sectionToIdx;
   DenseMap<CachedHashStringRef, std::set<unsigned>> rootSymbolToSectionIdxs;
   for (const auto *file : inputFiles) {
     for (auto *sec : file->sections) {
@@ -138,6 +143,7 @@ DenseMap<const InputSection *, int> lld::macho::runBalancedPartitioning(
         if (isa<ConcatInputSection>(isec) && !isec->isLive(0))
           continue;
         size_t idx = sections.size();
+        sectionToIdx.try_emplace(isec, idx);
         sections.emplace_back(isec);
         for (auto *sym : BPOrdererMachO::getSymbols(*isec)) {
           auto rootName = lld::utils::getRootSymbol(sym->getName());
@@ -151,10 +157,52 @@ DenseMap<const InputSection *, int> lld::macho::runBalancedPartitioning(
     }
   }
 
+  SetVector<unsigned> initialStartupSectionIdxs;
+  if (sortInitializers) {
+    const auto &initOffsetInputs = in.initOffsets->inputs();
+    SmallVector<ConcatInputSection *> initializerSections(
+        initOffsetInputs.begin(), initOffsetInputs.end());
+    for (InputSection *isec : inputSections)
+      if (sectionType(isec->getFlags()) ==
+          llvm::MachO::S_MOD_INIT_FUNC_POINTERS)
+        initializerSections.push_back(cast<ConcatInputSection>(isec));
+    for (const ConcatInputSection *isec : initializerSections) {
+      for (const Relocation &reloc : isec->relocs) {
+        InputSection *referent = reloc.getReferentInputSection();
+        if (!referent)
+          continue;
+        auto it = sectionToIdx.find(referent->canonical());
+        if (it != sectionToIdx.end())
+          initialStartupSectionIdxs.insert(it->second);
+      }
+    }
+    if (verbose)
+      dbgs() << "Initializer functions for startup: "
+             << initialStartupSectionIdxs.size() << "\n";
+  }
+
+  SmallVector<unsigned> objcLoadSectionIdxs;
+  if (sortObjCLoadMethods) {
+    for (InputSection *isec : objc::getLoadMethodSections()) {
+      auto it = sectionToIdx.find(isec);
+      if (it != sectionToIdx.end()) {
+        initialStartupSectionIdxs.insert(it->second);
+        objcLoadSectionIdxs.push_back(it->second);
+      }
+    }
+    llvm::sort(objcLoadSectionIdxs);
+    objcLoadSectionIdxs.erase(llvm::unique(objcLoadSectionIdxs),
+                              objcLoadSectionIdxs.end());
+    if (verbose)
+      dbgs() << "Objective-C +load functions for startup: "
+             << objcLoadSectionIdxs.size() << "\n";
+  }
+
   auto result = BPOrdererMachO().computeOrder(
       profilePath, compressionSortSpecs, forFunctionCompression,
       forDataCompression, compressionSortStartupFunctions, verbose, sections,
-      rootSymbolToSectionIdxs);
+      rootSymbolToSectionIdxs, initialStartupSectionIdxs.getArrayRef(),
+      objcLoadSectionIdxs);
   // BP already orders cold sections after non-cold via separate buckets.
   // Unset isCold on sections that received a BP priority so Writer.cpp's
   // stable_partition doesn't re-partition them. Sections without a BP priority
