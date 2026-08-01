@@ -2206,7 +2206,7 @@ let Predicates = [HasPAuth] in {
                                       GPR64noip:$AddrDisc),
                          []>, Sched<[WriteI, ReadI]> {
     let isCodeGenOnly = 1;
-    let hasSideEffects = 1;
+    let hasSideEffects = 0;
     let mayStore = 0;
     let mayLoad = 0;
     let Size = 32;
@@ -2270,7 +2270,7 @@ let Predicates = [HasPAuth] in {
     // Thanks to its register class, $PACAddrDisc never aliases X16 which is
     // early-clobbered.
     let isCodeGenOnly = 1;
-    let hasSideEffects = 1;
+    let hasSideEffects = 0;
     let mayStore = 0;
     let mayLoad = 0;
     let Size = 48;
