@@ -1134,3 +1134,73 @@ func.func @subview_non_alias_call(
 }
 func.func private @escape_subview_non_alias(
     memref<16xf64, strided<[1], offset: 1>>)
+
+// -----
+
+// An addressable effect without an SSA memory value cannot be represented by
+// the per-memref dependence graph. Fusion must be skipped for the block.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_addressable_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @value_less_addressable_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+  }
+  %effect = "test.side_effect_op"() {effects = [{effect = "write"}]} : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// A symbol-associated addressable effect is also not representable by a
+// per-memref dependence graph. Fusion must be skipped for the block.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @symbol_addressable_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @symbol_addressable_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+  }
+  "test.side_effect_op"() {
+    effects = [{effect = "write", on_reference = @effect_target}]
+  } : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @effect_target()
+
+// A value-less effect on a non-addressable resource is disjoint from memref
+// accesses, so the otherwise legal producer-consumer fusion remains enabled.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_nonaddressable_effect
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL-NOT:  affine.for
+func.func @value_less_nonaddressable_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+  }
+  %effect = "test.side_effect_op"() {
+    effects = [{effect = "write", test_nonaddressable_resource}]
+  } : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+  }
+  return
+}

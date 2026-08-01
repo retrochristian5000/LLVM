@@ -54,38 +54,58 @@ static bool isSameMemref(Value lhs, Value rhs) {
 /// (e.g. a call to an external function without a memory-effect interface) is
 /// conservatively assumed to affect all its memref operands. Fully aliasing
 /// views are canonicalized so the MDG uses one key for the view and its source.
+/// Returns false if an addressable effect cannot be represented by a memref
+/// value, in which case the MDG must not be used for fusion.
 template <typename... EffectTys>
-static void getMayAffectedValues(Operation *op,
+static bool getMayAffectedValues(Operation *op,
                                  SmallVectorImpl<Value> &values) {
   auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
   if (!memOp) {
     if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
       // No effects.
-      return;
+      return true;
     // Memref operands have to be considered as being affected.
     for (Value operand : op->getOperands()) {
       if (isa<BaseMemRefType>(operand.getType()))
         values.push_back(canonicalizeMemref(operand));
     }
-    return;
+    return true;
   }
   SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
   memOp.getEffects(effects);
   for (auto &effect : effects) {
+    if (!isa<EffectTys...>(effect.getEffect()))
+      continue;
     Value effectVal = effect.getValue();
-    if (isa<EffectTys...>(effect.getEffect()) && effectVal &&
-        isa<BaseMemRefType>(effectVal.getType()))
+    if (!effectVal) {
+      // A value-less or symbol-associated effect on an addressable resource
+      // cannot be represented by a per-memref graph edge. Refuse to fuse the
+      // block rather than silently dropping the effect.
+      if (effect.getResource()->isAddressable())
+        return false;
+      continue;
+    }
+    if (isa<BaseMemRefType>(effectVal.getType())) {
       values.push_back(canonicalizeMemref(effectVal));
+      continue;
+    }
+    // An addressable effect on a non-memref value (for example, a pointer) is
+    // equally unrepresentable by the memref dependence graph.
+    if (effect.getResource()->isAddressable())
+      return false;
   };
+  return true;
 }
 
 /// Returns true if `op` may have a memory effect of type `EffectTys` on
 /// `memref`, i.e., whether `memref` is among the values returned by
-/// `getMayAffectedValues` for `op`.
+/// `getMayAffectedValues` for `op`. An unrepresentable addressable effect is
+/// conservatively treated as affecting every memref.
 template <typename... EffectTys>
 static bool mayHaveEffect(Operation *op, Value memref) {
   SmallVector<Value> values;
-  getMayAffectedValues<EffectTys...>(op, values);
+  if (!getMayAffectedValues<EffectTys...>(op, values))
+    return true;
   return llvm::is_contained(values, canonicalizeMemref(memref));
 }
 
@@ -235,10 +255,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   }
   for (Operation *op : collector.memrefLoads) {
     SmallVector<Value> affectedValues;
-    getMayAffectedValues<MemoryEffects::Read>(op, affectedValues);
-    if (llvm::any_of(((ValueRange)affectedValues).getTypes(),
-                     [](Type type) { return !isa<BaseMemRefType>(type); }))
-      // We do not know the interaction here.
+    if (!getMayAffectedValues<MemoryEffects::Read>(op, affectedValues))
       return nullptr;
     for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
@@ -246,9 +263,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   }
   for (Operation *op : collector.memrefStores) {
     SmallVector<Value> affectedValues;
-    getMayAffectedValues<MemoryEffects::Write>(op, affectedValues);
-    if (llvm::any_of((ValueRange(affectedValues)).getTypes(),
-                     [](Type type) { return !isa<BaseMemRefType>(type); }))
+    if (!getMayAffectedValues<MemoryEffects::Write>(op, affectedValues))
       return nullptr;
     for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
@@ -256,9 +271,7 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   }
   for (Operation *op : collector.memrefFrees) {
     SmallVector<Value> affectedValues;
-    getMayAffectedValues<MemoryEffects::Free>(op, affectedValues);
-    if (llvm::any_of((ValueRange(affectedValues)).getTypes(),
-                     [](Type type) { return !isa<BaseMemRefType>(type); }))
+    if (!getMayAffectedValues<MemoryEffects::Free>(op, affectedValues))
       return nullptr;
     for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
