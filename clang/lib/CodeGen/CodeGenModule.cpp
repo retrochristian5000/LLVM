@@ -4373,7 +4373,8 @@ bool CodeGenModule::MustBeEmitted(const ValueDecl *Global) {
         (VD->getStorageDuration() == SD_Static ||
          VD->getStorageDuration() == SD_Thread)) ||
        (CodeGenOpts.KeepStaticConsts && VD->getStorageDuration() == SD_Static &&
-        VD->getType().isConstQualified())))
+        VD->getType().isConstQualified()) ||
+       VD->hasAttr<LoadTimeCommentVarAttr>()))
     return true;
 
   return getContext().DeclMustBeEmitted(Global);
@@ -6573,6 +6574,14 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
 
   if (D->hasAttr<AnnotateAttr>())
     AddGlobalAnnotations(D, GV);
+
+  // Variables Sema validated for '-mloadtime-comment-vars=' are marked for
+  // LowerCommentStringPass and kept alive.
+  if (D->hasAttr<LoadTimeCommentVarAttr>()) {
+    GV->setMetadata("loadtime_comment",
+                    llvm::MDNode::get(getLLVMContext(), {}));
+    llvm::appendToCompilerUsed(getModule(), {GV});
+  }
 
   // Set the llvm linkage type as appropriate.
   llvm::GlobalValue::LinkageTypes Linkage = getLLVMLinkageVarDefinition(D);
