@@ -602,6 +602,13 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
   return TPR == TPResult::True;
 }
 
+bool Parser::isNextCXXTypeId(TentativeCXXTypeIdContext Context,
+                             bool &IsAmbiguous) {
+  RevertingTentativeParsingAction PA(*this);
+  ConsumeToken();
+  return isCXXTypeId(Context, IsAmbiguous);
+}
+
 CXX11AttributeKind
 Parser::isCXX11AttributeSpecifier(bool Disambiguate,
                                   bool OuterMightBeMessageSend) {
@@ -1517,8 +1524,20 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
     //     enum E : int { a = 4 }; // enum
     //     enum E : int { 4 };     // bit-field
     //   };
-    if (getLangOpts().CPlusPlus11 && NextToken().is(tok::l_brace))
+    if (getLangOpts().CPlusPlus11 && NextToken().is(tok::l_brace)) {
+      if (ParsingGenericAssociationType) {
+        RevertingTentativeParsingAction PA(*this);
+        ConsumeAnyToken(); // skip keyword
+        ConsumeBrace();    // skip l_brace
+        if (SkipUntil(tok::r_brace, StopBeforeMatch)) {
+          ConsumeBrace(); // skip r_brace
+          if (Tok.is(tok::colon)) {
+            return TPResult::True;
+          }
+        }
+      }
       return BracedCastResult;
+    }
 
     if (isStartOfObjCClassMessageMissingOpenBracket())
       return TPResult::False;
