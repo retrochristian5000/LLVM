@@ -860,10 +860,12 @@ public:
     // 1. The source is to be removed after fusion,
     // OR
     // 2. The destination writes to `memref`.
-    if (llvm::any_of(srcEscapingMemRefs, [&](Value escapingMemref) {
-          return memref::isSameViewOrTrivialAlias(
-              cast<MemrefValue>(escapingMemref), cast<MemrefValue>(memref));
-        }) &&
+    if (llvm::any_of(srcEscapingMemRefs,
+                     [&](Value escapingMemref) {
+                       return memref::isSameViewOrTrivialAlias(
+                           cast<MemrefValue>(escapingMemref),
+                           cast<MemrefValue>(memref));
+                     }) &&
         (removeSrcNode || consumerNode->getStoreOpCount(memref) > 0))
       return false;
 
@@ -878,10 +880,10 @@ public:
     // cannot create a private memref.
     if (removeSrcNode &&
         any_of(mdg->outEdges[producerId], [&](const auto &edge) {
-          return edge.id != consumerId && isa<MemRefType>(edge.value.getType()) &&
-                 memref::isSameViewOrTrivialAlias(
-                     cast<MemrefValue>(edge.value),
-                     cast<MemrefValue>(memref));
+          return edge.id != consumerId &&
+                 isa<MemRefType>(edge.value.getType()) &&
+                 memref::isSameViewOrTrivialAlias(cast<MemrefValue>(edge.value),
+                                                  cast<MemrefValue>(memref));
         }))
       return false;
 
@@ -1072,12 +1074,13 @@ public:
           // Retrieve producer stores from the src loop.
           SmallVector<Operation *, 2> producerStores;
           for (Operation *op : srcNode->stores)
-            if (llvm::any_of(producerConsumerMemrefs, [&](Value producerMemref) {
-                  return memref::isSameViewOrTrivialAlias(
-                      cast<MemrefValue>(producerMemref),
-                      cast<MemrefValue>(
-                          cast<AffineWriteOpInterface>(op).getMemRef()));
-                }))
+            if (llvm::any_of(
+                    producerConsumerMemrefs, [&](Value producerMemref) {
+                      return memref::isSameViewOrTrivialAlias(
+                          cast<MemrefValue>(producerMemref),
+                          cast<MemrefValue>(
+                              cast<AffineWriteOpInterface>(op).getMemRef()));
+                    }))
               producerStores.push_back(op);
 
           assert(!producerStores.empty() && "Expected producer store");
@@ -1416,8 +1419,9 @@ public:
       // Check that all stores are to the same memref if any.
       DenseSet<Value> storeMemrefs;
       for (auto *storeOpInst : sibNode->stores) {
-        storeMemrefs.insert(memref::skipFullyAliasingOperations(cast<MemrefValue>(
-            cast<AffineWriteOpInterface>(storeOpInst).getMemRef())));
+        storeMemrefs.insert(
+            memref::skipFullyAliasingOperations(cast<MemrefValue>(
+                cast<AffineWriteOpInterface>(storeOpInst).getMemRef())));
       }
       return storeMemrefs.size() <= 1;
     };

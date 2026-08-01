@@ -355,10 +355,10 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
     // to 'memref' in 'srcForOp' to compute the slice union.
     for (Operation *op : opsA) {
       auto load = dyn_cast<AffineReadOpInterface>(op);
-      if (load && memref::isSameViewOrTrivialAlias(
-                      cast<MemrefValue>(load.getMemRef()),
-                      cast<MemrefValue>(
-                          fusionStrategy.getSiblingFusionMemRef())))
+      if (load &&
+          memref::isSameViewOrTrivialAlias(
+              cast<MemrefValue>(load.getMemRef()),
+              cast<MemrefValue>(fusionStrategy.getSiblingFusionMemRef())))
         strategyOpsA.push_back(op);
     }
     break;

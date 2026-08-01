@@ -178,8 +178,7 @@ unsigned Node::hasFree(Value memref) const {
 void Node::getStoreOpsForMemref(Value memref,
                                 SmallVectorImpl<Operation *> *storeOps) const {
   for (Operation *storeOp : stores) {
-    if (isSameMemref(memref,
-                     cast<AffineWriteOpInterface>(storeOp).getMemRef()))
+    if (isSameMemref(memref, cast<AffineWriteOpInterface>(storeOp).getMemRef()))
       storeOps->push_back(storeOp);
   }
 }
@@ -188,8 +187,7 @@ void Node::getStoreOpsForMemref(Value memref,
 void Node::getLoadOpsForMemref(Value memref,
                                SmallVectorImpl<Operation *> *loadOps) const {
   for (Operation *loadOp : loads) {
-    if (isSameMemref(memref,
-                     cast<AffineReadOpInterface>(loadOp).getMemRef()))
+    if (isSameMemref(memref, cast<AffineReadOpInterface>(loadOp).getMemRef()))
       loadOps->push_back(loadOp);
   }
 }
@@ -200,12 +198,12 @@ void Node::getLoadAndStoreMemrefSet(
     DenseSet<Value> *loadAndStoreMemrefSet) const {
   llvm::SmallDenseSet<Value, 2> loadMemrefs;
   for (Operation *loadOp : loads) {
-    loadMemrefs.insert(canonicalizeMemref(
-        cast<AffineReadOpInterface>(loadOp).getMemRef()));
+    loadMemrefs.insert(
+        canonicalizeMemref(cast<AffineReadOpInterface>(loadOp).getMemRef()));
   }
   for (Operation *storeOp : stores) {
-    auto memref = canonicalizeMemref(
-        cast<AffineWriteOpInterface>(storeOp).getMemRef());
+    auto memref =
+        canonicalizeMemref(cast<AffineWriteOpInterface>(storeOp).getMemRef());
     if (loadMemrefs.count(memref) > 0)
       loadAndStoreMemrefSet->insert(memref);
   }
@@ -225,14 +223,14 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   Node &node = nodes.insert({newNodeId, Node(newNodeId, nodeOp)}).first->second;
   for (Operation *op : collector.loadOpInsts) {
     node.loads.push_back(op);
-    auto memref = canonicalizeMemref(
-        cast<AffineReadOpInterface>(op).getMemRef());
+    auto memref =
+        canonicalizeMemref(cast<AffineReadOpInterface>(op).getMemRef());
     memrefAccesses[memref].insert(node.id);
   }
   for (Operation *op : collector.storeOpInsts) {
     node.stores.push_back(op);
-    auto memref = canonicalizeMemref(
-        cast<AffineWriteOpInterface>(op).getMemRef());
+    auto memref =
+        canonicalizeMemref(cast<AffineWriteOpInterface>(op).getMemRef());
     memrefAccesses[memref].insert(node.id);
   }
   for (Operation *op : collector.memrefLoads) {
@@ -382,16 +380,16 @@ bool MemRefDependenceGraph::init(bool fullAffineDependences) {
       // Create graph node for top-level load op.
       Node node(nextNodeId++, &op);
       node.loads.push_back(&op);
-      auto memref = canonicalizeMemref(
-          cast<AffineReadOpInterface>(op).getMemRef());
+      auto memref =
+          canonicalizeMemref(cast<AffineReadOpInterface>(op).getMemRef());
       memrefAccesses[memref].insert(node.id);
       nodes.insert({node.id, node});
     } else if (isa<AffineWriteOpInterface>(op)) {
       // Create graph node for top-level store op.
       Node node(nextNodeId++, &op);
       node.stores.push_back(&op);
-      auto memref = canonicalizeMemref(
-          cast<AffineWriteOpInterface>(op).getMemRef());
+      auto memref =
+          canonicalizeMemref(cast<AffineWriteOpInterface>(op).getMemRef());
       memrefAccesses[memref].insert(node.id);
       nodes.insert({node.id, node});
     } else if (op.getNumResults() > 0 && !op.use_empty()) {
