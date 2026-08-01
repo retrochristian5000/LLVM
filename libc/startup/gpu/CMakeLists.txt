@@ -2,7 +2,7 @@ function(add_startup_object name)
   cmake_parse_arguments(
     "ADD_STARTUP_OBJECT"
     "ALIAS" # Option argument
-    "SRC"   # Single value arguments
+    "SRC" # Single value arguments
     "DEPENDS;COMPILE_OPTIONS" # Multi value arguments
     ${ARGN}
   )
@@ -18,7 +18,7 @@ function(add_startup_object name)
     ${name}
     SRCS ${ADD_STARTUP_OBJECT_SRC}
     COMPILE_OPTIONS ${ADD_STARTUP_OBJECT_COMPILE_OPTIONS}
-    ${ADD_STARTUP_OBJECT_UNPARSED_ARGUMENTS}
+      ${ADD_STARTUP_OBJECT_UNPARSED_ARGUMENTS}
     DEPENDS ${ADD_STARTUP_OBJECT_DEPENDS}
   )
   set_target_properties(
@@ -34,8 +34,8 @@ function(add_startup_object name)
       RUNTIME_OUTPUT_DIRECTORY ${LIBC_LIBRARY_DIR}
       RUNTIME_OUTPUT_NAME ${name}.o)
     target_link_options(${fq_target_name}.exe PRIVATE
-                        ${LIBC_COMPILE_OPTIONS_DEFAULT}
-                        "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm")
+      ${LIBC_COMPILE_OPTIONS_DEFAULT}
+      "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm")
   endif()
 endfunction()
 
@@ -60,7 +60,7 @@ foreach(target IN LISTS startup_components)
   set(fq_target_name libc.startup.gpu.${target})
   add_dependencies(libc-startup ${fq_target_name})
   install(FILES $<TARGET_OBJECTS:${fq_target_name}>
-          DESTINATION ${LIBC_INSTALL_LIBRARY_DIR}
-          RENAME $<TARGET_PROPERTY:${fq_target_name},OUTPUT_NAME>
-          COMPONENT libc)
+    DESTINATION ${LIBC_INSTALL_LIBRARY_DIR}
+    RENAME $<TARGET_PROPERTY:${fq_target_name},OUTPUT_NAME>
+    COMPONENT libc)
 endforeach()
