@@ -158,6 +158,12 @@ features cannot lower the translation-unit ABI level;
 
 ### Non-comprehensive list of changes in this release
 
+- Added the `__addrspaceof` operator, which returns a Clang address-space
+  identifier for a type, directly named entity, or lvalue expression. It can
+  report CUDA/HIP storage address spaces for known `__device__`, `__shared__`,
+  and `__constant__` variables. Clang also now emits predefined
+  `__CLANG_ADDRESS_SPACE_*` macros for these values.
+
 ### New Compiler Flags
 
 - New option `-fdefined-pointer-subtraction` added to preserve stable semantics

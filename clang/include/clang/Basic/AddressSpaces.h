@@ -115,6 +115,105 @@ inline bool isPtrSizeAddressSpace(LangAS AS) {
           AS == LangAS::ptr64);
 }
 
+namespace AddressSpaceQuery {
+
+enum ID : unsigned {
+  Default = 0,
+  OpenCLGlobal = 1,
+  OpenCLLocal = 2,
+  OpenCLConstant = 3,
+  OpenCLPrivate = 4,
+  OpenCLGeneric = 5,
+  CUDADevice = 6,
+  CUDAConstant = 7,
+  CUDAShared = 8,
+  SYCLGlobal = 9,
+  SYCLLocal = 10,
+  SYCLPrivate = 11,
+  Ptr32Sptr = 12,
+  Ptr32Uptr = 13,
+  Ptr64 = 14,
+  HLSLGroupShared = 15,
+  HLSLConstant = 16,
+  HLSLPrivate = 17,
+  HLSLDevice = 18,
+  HLSLInput = 19,
+  HLSLOutput = 20,
+  HLSLPushConstant = 21,
+  WasmFuncRef = 22,
+  HIPDevice = 23,
+  HIPConstant = 24,
+  HIPShared = 25,
+
+  TargetOffset = 0x1000000
+};
+
+inline unsigned encode(LangAS AS, bool IsHIP = false) {
+  if (isTargetAddressSpace(AS))
+    return TargetOffset + toTargetAddressSpace(AS);
+
+  switch (AS) {
+  case LangAS::Default:
+    return Default;
+  case LangAS::opencl_global:
+    return OpenCLGlobal;
+  case LangAS::opencl_local:
+    return OpenCLLocal;
+  case LangAS::opencl_constant:
+    return OpenCLConstant;
+  case LangAS::opencl_private:
+    return OpenCLPrivate;
+  case LangAS::opencl_generic:
+    return OpenCLGeneric;
+  case LangAS::opencl_global_device:
+  case LangAS::opencl_global_host:
+    return OpenCLGlobal;
+  case LangAS::cuda_device:
+    return IsHIP ? HIPDevice : CUDADevice;
+  case LangAS::cuda_constant:
+    return IsHIP ? HIPConstant : CUDAConstant;
+  case LangAS::cuda_shared:
+    return IsHIP ? HIPShared : CUDAShared;
+  case LangAS::sycl_global:
+  case LangAS::sycl_global_device:
+  case LangAS::sycl_global_host:
+    return SYCLGlobal;
+  case LangAS::sycl_local:
+    return SYCLLocal;
+  case LangAS::sycl_private:
+    return SYCLPrivate;
+  case LangAS::ptr32_sptr:
+    return Ptr32Sptr;
+  case LangAS::ptr32_uptr:
+    return Ptr32Uptr;
+  case LangAS::ptr64:
+    return Ptr64;
+  case LangAS::hlsl_groupshared:
+    return HLSLGroupShared;
+  case LangAS::hlsl_constant:
+    return HLSLConstant;
+  case LangAS::hlsl_private:
+    return HLSLPrivate;
+  case LangAS::hlsl_device:
+    return HLSLDevice;
+  case LangAS::hlsl_input:
+    return HLSLInput;
+  case LangAS::hlsl_output:
+    return HLSLOutput;
+  case LangAS::hlsl_push_constant:
+    return HLSLPushConstant;
+  case LangAS::wasm_funcref:
+    return WasmFuncRef;
+  case LangAS::FirstTargetAddressSpace:
+    break;
+  }
+
+  assert(false && "unknown language address space");
+  return Default;
+}
+
+} // namespace AddressSpaceQuery
+
 } // namespace clang
 
 #endif // LLVM_CLANG_BASIC_ADDRESSSPACES_H
