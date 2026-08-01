@@ -2399,6 +2399,67 @@ public:
   llvm::Expected<SourceLocation::UIntTy> readSLocOffset(ModuleFile *F,
                                                         unsigned Index);
 
+  /// Identity of an input file, built from serialized metadata so we touch no
+  /// files at load. Name is the resolved path, so two files with the same
+  /// spelling in different directories stay distinct. An empty Name means a
+  /// non-file entry like a buffer or expansion, and never deduplicates.
+  struct SLocFileIdentity {
+    std::string Name;
+    off_t Size = 0;
+  };
+
+  /// Where a file's SLoc entry first landed in the loaded address space, kept
+  /// with the identity fields used to confirm a later module's same-named entry
+  /// really is the same file.
+  struct PrimaryLoadedFileLoc {
+    SourceLocation::UIntTy Offset = 0; ///< global start offset
+    int ID = 0;                        ///< global SLoc entry ID
+    off_t Size = 0;
+  };
+
+  /// Files already loaded into the loaded SLoc address space, keyed by stored
+  /// name. Lets a later module reuse an earlier module's copy instead of
+  /// allocating a duplicate range.
+  llvm::StringMap<PrimaryLoadedFileLoc> PrimaryLoadedFiles;
+
+  /// The location of a previously-loaded file matching \p Id (same name, size,
+  /// and time), or null if none has been loaded.
+  const PrimaryLoadedFileLoc *
+  getPrimaryLoadedFile(const SLocFileIdentity &Id) const;
+
+  /// Record the location of a file the first time it loads. \p Id must name a
+  /// file entry (non-empty Name). Later duplicates are ignored.
+  void registerPrimaryLoadedFile(const SLocFileIdentity &Id,
+                                 SourceLocation::UIntTy Offset, int ID);
+
+  /// Read \p F's SLoc entry records without materializing them, filling
+  /// \p Offsets[i] with each entry's local offset and \p Files[i] with its
+  /// file identity (empty Name for non-file entries). Returns false on a
+  /// malformed record.
+  bool scanLoadedSLocEntries(ModuleFile &F, SmallVectorImpl<uint32_t> &Offsets,
+                             SmallVectorImpl<SLocFileIdentity> &Files);
+
+  /// Mark the scanned entries that duplicate an already-loaded file. Returns
+  /// the number of duplicates and the space they would otherwise occupy.
+  std::pair<unsigned, SourceLocation::UIntTy> classifyDuplicateSLocEntries(
+      ArrayRef<uint32_t> Offsets, ArrayRef<SLocFileIdentity> Files,
+      SourceLocation::UIntTy SLocSpaceSize, SmallVectorImpl<bool> &IsDup);
+
+  /// Build \p F's local-to-global SLoc remapping and register its files. Run
+  /// after AllocateLoadedSLocEntries has assigned \p F's base ID and offset.
+  void buildLoadedSLocRemapping(ModuleFile &F, ArrayRef<uint32_t> Offsets,
+                                ArrayRef<SLocFileIdentity> Files,
+                                ArrayRef<bool> IsDup,
+                                SourceLocation::UIntTy SLocSpaceSize,
+                                unsigned NumDupEntries,
+                                unsigned ReducedNumEntries);
+
+  /// Map a local SLoc entry offset (as stored in the entry record) to its
+  /// global start offset. This is (SLocEntryBaseOffset + LocalOffset) unless a
+  /// file in this module was reused from an earlier one.
+  SourceLocation::UIntTy remapSLocEntryOffset(ModuleFile &F,
+                                              uint32_t LocalOffset) const;
+
   /// Retrieve the module import location and module name for the
   /// given source manager entry ID.
   std::pair<SourceLocation, StringRef> getModuleImportLoc(int ID) override;
@@ -2493,6 +2554,34 @@ public:
     // translated or refactor the code to make it clear that
     // TranslateSourceLocation won't be called with translated source location.
 
+    // When a file in this module was reused from an earlier one, the map is
+    // piecewise rather than a single shift, so find the segment covering this
+    // location. A macro location keeps its offset in the low bits with the high
+    // bit set, so match on the offset part and re-apply the bit to the result.
+    if (!ModuleFile.SLocRemap.empty()) {
+      SourceLocation::UIntTy Raw = Loc.getRawEncoding();
+      SourceLocation::UIntTy MacroBit = Raw & SourceLocation::MacroIDBit;
+      SourceLocation::UIntTy Low = Raw & ~SourceLocation::MacroIDBit;
+      // The list is sorted by LocalBegin and its segments are contiguous, so
+      // the covering segment is the last one whose LocalBegin is <= Low.
+      auto It = llvm::upper_bound(
+          ModuleFile.SLocRemap, Low,
+          [](SourceLocation::UIntTy V,
+             const serialization::ModuleFile::SLocRemapSegment &S) {
+            return V < S.LocalBegin;
+          });
+      if (It != ModuleFile.SLocRemap.begin()) {
+        const auto &Seg = *std::prev(It);
+        if (Low < Seg.LocalEnd)
+          return SourceLocation::getFromRawEncoding(
+              (static_cast<SourceLocation::UIntTy>(static_cast<int64_t>(Low) +
+                                                   Seg.Delta)) |
+              MacroBit);
+      }
+      // The segments cover the whole value range, so one always matches.
+      llvm_unreachable("SLocRemap segments must cover every source location");
+    }
+
     return Loc.getLocWithOffset(ModuleFile.SLocEntryBaseOffset - 2);
   }
 
@@ -2514,6 +2603,14 @@ public:
     assert(FID.ID >= 0 && "Reading non-local FileID.");
     if (FID.isInvalid())
       return FID;
+    // When a file was reused from an earlier module, its local FileID maps to
+    // that module's copy, so use the explicit map. Local FileID N is local
+    // entry index N-1.
+    if (!F.LocalToGlobalID.empty()) {
+      assert((unsigned)(FID.ID - 1) < F.LocalToGlobalID.size() &&
+             "local FileID out of range");
+      return FileID::get(F.LocalToGlobalID[FID.ID - 1]);
+    }
     return FileID::get(F.SLocEntryBaseID + FID.ID - 1);
   }
 
