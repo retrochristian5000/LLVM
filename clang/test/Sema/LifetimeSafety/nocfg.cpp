@@ -1085,15 +1085,15 @@ void operator_star_arrow_reference() {
   auto temporary = []() { return std::vector<std::string>{{"1"}}; };
   const char* x = temporary().begin()->data();    // cfg-warning {{temporary object does not live long enough}} cfg-note {{destroyed here}} \
                                                   // cfg-note {{result of call to 'begin' aliases the storage of temporary object}} \
-  // cfg-note {{expression aliases the storage of temporary object}} \
-  // cfg-note {{result of call to 'data' aliases the storage of temporary object}}
+                                                  // cfg-note {{expression aliases the storage of temporary object}} \
+                                                  // cfg-note {{result of call to 'data' aliases the storage of temporary object}}
   const char* y = (*temporary().begin()).data();  // cfg-warning {{temporary object does not live long enough}} cfg-note {{destroyed here}} \
                                                   // cfg-note {{result of call to 'begin' aliases the storage of temporary object}} \
-  // cfg-note {{expression aliases the storage of temporary object}} \
-  // cfg-note {{result of call to 'data' aliases the storage of temporary object}}
+                                                  // cfg-note {{expression aliases the storage of temporary object}} \
+                                                  // cfg-note {{result of call to 'data' aliases the storage of temporary object}}
   const std::string& z = (*temporary().begin());  // cfg-warning {{temporary object does not live long enough}} cfg-note {{destroyed here}} \
                                                   // cfg-note {{result of call to 'begin' aliases the storage of temporary object}} \
-                                                   // cfg-note {{expression aliases the storage of temporary object}}
+                                                  // cfg-note {{expression aliases the storage of temporary object}}
 
   use(p, q, r, x, y, z); // cfg-note 3 {{later used here}}
 }
@@ -1114,7 +1114,7 @@ void operator_star_arrow_of_iterators_false_positive_no_cfg_analysis() {
                                                         // cfg-note {{expression aliases the storage of temporary object}} \
                                                         // cfg-note {{result of call to 'data' aliases the storage of temporary object}}
   const std::string& z = (*temporary().begin()).second; // cfg-warning {{temporary object does not live long enough}} cfg-note {{destroyed here}} \
-                                                       // cfg-note {{result of call to 'begin' aliases the storage of temporary object}} \
+                                                        // cfg-note {{result of call to 'begin' aliases the storage of temporary object}} \
                                                         // cfg-note {{expression aliases the storage of temporary object}}
 
   use(p, q, r, x, y, z); // cfg-note 3 {{later used here}}
