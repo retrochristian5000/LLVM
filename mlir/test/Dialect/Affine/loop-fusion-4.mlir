@@ -583,11 +583,15 @@ func.func @zero_tolerance(%arg0: memref<65536xcomplex<f64>>, %arg1: memref<30x13
     affine.store %18, %2[%arg2] : memref<131072xi128>
     affine.store %13, %1[%arg2] : memref<131072xi1>
   }
-  // The next two nests are fused.
+  // The next nest cannot fuse with the one following it across the opaque
+  // external call below, which may write to its memref operand in place.
   // ZERO-TOLERANCE:      affine.for %{{.*}} = 0 to 30
   // ZERO-TOLERANCE-NEXT:   affine.for %{{.*}} = 0 to 131072
   // ZERO-TOLERANCE:          func.call @__external_reduce_barrett
   // ZERO-TOLERANCE:          affine.store
+  // ZERO-TOLERANCE:      call @__external_levelwise_forward_ntt
+  // ZERO-TOLERANCE-NEXT: affine.for %{{.*}} = 0 to 30
+  // ZERO-TOLERANCE-NEXT:   affine.for %{{.*}} = 0 to 131072
   // ZERO-TOLERANCE:          affine.load
   // ZERO-TOLERANCE-NEXT:     affine.store
   affine.for %arg2 = 0 to 30 {
@@ -611,8 +615,13 @@ func.func @zero_tolerance(%arg0: memref<65536xcomplex<f64>>, %arg1: memref<30x13
       affine.store %7, %arg1[%arg2, %arg3] : memref<30x131072xi64>
     }
   }
-  // Under maximal fusion, just one nest.
+  // Under maximal fusion, the first two nests fuse, but the last nest cannot
+  // fuse into them across the opaque external call, which may write to its
+  // memref operand in place.
   // PRODUCER-CONSUMER-MAXIMAL:      affine.for %{{.*}} = 0 to 30
+  // PRODUCER-CONSUMER-MAXIMAL-NEXT:   affine.for %{{.*}} = 0 to 131072
+  // PRODUCER-CONSUMER-MAXIMAL:      call @__external_levelwise_forward_ntt
+  // PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for %{{.*}} = 0 to 30
   // PRODUCER-CONSUMER-MAXIMAL-NEXT:   affine.for %{{.*}} = 0 to 131072
   // PRODUCER-CONSUMER-MAXIMAL-NOT:  affine.for %{{.*}}
   memref.dealloc %2 : memref<131072xi128>
@@ -884,3 +893,31 @@ func.func @high_trip_count(%arg0: memref<1024x4096xf32>, %arg1: memref<8192x4096
   }
   return %alloc : memref<1024x8192xf32>
 }
+
+// -----
+
+// The external call receives a fully aliasing cast of the producer's memref.
+// Fusion must preserve the call between the producer and consumer loops.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_external_call
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      memref.cast
+// PRODUCER-CONSUMER-MAXIMAL:      call @escape
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @cast_alias_external_call(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  %view = memref.cast %comm : memref<32xf64> to memref<?xf64>
+  func.call @escape(%view) : (memref<?xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    %d = arith.addf %c, %c : f64
+    affine.store %d, %out[%j] : memref<32xf64>
+  }
+  return
+}
+func.func private @escape(memref<?xf64>)
