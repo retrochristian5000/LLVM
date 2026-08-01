@@ -550,7 +550,6 @@ bool MemRefDependenceGraph::hasEdge(unsigned srcId, unsigned dstId,
   if (!outEdges.contains(srcId) || !inEdges.contains(dstId)) {
     return false;
   }
-  value = canonicalizeMemref(value);
   bool hasOutEdge = llvm::any_of(outEdges.lookup(srcId), [=](const Edge &edge) {
     return edge.id == dstId && (!value || edge.value == value);
   });
@@ -563,12 +562,14 @@ bool MemRefDependenceGraph::hasEdge(unsigned srcId, unsigned dstId,
 // Adds an edge from node 'srcId' to node 'dstId' for 'value'.
 void MemRefDependenceGraph::addEdge(unsigned srcId, unsigned dstId,
                                     Value value) {
-  value = canonicalizeMemref(value);
+  // Keep memref SSA edges in their raw form so their defining operation stays
+  // available to graph clients. Memory-dependence callers provide the
+  // canonical representative; count both kinds by canonical identity.
   if (!hasEdge(srcId, dstId, value)) {
     outEdges[srcId].push_back({dstId, value});
     inEdges[dstId].push_back({srcId, value});
     if (isa<MemRefType>(value.getType()))
-      memrefEdgeCount[value]++;
+      memrefEdgeCount[canonicalizeMemref(value)]++;
   }
 }
 
@@ -577,10 +578,10 @@ void MemRefDependenceGraph::removeEdge(unsigned srcId, unsigned dstId,
                                        Value value) {
   assert(inEdges.count(dstId) > 0);
   assert(outEdges.count(srcId) > 0);
-  value = canonicalizeMemref(value);
   if (isa<MemRefType>(value.getType())) {
-    assert(memrefEdgeCount.count(value) > 0);
-    memrefEdgeCount[value]--;
+    Value canonicalValue = canonicalizeMemref(value);
+    assert(memrefEdgeCount.count(canonicalValue) > 0);
+    memrefEdgeCount[canonicalValue]--;
   }
   // Remove 'srcId' from 'inEdges[dstId]'.
   for (auto *it = inEdges[dstId].begin(); it != inEdges[dstId].end(); ++it) {

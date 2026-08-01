@@ -364,6 +364,28 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
     break;
   }
 
+  // Affine access maps are expressed in the raw view coordinates. Reject a
+  // fusion that would pair different views from one trivial alias class until
+  // a coordinate translation is available.
+  auto getMemref = [](Operation *op) -> Value {
+    if (auto load = dyn_cast<AffineReadOpInterface>(op))
+      return load.getMemRef();
+    return cast<AffineWriteOpInterface>(op).getMemRef();
+  };
+  if (llvm::any_of(strategyOpsA, [&](Operation *srcOp) {
+        return llvm::any_of(opsB, [&](Operation *dstOp) {
+          Value srcMemref = getMemref(srcOp);
+          Value dstMemref = getMemref(dstOp);
+          return srcMemref != dstMemref &&
+                 memref::isSameViewOrTrivialAlias(
+                     cast<MemrefValue>(srcMemref),
+                     cast<MemrefValue>(dstMemref));
+        });
+      })) {
+    LDBG() << "Fusion across different trivial alias views is unsupported";
+    return FusionResult::FailFusionDependence;
+  }
+
   // Compute union of computation slices computed between all pairs of ops
   // from 'forOpA' and 'forOpB'.
   SliceComputationResult sliceComputationResult = affine::computeSliceUnion(
