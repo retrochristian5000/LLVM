@@ -968,6 +968,11 @@ Expected<bool> parseDropUnnecessaryAssumesPassOptions(StringRef Params) {
                                             "DropUnnecessaryAssumes");
 }
 
+Expected<bool> parseFixIrreduciblePassOptions(StringRef Params) {
+  return PassBuilder::parseSinglePassOption(Params, "switch-guards",
+                                            "FixIrreducible");
+}
+
 Expected<bool> parseLoopExtractorPassOptions(StringRef Params) {
   return PassBuilder::parseSinglePassOption(Params, "single", "LoopExtractor");
 }
@@ -975,6 +980,11 @@ Expected<bool> parseLoopExtractorPassOptions(StringRef Params) {
 Expected<bool> parseLowerMatrixIntrinsicsPassOptions(StringRef Params) {
   return PassBuilder::parseSinglePassOption(Params, "minimal",
                                             "LowerMatrixIntrinsics");
+}
+
+Expected<bool> parseUnifyLoopExitsPassOptions(StringRef Params) {
+  return PassBuilder::parseSinglePassOption(Params, "switch-guards",
+                                            "UnifyLoopExits");
 }
 
 Expected<IRNormalizerOptions> parseIRNormalizerPassOptions(StringRef Params) {
