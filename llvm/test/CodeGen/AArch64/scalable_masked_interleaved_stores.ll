@@ -54,6 +54,43 @@ define void @foo_st2_nxv2i64(<vscale x 2 x i1> %mask, <vscale x 2 x i64> %val1, 
   ret void
 }
 
+define void @foo_st3_nxv16i8(<vscale x 16 x i1> %mask, <vscale x 16 x i8> %val1, <vscale x 16 x i8> %val2, <vscale x 16 x i8> %val3, ptr %p) {
+; CHECK-LABEL: foo_st3_nxv16i8:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    // kill: def $z2 killed $z2 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    // kill: def $z1 killed $z1 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    // kill: def $z0 killed $z0 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    st3b { z0.b - z2.b }, p0, [x0]
+; CHECK-NEXT:    ret
+  %interleaved.mask = call <vscale x 48 x i1> @llvm.vector.interleave3.nxv48i1(<vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask)
+  %interleaved.value = call <vscale x 48 x i8> @llvm.vector.interleave3.nxv48i8(<vscale x 16 x i8> %val1, <vscale x 16 x i8> %val2, <vscale x 16 x i8> %val3)
+  call void @llvm.masked.store.nxv48i8.p0(<vscale x 48 x i8> %interleaved.value, ptr %p, i32 1, <vscale x 48 x i1> %interleaved.mask)
+  ret void
+}
+
+; This test is specific to interleaves of factor 3.
+; SelectionDAG combines are local to a basic blocks. Keep the interleave in the
+; predecessor so the store sees an opaque, target-illegal nxv48i8 value.
+; The DAG should split the vectors back into three legal SVE vectors before type
+; legalisation.
+define void @interleave3_cross_block(<vscale x 16 x i1> %mask, <vscale x 16 x i8> %a, <vscale x 16 x i8> %b, <vscale x 16 x i8> %c, ptr %p) {
+; CHECK-LABEL: interleave3_cross_block:
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    // kill: def $z2 killed $z2 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    // kill: def $z1 killed $z1 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    // kill: def $z0 killed $z0 killed $z0_z1_z2 def $z0_z1_z2
+; CHECK-NEXT:    st3b { z0.b - z2.b }, p0, [x0]
+; CHECK-NEXT:    ret
+entry:
+  %wide.value = call <vscale x 48 x i8> @llvm.vector.interleave3.nxv48i8(<vscale x 16 x i8> %a, <vscale x 16 x i8> %b, <vscale x 16 x i8> %c)
+  br label %store
+
+store:
+  %wide.mask = call <vscale x 48 x i1> @llvm.vector.interleave3.nxv48i1(<vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask)
+  call void @llvm.masked.store.nxv48i8.p0(<vscale x 48 x i8> %wide.value, ptr %p, i32 1, <vscale x 48 x i1> %wide.mask)
+  ret void
+}
+
 define void @foo_st4_nxv16i8(<vscale x 16 x i1> %mask, <vscale x 16 x i8> %val1, <vscale x 16 x i8> %val2, <vscale x 16 x i8> %val3, <vscale x 16 x i8> %val4, ptr %p) {
 ; CHECK-LABEL: foo_st4_nxv16i8:
 ; CHECK:       // %bb.0:
@@ -296,6 +333,19 @@ define void @foo_st2_nxv16i8_zeroinitializer(<vscale x 16 x i1> %mask, ptr %p) {
   ret void
 }
 
+define void @foo_st3_nxv16i8_zeroinitializer(<vscale x 16 x i1> %mask, <vscale x 16 x i8> %val1, <vscale x 16 x i8> %val2, <vscale x 16 x i8> %val3, ptr %p) {
+; CHECK-LABEL: foo_st3_nxv16i8_zeroinitializer:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    movi v0.2d, #0000000000000000
+; CHECK-NEXT:    mov z1.d, z0.d
+; CHECK-NEXT:    mov z2.d, z0.d
+; CHECK-NEXT:    st3b { z0.b - z2.b }, p0, [x0]
+; CHECK-NEXT:    ret
+  %interleaved.mask = call <vscale x 48 x i1> @llvm.vector.interleave3.nxv48i1(<vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask)
+  call void @llvm.masked.store.nxv48i8.p0(<vscale x 48 x i8> zeroinitializer, ptr %p, i32 1, <vscale x 48 x i1> %interleaved.mask)
+  ret void
+}
+
 define void @foo_st4_nxv16i8_zeroinitializer(<vscale x 16 x i1> %mask, ptr %p) {
 ; CHECK-LABEL: foo_st4_nxv16i8_zeroinitializer:
 ; CHECK:       // %bb.0:
@@ -321,6 +371,21 @@ define void @foo_st2_nxv16i8_splat(<vscale x 16 x i1> %mask, ptr %p) {
   %interleaved.value = shufflevector <vscale x 32 x i8> %base, <vscale x 32 x i8> poison, <vscale x 32 x i32> zeroinitializer
   %interleaved.mask = call <vscale x 32 x i1> @llvm.vector.interleave2.nxv32i1(<vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask)
   call void @llvm.masked.store.nxv32i8.p0(<vscale x 32 x i8> %interleaved.value, ptr %p, i32 1, <vscale x 32 x i1> %interleaved.mask)
+  ret void
+}
+
+define void @foo_st3_nxv16i8_splat(<vscale x 16 x i1> %mask, ptr %p) {
+; CHECK-LABEL: foo_st3_nxv16i8_splat:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    mov z0.b, #1 // =0x1
+; CHECK-NEXT:    mov z1.d, z0.d
+; CHECK-NEXT:    mov z2.d, z0.d
+; CHECK-NEXT:    st3b { z0.b - z2.b }, p0, [x0]
+; CHECK-NEXT:    ret
+  %base = insertelement <vscale x 48 x i8> poison, i8 1, i32 0
+  %interleaved.value = shufflevector <vscale x 48 x i8> %base, <vscale x 48 x i8> poison, <vscale x 48 x i32> zeroinitializer
+  %interleaved.mask = call <vscale x 48 x i1> @llvm.vector.interleave3.nxv48i1(<vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask, <vscale x 16 x i1> %mask)
+  call void @llvm.masked.store.nxv48i8.p0( <vscale x 48 x i8> %interleaved.value, ptr %p, i32 1, <vscale x 48 x i1> %interleaved.mask)
   ret void
 }
 

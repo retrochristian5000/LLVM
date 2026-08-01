@@ -27724,6 +27724,41 @@ static SDValue getNarrowMaskForInterleavedOps(SelectionDAG &DAG, SDLoc &DL,
                      WideMask->getOperand(0));
 }
 
+static bool
+deinterleaveInterleavedValueForSVESt3(SDValue WideValue, SDLoc DL,
+                                      SelectionDAG &DAG,
+                                      SmallVectorImpl<SDValue> &Ops) {
+  constexpr unsigned Factor = 3;
+  EVT WideVT = WideValue.getValueType();
+  if (!WideVT.isScalableVector())
+    return false;
+
+  ElementCount WideEC = WideVT.getVectorElementCount();
+  if (!WideEC.isKnownMultipleOf(Factor))
+    return false;
+
+  EVT SubVecTy =
+      EVT::getVectorVT(*DAG.getContext(), WideVT.getVectorElementType(),
+                       WideEC.divideCoefficientBy(Factor));
+  if (!SubVecTy.isScalableVector() ||
+      SubVecTy.getSizeInBits().getKnownMinValue() != 128 ||
+      !DAG.getTargetLoweringInfo().isTypeLegal(SubVecTy))
+    return false;
+
+  SmallVector<SDValue, 3> SubVecs;
+  for (unsigned I = 0; I != Factor; ++I)
+    SubVecs.push_back(DAG.getNode(
+        ISD::EXTRACT_SUBVECTOR, DL, SubVecTy, WideValue,
+        DAG.getVectorIdxConstant(I * SubVecTy.getVectorMinNumElements(), DL)));
+
+  SmallVector<EVT, 3> ResultVTs(Factor, SubVecTy);
+  SDValue Deinterleaved = DAG.getNode(ISD::VECTOR_DEINTERLEAVE, DL,
+                                      DAG.getVTList(ResultVTs), SubVecs);
+  for (unsigned I = 0; I != Factor; ++I)
+    Ops.push_back(Deinterleaved.getValue(I));
+  return true;
+}
+
 static SDValue
 performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                SelectionDAG &DAG) {
@@ -27762,7 +27797,12 @@ performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
       return SDValue();
   } else if (!isSplatVectorInterleaveOps(DAG, DL, WideValue,
                                          ValueInterleaveOps)) {
-    return SDValue();
+    // A vector.interleave3 defined in another basic block is unknown here
+    // because SelectionDAGs are local to a basic block. Deinterleave the wide
+    // value back into legal operands so it can be used by st3.
+    if (!deinterleaveInterleavedValueForSVESt3(WideValue, DL, DAG,
+                                               ValueInterleaveOps))
+      return SDValue();
   }
 
   unsigned NumParts = ValueInterleaveOps.size();
@@ -27784,8 +27824,6 @@ performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
   auto *MemN = cast<MemSDNode>(N);
   if (IsScalable) {
-    if (NumParts == 3)
-      return SDValue();
     SDValue Pred;
     if (IsMasked) {
       Pred = getNarrowMaskForInterleavedOps(DAG, DL, Mask, NumParts);
@@ -27796,8 +27834,18 @@ performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
       Pred = DAG.getConstant(1, DL, PredVT);
     }
 
-    const Intrinsic::ID IID =
-        NumParts == 2 ? Intrinsic::aarch64_sve_st2 : Intrinsic::aarch64_sve_st4;
+    Intrinsic::ID IID;
+    switch (NumParts) {
+    case 2:
+      IID = Intrinsic::aarch64_sve_st2;
+      break;
+    case 3:
+      IID = Intrinsic::aarch64_sve_st3;
+      break;
+    case 4:
+      IID = Intrinsic::aarch64_sve_st4;
+      break;
+    }
     SmallVector<SDValue, 8> Ops;
     Ops.append({Chain, DAG.getConstant(IID, DL, MVT::i32)});
     Ops.append(ValueInterleaveOps);
@@ -30848,8 +30896,6 @@ static SDValue performVectorDeinterleaveCombine(
   SDValue Res;
   MemSDNode *MemNode = dyn_cast<MemSDNode>(WideVec);
   if (IsScalable) {
-    if (NumParts == 3)
-      return SDValue();
     SDValue Chain, BasePtr, Pred;
     if (auto *MaskedLoad = dyn_cast<MaskedLoadSDNode>(WideVec)) {
       // Bail out if the masked load has an unexpected number of uses, since we
@@ -30883,8 +30929,18 @@ static SDValue performVectorDeinterleaveCombine(
       BasePtr = Load->getBasePtr();
     }
 
-    const Intrinsic::ID IID = NumParts == 2 ? Intrinsic::aarch64_sve_ld2_sret
-                                            : Intrinsic::aarch64_sve_ld4_sret;
+    Intrinsic::ID IID;
+    switch (NumParts) {
+    case 2:
+      IID = Intrinsic::aarch64_sve_ld2_sret;
+      break;
+    case 3:
+      IID = Intrinsic::aarch64_sve_ld3_sret;
+      break;
+    case 4:
+      IID = Intrinsic::aarch64_sve_ld4_sret;
+      break;
+    }
     SDValue NewLdOps[] = {Chain, DAG.getConstant(IID, DL, MVT::i32), Pred,
                           BasePtr};
     Res = DAG.getMemIntrinsicNode(ISD::INTRINSIC_W_CHAIN, DL, ResVTList,
@@ -34392,6 +34448,7 @@ AArch64TargetLowering::LowerVECTOR_DEINTERLEAVE(SDValue Op,
   if (OpVT.isScalableVector() && Op->getNumOperands() == 3) {
     // aarch64_sve_ld3 only supports packed datatypes.
     EVT PackedVT = getPackedSVEVectorVT(OpVT.getVectorElementCount());
+    bool IsPredicate = OpVT.getVectorElementType() == MVT::i1;
     Align Alignment = DAG.getReducedAlign(PackedVT, /*UseABI=*/false);
     SDValue StackPtr =
         DAG.CreateStackTemporary(PackedVT.getStoreSize() * 3, Alignment);
@@ -34401,7 +34458,12 @@ AArch64TargetLowering::LowerVECTOR_DEINTERLEAVE(SDValue Op,
     for (unsigned I = 0; I < 3; ++I) {
       SDValue Ptr =
           DAG.getMemBasePlusOffset(StackPtr, PackedVT.getStoreSize() * I, DL);
-      SDValue V = getSVESafeBitCast(PackedVT, Op.getOperand(I), DAG);
+      // Predicate vectors cannot be bitcast to packed data vectors. Materialize
+      // their values in Z registers so they can be written to memory.
+      SDValue V =
+          IsPredicate
+              ? DAG.getNode(ISD::ZERO_EXTEND, DL, PackedVT, Op.getOperand(I))
+              : getSVESafeBitCast(PackedVT, Op.getOperand(I), DAG);
       Chains.push_back(
           DAG.getStore(DAG.getEntryNode(), DL, V, Ptr, MachinePointerInfo()));
     }
@@ -34420,9 +34482,12 @@ AArch64TargetLowering::LowerVECTOR_DEINTERLEAVE(SDValue Op,
     SDValue LD3 = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, VTs, Ops);
 
     SmallVector<SDValue, 3> Results;
-    Results.push_back(getSVESafeBitCast(OpVT, LD3.getValue(0), DAG));
-    Results.push_back(getSVESafeBitCast(OpVT, LD3.getValue(1), DAG));
-    Results.push_back(getSVESafeBitCast(OpVT, LD3.getValue(2), DAG));
+    for (unsigned I = 0; I < 3; ++I)
+      Results.push_back(IsPredicate
+                            ? DAG.getSetCC(DL, OpVT, LD3.getValue(I),
+                                           DAG.getConstant(0, DL, PackedVT),
+                                           ISD::SETNE)
+                            : getSVESafeBitCast(OpVT, LD3.getValue(I), DAG));
     return DAG.getMergeValues(Results, DL);
   }
 
@@ -34502,9 +34567,15 @@ SDValue AArch64TargetLowering::LowerVECTOR_INTERLEAVE(SDValue Op,
   if (OpVT.isScalableVector() && Op->getNumOperands() == 3) {
     // aarch64_sve_st3 only supports packed datatypes.
     EVT PackedVT = getPackedSVEVectorVT(OpVT.getVectorElementCount());
+    bool IsPredicate = OpVT.getVectorElementType() == MVT::i1;
     SmallVector<SDValue, 3> InVecs;
-    for (SDValue V : Op->ops())
-      InVecs.push_back(getSVESafeBitCast(PackedVT, V, DAG));
+    for (SDValue V : Op->ops()) {
+      // Predicate vectors cannot be bitcast to packed data vectors. Materialize
+      // their values in Z registers so they can be interleaved by st3.
+      InVecs.push_back(IsPredicate
+                           ? DAG.getNode(ISD::ZERO_EXTEND, DL, PackedVT, V)
+                           : getSVESafeBitCast(PackedVT, V, DAG));
+    }
 
     Align Alignment = DAG.getReducedAlign(PackedVT, /*UseABI=*/false);
     SDValue StackPtr =
@@ -34536,7 +34607,11 @@ SDValue AArch64TargetLowering::LowerVECTOR_INTERLEAVE(SDValue Op,
       SDValue Ptr =
           DAG.getMemBasePlusOffset(StackPtr, PackedVT.getStoreSize() * I, DL);
       SDValue L = DAG.getLoad(PackedVT, DL, Chain, Ptr, MachinePointerInfo());
-      Results.push_back(getSVESafeBitCast(OpVT, L, DAG));
+      Results.push_back(IsPredicate
+                            ? DAG.getSetCC(DL, OpVT, L,
+                                           DAG.getConstant(0, DL, PackedVT),
+                                           ISD::SETNE)
+                            : getSVESafeBitCast(OpVT, L, DAG));
     }
 
     return DAG.getMergeValues(Results, DL);
