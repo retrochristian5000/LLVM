@@ -145,6 +145,11 @@ static cl::opt<uint32_t> MaxNumInsnsPerBlock(
     cl::desc("Max number of instructions to scan in each basic block in GVN "
              "(default = 100)"));
 
+static cl::opt<bool> GVNPropagateConstExp(
+    "gvn-const-expr-prop", cl::ReallyHidden, cl::init(true),
+    cl::desc("Propagate expressions defined outside the dominating blocks "
+             "for equality checks"));
+
 struct llvm::GVNPass::Expression {
   uint32_t Opcode;
   bool Commutative = false;
@@ -3083,6 +3088,152 @@ void GVNPass::assignBlockRPONumber(Function &F) {
   InvalidBlockRPONumbers = false;
 }
 
+namespace {
+
+/// Check if \p Expr is an expression involving only \p Base and/or constants.
+bool isExprBuiltFromOnly(Value *Expr, Value *Base) {
+  if (isa<Constant>(Expr))
+    return false;
+  if (Expr == Base)
+    return true;
+  if (!isa<Instruction>(Expr))
+    return false;
+  if (!isa<CastInst, BinaryOperator, UnaryOperator>(Expr))
+    return false;
+  if (auto *II = dyn_cast<IntrinsicInst>(Expr))
+    if (II->getIntrinsicID() == Intrinsic::fake_use)
+      return false;
+  auto *ExprInst = cast<Instruction>(Expr);
+  bool UsedAtleastOnce = false;
+  for (unsigned i = 0, e = ExprInst->getNumOperands(); i != e; ++i) {
+    auto *Op = ExprInst->getOperand(i);
+    if (isa<Constant>(Op))
+      continue;
+    if (!isExprBuiltFromOnly(Op, Base))
+      return false;
+    UsedAtleastOnce = true;
+  }
+  return UsedAtleastOnce;
+}
+
+/// Clone the valid-use expression \p Expr, replacing any use of \p OldVal
+/// with \p NewVal, inserting the cloned instructions right before
+/// \p InsertPt. This avoids creating a new expression for the same value
+/// more than once and keeps the clone as close as possible to its first use.
+Value *cloneExprReplacingOperand(Value *Expr, const Value *OldVal,
+                                 Value *NewVal, Instruction *InsertPt) {
+  if (isa<Constant>(Expr))
+    return Expr;
+  if (Expr == OldVal)
+    return NewVal;
+  if (!isa<Instruction>(Expr))
+    return nullptr;
+  // Only handle Cast, BinOp, UnaryOp for now.
+  if (!isa<CastInst, BinaryOperator, UnaryOperator>(Expr))
+    return nullptr;
+  auto *ExprInst = cast<Instruction>(Expr);
+  SmallVector<Value *, 4> NewOps;
+  for (unsigned i = 0, e = ExprInst->getNumOperands(); i != e; ++i) {
+    auto *Op = ExprInst->getOperand(i);
+    auto *NewOp = cloneExprReplacingOperand(Op, OldVal, NewVal, InsertPt);
+    if (!NewOp)
+      return nullptr;
+    NewOps.push_back(NewOp);
+  }
+  auto *NewInst = ExprInst->clone();
+  for (unsigned i = 0, e = NewOps.size(); i != e; ++i)
+    NewInst->setOperand(i, NewOps[i]);
+
+  NewInst->insertBefore(InsertPt->getIterator());
+  LLVM_DEBUG(dbgs() << "ConstPropExpr: Cloning Inst " << *NewInst << "\n");
+  return NewInst;
+}
+
+} // end anonymous namespace
+
+/// LHS and RHS are known to be equal along the \p Root edge, with one of
+/// them being a constant. Look for instructions dominated by \p Root that
+/// use an expression built solely from the non-constant value but whose
+/// operand is defined outside the region dominated by \p Root (so
+/// propagateEquality's direct-use replacement cannot reach it). Clone such
+/// expressions into the dominated region with the constant substituted in,
+/// exposing further constant folding. Returns whether a change was made.
+bool GVNPass::propagateConstExpressions(Value *LHS, Value *RHS,
+                                        const BasicBlockEdge &Root) {
+  if (!GVNPropagateConstExp)
+    return false;
+
+  // Restrict to integer type for now.
+  if (!LHS->getType()->isIntegerTy())
+    return false;
+
+  // Exactly one of the two should be a constant.
+  if (isa<Constant>(LHS) == isa<Constant>(RHS))
+    return false;
+
+  // Prefer RHS to be the constant.
+  if (!isa<Constant>(RHS))
+    std::swap(LHS, RHS);
+
+  if (!isOnlyReachableViaThisEdge(Root, DT))
+    return false;
+
+  BasicBlock *RootBB = const_cast<BasicBlock *>(Root.getEnd());
+  bool ChangedIR = false;
+  for (BasicBlock *BB : depth_first(RootBB)) {
+    if (!DT->dominates(Root.getEnd(), BB))
+      continue;
+
+    for (Instruction &I : *BB) {
+      if (isa<PHINode>(&I))
+        continue;
+
+      if (auto *II = dyn_cast<IntrinsicInst>(&I))
+        if (II->getIntrinsicID() == Intrinsic::fake_use)
+          continue;
+
+      for (unsigned OpNum = 0; OpNum < I.getNumOperands(); ++OpNum) {
+        Instruction *OpExpr = dyn_cast<Instruction>(I.getOperand(OpNum));
+        if (!OpExpr)
+          continue;
+
+        // Skip if OpExpr is not defined outside the dominated region.
+        if (DT->dominates(Root.getEnd(), OpExpr->getParent()))
+          continue;
+
+        // Make sure the expression is built only from LHS.
+        if (!isExprBuiltFromOnly(OpExpr, LHS))
+          continue;
+
+        Value *ClonedExpr = cloneExprReplacingOperand(OpExpr, LHS, RHS, &I);
+        if (!ClonedExpr || ClonedExpr == OpExpr)
+          continue;
+
+        LLVM_DEBUG(dbgs() << "ConstPropExpr: From: " << I);
+        I.setOperand(OpNum, ClonedExpr);
+        LLVM_DEBUG(dbgs() << "\nConstPropExpr: To: " << I << "\n");
+
+        if (isa<Instruction>(ClonedExpr) && ClonedExpr->hasOneUse()) {
+          auto *CI = cast<Instruction>(ClonedExpr);
+          const DataLayout &DL = I.getDataLayout();
+          if (Value *V = simplifyInstruction(CI, {DL, TLI, DT, AC})) {
+            I.setOperand(OpNum, V);
+            LLVM_DEBUG(dbgs() << "ConstPropExpr: Optimized instruction: " << I
+                              << "\n");
+          }
+          ++NumGVNEqProp;
+        }
+        ChangedIR = true;
+      }
+    }
+  }
+
+  if (ChangedIR)
+    LLVM_DEBUG(dbgs() << "ConstPropExpr: With " << *LHS << " == " << *RHS
+                      << "\n");
+  return ChangedIR;
+}
+
 /// The given values are known to be equal in every use
 /// dominated by 'Root'.  Exploit this, for example by replacing 'LHS' with
 /// 'RHS' everywhere in the scope.  Returns whether a change was made.
@@ -3354,10 +3505,25 @@ bool GVNPass::processInstruction(Instruction *I) {
     Value *TrueVal = ConstantInt::getTrue(TrueSucc->getContext());
     BasicBlockEdge TrueE(Parent, TrueSucc);
     Changed |= propagateEquality(BranchCond, TrueVal, TrueE);
+    Changed |= propagateConstExpressions(BranchCond, TrueVal, TrueE);
 
     Value *FalseVal = ConstantInt::getFalse(FalseSucc->getContext());
     BasicBlockEdge FalseE(Parent, FalseSucc);
     Changed |= propagateEquality(BranchCond, FalseVal, FalseE);
+    Changed |= propagateConstExpressions(BranchCond, FalseVal, FalseE);
+
+    // If the condition is a comparison, also propagate the equality (or
+    // disequality) between its operands into whichever edge it is known to
+    // hold along, e.g. for "if (x == 5) ... " propagate x == 5 into the
+    // true edge. This mirrors the equality propagateEquality() itself
+    // derives from CmpInst equivalences.
+    if (CmpInst *Cmp = dyn_cast<CmpInst>(BranchCond)) {
+      Value *Op0 = Cmp->getOperand(0), *Op1 = Cmp->getOperand(1);
+      if (Cmp->isEquivalence(/*Invert=*/false))
+        Changed |= propagateConstExpressions(Op0, Op1, TrueE);
+      if (Cmp->isEquivalence(/*Invert=*/true))
+        Changed |= propagateConstExpressions(Op0, Op1, FalseE);
+    }
 
     return Changed;
   }
@@ -3379,6 +3545,8 @@ bool GVNPass::processInstruction(Instruction *I) {
       if (SwitchEdges.lookup(Dst) == 1) {
         BasicBlockEdge E(Parent, Dst);
         Changed |= propagateEquality(SwitchCond, Case.getCaseValue(), E);
+        Changed |=
+            propagateConstExpressions(SwitchCond, Case.getCaseValue(), E);
       }
     }
     return Changed;
