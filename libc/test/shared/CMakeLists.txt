@@ -488,6 +488,7 @@ add_fp_unittest(
     libc.src.__support.math.tanhf16
     libc.src.__support.math.tanpif
     libc.src.__support.math.tanpif16
+    libc.src.__support.math.tgammabf16
     libc.src.__support.math.trunc
     libc.src.__support.math.truncbf16
     libc.src.__support.math.truncf
