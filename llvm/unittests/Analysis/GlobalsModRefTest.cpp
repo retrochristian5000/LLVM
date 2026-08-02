@@ -53,7 +53,8 @@ TEST(GlobalsModRef, OptNone) {
 
   auto AAR = GlobalsAAResult::analyzeModule(*M, GetTLI, CG);
 
+  // Optnone definitions are maybe derefined.
   EXPECT_EQ(MemoryEffects::unknown(), AAR.getMemoryEffects(&F1));
-  EXPECT_EQ(MemoryEffects::none(), AAR.getMemoryEffects(&F2));
-  EXPECT_EQ(MemoryEffects::readOnly(), AAR.getMemoryEffects(&F3));
+  EXPECT_EQ(MemoryEffects::unknown(), AAR.getMemoryEffects(&F2));
+  EXPECT_EQ(MemoryEffects::unknown(), AAR.getMemoryEffects(&F3));
 }

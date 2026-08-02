@@ -64,8 +64,7 @@ entry:
   %fptrptr = getelementptr ptr, ptr %vtable, i32 1
   %fptr1 = load ptr, ptr %fptrptr, align 8
 
-  ; Check that the call was devirtualized.
-  ; CHECK-IR1: tail call i32 {{.*}}@_ZN1B1nEi
+  ; CHECK-IR1: ret i32 0
   %call = tail call i32 %fptr1(ptr nonnull %obj, i32 %a)
 
   ret i32 %call
@@ -78,7 +77,7 @@ entry:
 declare i1 @llvm.type.test(ptr, metadata)
 declare void @llvm.assume(i1)
 
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline }
 
 !0 = !{i64 16, !"_ZTS1A"}
 !1 = !{i64 16, !"_ZTS1B"}

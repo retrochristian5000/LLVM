@@ -153,9 +153,9 @@ private:
     case PrivateLinkage:
       // Optimizations may assume builtin semantics for functions defined as
       // nobuiltin due to attributes at call-sites. To avoid applying IPO based
-      // on nobuiltin semantics, treat such function definitions as maybe
-      // derefined.
-      return isInterposable() || isNobuiltinFnDef();
+      // on nobuiltin or optnone semantics, treat such function definitions as
+      // maybe derefined.
+      return isInterposable() || isNobuiltinFnDef() || isOptNoneFnDef();
     }
 
     llvm_unreachable("Fully covered switch above!");
@@ -168,6 +168,10 @@ private:
   /// Returns true if the global is a function definition with the noipa
   /// attribute.
   LLVM_ABI bool isNoipaFnDef() const;
+
+  /// Returns true if the global is a function definition with the optnone
+  /// attribute.
+  LLVM_ABI bool isOptNoneFnDef() const;
 
 protected:
   /// The intrinsic ID for this subclass (which must be a Function).

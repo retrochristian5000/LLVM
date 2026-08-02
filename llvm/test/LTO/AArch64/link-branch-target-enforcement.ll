@@ -30,9 +30,7 @@ entry:
 
 ; CHECK-NOT: linking module flags 'branch-target-enforcement': IDs have conflicting values in
 ; CHECK-DUMP: <main>:
-; CHECK-DUMP:      paciasp
-; CHECK-DUMP:      str
-; CHECK-DUMP:      bl      0x8 <main+0x8>
+; CHECK-DUMP:      b       {{.*}}
 ; CHECK-DUMP: <foo_on>:
 ; CHECK-DUMP:     pacibsp
 
