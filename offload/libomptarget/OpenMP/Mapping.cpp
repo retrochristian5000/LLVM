@@ -263,7 +263,22 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
               "exist for host address " DPxMOD " (%" PRId64 " bytes)",
               DPxPTR(HstPtrBegin), Size);
   } else if ((PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-              !HasCloseModifier) ||
+              (!HasCloseModifier ||
+               // A close mapping should not incur a new allocation under USM
+               // when the storage it refers to is already on the device, i.e.
+               // when it overlaps a previously encountered map, with or without
+               // the close modifier.
+               //
+               // Storage that is present for the whole program, such as a
+               // declare-target variable, should be covered by this as well but
+               // is not: under USM the entry registered for such a variable
+               // describes the device reference pointer rather than the
+               // variable, so a mapping of the variable does not overlap it.
+               // Communicating the variable's extent is a code-generation
+               // change.
+               (LR.TPR.getEntry() != nullptr &&
+                (LR.Flags.IsContained || LR.Flags.ExtendsBefore ||
+                 LR.Flags.ExtendsAfter)))) ||
              (PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY)) {
 
     // If unified shared memory is active, implicitly mapped variables that are
@@ -282,6 +297,22 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       LR.TPR.Flags.IsPresent = false;
       LR.TPR.Flags.IsHostPointer = true;
       LR.TPR.TargetPointer = HstPtrBegin;
+      // Create a mapping for a case when map(close, alloc:...) is applied to a
+      // subsection of previously mapped allocation. The mapping would prevent
+      // map(close, alloc:...) from creating a new allocation as it would reuse
+      // the mapped allocation instead.
+      auto Emplaced = HDTTMap->emplace(new HostDataToTargetTy(
+          (uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
+          (uintptr_t)HstPtrBegin + Size, (uintptr_t)HstPtrBegin,
+          (uintptr_t)HstPtrBegin, HasHoldModifier, HstPtrName));
+      LR.TPR.setEntry(Emplaced.first->HDTT);
+
+      // The mapping is new for this construct, which is what pointer attachment
+      // is governed by, so record it even though no device memory was allocated.
+      if (Emplaced.second && StateInfo)
+        StateInfo->NewMappings[HstPtrBegin] = Size;
+      if (Device.notifyDataMapped(HstPtrBegin, Size))
+        return TargetPointerResultTy{};
     }
   } else if (HasPresentModifier) {
     ODBG(ODT_Mapping) << "Mapping required by 'present' map type modifier does "
@@ -545,7 +576,12 @@ int MappingInfoTy::deallocTgtPtrAndEntry(HostDataToTargetTy *Entry,
     return OFFLOAD_FAIL;
   }
 
-  int Ret = Device.deleteData((void *)Entry->TgtAllocBegin);
+  // The reuse entry recorded on the unified-shared-memory host path owns no
+  // device allocation: its allocation maps to the host address itself, so it
+  // must not be handed to deleteData().
+  int Ret = OFFLOAD_SUCCESS;
+  if (Entry->TgtAllocBegin != Entry->HstPtrBegin)
+    Ret = Device.deleteData((void *)Entry->TgtAllocBegin);
 
   // Notify the plugin about the unmapped memory.
   Ret |= Device.notifyDataUnmapped((void *)Entry->HstPtrBegin);
