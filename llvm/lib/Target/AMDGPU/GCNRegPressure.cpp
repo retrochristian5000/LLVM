@@ -14,6 +14,7 @@
 #include "GCNRegPressure.h"
 #include "AMDGPU.h"
 #include "SIMachineFunctionInfo.h"
+#include "llvm/CodeGen/LiveIntervalUnion.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/RegisterPressure.h"
@@ -1213,3 +1214,83 @@ LLVM_DUMP_METHOD void llvm::dumpMaxRegPressure(MachineFunction &MF,
   }
 }
 #endif
+
+unsigned llvm::estimateGreedyVGPRPressure(
+    MachineBasicBlock::const_iterator RegionBegin,
+    MachineBasicBlock::const_iterator RegionEnd,
+    const GCNRPTracker::LiveRegSet &LiveIns, LiveIntervals &LIS,
+    const MachineRegisterInfo &MRI, const SIRegisterInfo &TRI) {
+
+  SmallVector<LiveInterval *> RegionIntervals;
+  SmallPtrSet<LiveInterval *, 32> Seen;
+
+  auto IsVGPR = [&MRI, &TRI](Register VReg) {
+    const TargetRegisterClass *RC = MRI.getRegClass(VReg);
+    return TRI.isVGPRClass(RC) || TRI.isVectorSuperClass(RC);
+  };
+
+  // Collect live-ins
+  for (const auto &[RegNum, LaneMask] : LiveIns) {
+    Register VReg(RegNum);
+    if (!VReg.isVirtual() || !LIS.hasInterval(VReg) || !IsVGPR(VReg))
+      continue;
+    LiveInterval &LI = LIS.getInterval(VReg);
+    if (Seen.insert(&LI).second)
+      RegionIntervals.push_back(&LI);
+  }
+
+  // Collect defs in region
+  for (auto I = RegionBegin; I != RegionEnd; ++I) {
+    for (const MachineOperand &MO : I->operands()) {
+      if (!MO.isReg() || !MO.isDef())
+        continue;
+      Register VReg = MO.getReg();
+      if (!VReg.isVirtual() || !LIS.hasInterval(VReg) || !IsVGPR(VReg))
+        continue;
+      LiveInterval &LI = LIS.getInterval(VReg);
+      if (Seen.insert(&LI).second)
+        RegionIntervals.push_back(&LI);
+    }
+  }
+
+  llvm::sort(RegionIntervals, [](auto *LHS, auto *RHS) {
+    return LHS->beginIndex() < RHS->beginIndex();
+  });
+
+  LiveIntervalUnion::Allocator Alloc;
+  std::vector<LiveIntervalUnion> Slots;
+  unsigned MaxSlotUsed = 0;
+
+  // Simulate greedy register allocation, assuming unlimited number
+  // of physical registers (slots).
+  for (LiveInterval *LI : RegionIntervals) {
+    const TargetRegisterClass *RC = MRI.getRegClass(LI->reg());
+    unsigned Width = TRI.getRegClassWeight(RC).RegWeight;
+    unsigned Alignment = std::max(1u, TRI.getRegClassAlignmentNumBits(RC) / 32);
+
+    unsigned Start = 0;
+    while (true) {
+      if (Slots.size() < Start + Width)
+        Slots.resize(Start + Width, LiveIntervalUnion(Alloc));
+
+      bool Fits = true;
+      for (unsigned Idx = Start; Idx < Start + Width; Idx++) {
+        LiveIntervalUnion::Query Q(*LI, Slots[Idx]);
+        if (Q.checkInterference()) {
+          Start = alignTo(Idx + 1, Alignment);
+          Fits = false;
+          break;
+        }
+      }
+
+      if (Fits) {
+        for (unsigned Idx = Start; Idx < Start + Width; Idx++)
+          Slots[Idx].unify(*LI, *LI);
+        MaxSlotUsed = std::max(MaxSlotUsed, Start + Width);
+        break;
+      }
+    }
+  }
+
+  return MaxSlotUsed;
+}
