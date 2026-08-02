@@ -33,8 +33,6 @@ define double @fpext_float_to_double(float %f) nounwind {
 ; GLOBAL-X86-LABEL: fpext_float_to_double:
 ; GLOBAL-X86:       # %bb.0:
 ; GLOBAL-X86-NEXT:    pushl %eax
-; GLOBAL-X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
-; GLOBAL-X86-NEXT:    movl %eax, (%esp)
 ; GLOBAL-X86-NEXT:    flds {{[0-9]+}}(%esp)
 ; GLOBAL-X86-NEXT:    popl %eax
 ; GLOBAL-X86-NEXT:    retl
@@ -63,8 +61,6 @@ define x86_fp80 @fpext_float_to_x86_fp80(float %f) nounwind {
 ; GLOBAL-X86-LABEL: fpext_float_to_x86_fp80:
 ; GLOBAL-X86:       # %bb.0:
 ; GLOBAL-X86-NEXT:    pushl %eax
-; GLOBAL-X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
-; GLOBAL-X86-NEXT:    movl %eax, (%esp)
 ; GLOBAL-X86-NEXT:    flds {{[0-9]+}}(%esp)
 ; GLOBAL-X86-NEXT:    popl %eax
 ; GLOBAL-X86-NEXT:    retl
