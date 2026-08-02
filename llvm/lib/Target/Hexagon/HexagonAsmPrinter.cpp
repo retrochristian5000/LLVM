@@ -1002,6 +1002,8 @@ void HexagonAsmPrinter::LowerKCFI_CHECK(const MachineInstr &MI) {
   unsigned TypeReg = ScratchRegs[1];
   unsigned PredReg = Hexagon::P0;
 
+  const MCInstrInfo &MCII = *Subtarget->getInstrInfo();
+
   // Adjust for patchable-function-prefix (nop padding before the function).
   int64_t PrefixNops = MI.getMF()->getFunction().getFnAttributeAsParsedInteger(
       "patchable-function-prefix");
@@ -1034,6 +1036,8 @@ void HexagonAsmPrinter::LowerKCFI_CHECK(const MachineInstr &MI) {
   LoadTypePacket.setOpcode(Hexagon::BUNDLE);
   LoadTypePacket.addOperand(MCOperand::createImm(0));
   LoadTypePacket.addOperand(MCOperand::createInst(LoadInst));
+  HexagonMCInstrInfo::extendIfNeeded(OutContext, MCII, LoadTypePacket,
+                                     *TypeInst);
   LoadTypePacket.addOperand(MCOperand::createInst(TypeInst));
   EmitToStreamer(*OutStreamer, LoadTypePacket);
 
@@ -1079,6 +1083,7 @@ void HexagonAsmPrinter::LowerKCFI_CHECK(const MachineInstr &MI) {
   MCInst CrashPacket;
   CrashPacket.setOpcode(Hexagon::BUNDLE);
   CrashPacket.addOperand(MCOperand::createImm(0));
+  HexagonMCInstrInfo::extendIfNeeded(OutContext, MCII, CrashPacket, *CrashInst);
   CrashPacket.addOperand(MCOperand::createInst(CrashInst));
   EmitToStreamer(*OutStreamer, CrashPacket);
 
