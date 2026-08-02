@@ -7432,8 +7432,8 @@ LLT SITargetLowering::getPreferredShiftAmountTy(LLT Ty) const {
 // however does not support denormals, so we do report fma as faster if we have
 // a fast fma device and require denormals.
 //
-bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
-                                                  EVT VT) const {
+bool SITargetLowering::isFMAFasterThanFMulAndFAdd(
+    EVT VT, const SIModeRegisterDefaults &Mode) const {
   VT = VT.getScalarType();
 
   switch (VT.getSimpleVT().SimpleTy) {
@@ -7445,7 +7445,7 @@ bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
     // Otherwise f32 mad is always full rate and returns the same result as
     // the separate operations so should be preferred over fma.
     // However does not support denormals.
-    if (!denormalModeIsFlushAllF32(MF))
+    if (Mode.FP32Denormals != DenormalMode::getPreserveSign())
       return Subtarget->hasFastFMAF32() || Subtarget->hasDLInsts();
 
     // If the subtarget has v_fmac_f32, that's just as good as v_mac_f32.
@@ -7455,12 +7455,24 @@ bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
     return true;
   case MVT::f16:
   case MVT::bf16:
-    return Subtarget->has16BitInsts() && !denormalModeIsFlushAllF64F16(MF);
+    return Subtarget->has16BitInsts() &&
+           Mode.FP64FP16Denormals != DenormalMode::getPreserveSign();
   default:
     break;
   }
 
   return false;
+}
+
+bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                                  EVT VT) const {
+  return isFMAFasterThanFMulAndFAdd(
+      VT, MF.getInfo<SIMachineFunctionInfo>()->getMode());
+}
+
+bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const Function &F,
+                                                  EVT VT) const {
+  return isFMAFasterThanFMulAndFAdd(VT, SIModeRegisterDefaults(F, *Subtarget));
 }
 
 bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
@@ -7479,33 +7491,43 @@ bool SITargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
   return false;
 }
 
+bool SITargetLowering::isFMADLegal(EVT VT,
+                                   const SIModeRegisterDefaults &Mode) const {
+  // TODO: Check future ftz flag
+  // v_mad_f32/v_mac_f32 do not support denormals.
+  if (VT == MVT::f32)
+    return Subtarget->hasMadMacF32Insts() &&
+           Mode.FP32Denormals == DenormalMode::getPreserveSign();
+  if (VT == MVT::f16)
+    return Subtarget->hasMadF16() &&
+           Mode.FP64FP16Denormals == DenormalMode::getPreserveSign();
+
+  return false;
+}
+
 bool SITargetLowering::isFMADLegal(const MachineInstr &MI, LLT Ty) const {
   if (!Ty.isScalar())
     return false;
 
+  SIModeRegisterDefaults Mode =
+      MI.getMF()->getInfo<SIMachineFunctionInfo>()->getMode();
   if (Ty.getScalarSizeInBits() == 16)
-    return Subtarget->hasMadF16() && denormalModeIsFlushAllF64F16(*MI.getMF());
+    return isFMADLegal(MVT::f16, Mode);
   if (Ty.getScalarSizeInBits() == 32)
-    return Subtarget->hasMadMacF32Insts() &&
-           denormalModeIsFlushAllF32(*MI.getMF());
+    return isFMADLegal(MVT::f32, Mode);
 
   return false;
 }
 
 bool SITargetLowering::isFMADLegal(const SelectionDAG &DAG,
                                    const SDNode *N) const {
-  // TODO: Check future ftz flag
-  // v_mad_f32/v_mac_f32 do not support denormals.
-  EVT VT = N->getValueType(0);
-  if (VT == MVT::f32)
-    return Subtarget->hasMadMacF32Insts() &&
-           denormalModeIsFlushAllF32(DAG.getMachineFunction());
-  if (VT == MVT::f16) {
-    return Subtarget->hasMadF16() &&
-           denormalModeIsFlushAllF64F16(DAG.getMachineFunction());
-  }
+  return isFMADLegal(
+      N->getValueType(0),
+      DAG.getMachineFunction().getInfo<SIMachineFunctionInfo>()->getMode());
+}
 
-  return false;
+bool SITargetLowering::isFMADLegal(const Function &F, EVT VT) const {
+  return isFMADLegal(VT, SIModeRegisterDefaults(F, *Subtarget));
 }
 
 //===----------------------------------------------------------------------===//
