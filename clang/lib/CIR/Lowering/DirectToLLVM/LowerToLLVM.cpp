@@ -2620,11 +2620,21 @@ mlir::LogicalResult CIRToLLVMFuncOpLowering::matchAndRewrite(
   mlir::Type resultType =
       getTypeConverter()->convertType(fnType.getReturnType());
 
+  // To match OGCG, a 'no_proto' function must be lowered to a variadic LLVM
+  // function type '(...)' to safely handle unspecified arguments. However, this
+  // fallback only applies to pure declarations and aliases that lack explicit
+  // parameters. We skip this fallback and emit a strict non-variadic signature
+  // if the function has a body, or if an alias redefines the type with explicit
+  // arguments.
+  bool isDeclOrAlias = op.isDeclaration() || (op.getAliaseeAttr() != nullptr);
+  bool isNoProto =
+      (op.getNoProto() && isDeclOrAlias) && (fnType.getNumInputs() == 0);
+  bool isVarArg = fnType.isVarArg() || isNoProto;
+
   // Create the LLVM function operation.
   mlir::Type llvmFnTy = mlir::LLVM::LLVMFunctionType::get(
       resultType ? resultType : mlir::LLVM::LLVMVoidType::get(getContext()),
-      signatureConversion.getConvertedTypes(),
-      /*isVarArg=*/fnType.isVarArg());
+      signatureConversion.getConvertedTypes(), isVarArg);
 
   // If this is an alias, it needs to be lowered to llvm::AliasOp.
   if (std::optional<llvm::StringRef> aliasee = op.getAliasee())
