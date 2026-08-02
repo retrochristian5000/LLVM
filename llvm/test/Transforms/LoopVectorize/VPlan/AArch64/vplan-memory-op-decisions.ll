@@ -23,7 +23,7 @@ define void @replicating_load_used_as_store_addr(ptr noalias %A) {
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION ir<0>, ir<1>, vp<[[VP0]]>
 ; CHECK-NEXT:      EMIT ir<%iv.next> = add ir<%iv>, ir<1>
-; CHECK-NEXT:      EMIT ir<%gep.A> = getelementptr ir<%A>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.A> = getelementptr ptr, ir<%A>, ir<%iv>
 ; CHECK-NEXT:      REPLICATE ir<%l.p> = load ir<%gep.A>
 ; CHECK-NEXT:      EMIT-SCALAR ir<%iv.trunc> = trunc ir<%iv.next> to i32
 ; CHECK-NEXT:      EMIT store ir<%iv.trunc>, ir<%l.p>
@@ -74,14 +74,14 @@ define void @load_feeding_only_mask_not_scalarized(ptr noalias %A, ptr noalias %
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION ir<0>, ir<1>, vp<[[VP0]]>
-; CHECK-NEXT:      EMIT ir<%gep.C> = getelementptr ir<%C>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.C> = getelementptr i32, ir<%C>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP4:%[0-9]+]]> = vector-pointer i32, ir<%gep.C>, ir<1>
 ; CHECK-NEXT:      WIDEN ir<%c> = load vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT ir<%cmp> = icmp sgt ir<%c>, ir<0>
 ; CHECK-NEXT:    Successor(s): then
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    then:
-; CHECK-NEXT:      EMIT ir<%gep.B> = getelementptr ir<%B>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.B> = getelementptr ptr, ir<%B>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP5:%[0-9]+]]> = vector-pointer ptr, ir<%gep.B>, ir<1>
 ; CHECK-NEXT:      WIDEN ir<%l.p> = load vp<[[VP5]]>, ir<%cmp>
 ; CHECK-NEXT:      EMIT store ir<42>, ir<%l.p>, ir<%cmp>
@@ -146,7 +146,7 @@ define void @single_scalar_load_used_as_store_addr(ptr noalias %p) {
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION ir<0>, ir<1>, vp<[[VP0]]>
 ; CHECK-NEXT:      EMIT ir<%iv.next> = add ir<%iv>, ir<1>
 ; CHECK-NEXT:      CLONE ir<%l.p> = load ir<%p>
-; CHECK-NEXT:      EMIT ir<%gep> = getelementptr ir<%l.p>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep> = getelementptr i32, ir<%l.p>, ir<%iv>
 ; CHECK-NEXT:      EMIT-SCALAR ir<%iv.trunc> = trunc ir<%iv.next> to i32
 ; CHECK-NEXT:      EMIT store ir<%iv.trunc>, ir<%gep>
 ; CHECK-NEXT:      EMIT ir<%ec> = icmp eq ir<%iv>, ir<100>
@@ -197,11 +197,11 @@ define void @consecutive_load_store(ptr noalias %a, ptr noalias %b) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION nuw nsw ir<0>, ir<1>, vp<[[VP0]]>
-; CHECK-NEXT:      EMIT ir<%gep.a> = getelementptr inbounds ir<%a>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.a> = getelementptr inbounds i32, ir<%a>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP4:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.a>, ir<1>
 ; CHECK-NEXT:      WIDEN ir<%lv> = load vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT ir<%add> = add ir<%lv>, ir<1>
-; CHECK-NEXT:      EMIT ir<%gep.b> = getelementptr inbounds ir<%b>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.b> = getelementptr inbounds i32, ir<%b>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP5:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.b>, ir<1>
 ; CHECK-NEXT:      WIDEN store vp<[[VP5]]>, ir<%add>
 ; CHECK-NEXT:      EMIT ir<%iv.next> = add nuw nsw ir<%iv>, ir<1>
@@ -252,12 +252,12 @@ define void @reverse_load_store(ptr noalias %a, ptr noalias %b) {
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION nsw ir<1023>, ir<-1>, vp<[[VP0]]>
-; CHECK-NEXT:      EMIT ir<%gep.a> = getelementptr inbounds ir<%a>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.a> = getelementptr inbounds i32, ir<%a>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP4:%[0-9]+]]> = vector-end-pointer inbounds i32, ir<%gep.a>, vp<[[VP0]]>
 ; CHECK-NEXT:      WIDEN ir<%lv> = load vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT vp<[[VP5:%[0-9]+]]> = reverse ir<%lv>
 ; CHECK-NEXT:      EMIT ir<%add> = add vp<[[VP5]]>, ir<1>
-; CHECK-NEXT:      EMIT ir<%gep.b> = getelementptr inbounds ir<%b>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.b> = getelementptr inbounds i32, ir<%b>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP6:%[0-9]+]]> = vector-end-pointer inbounds i32, ir<%gep.b>, vp<[[VP0]]>
 ; CHECK-NEXT:      EMIT vp<[[VP7:%[0-9]+]]> = reverse ir<%add>
 ; CHECK-NEXT:      WIDEN store vp<[[VP6]]>, vp<[[VP7]]>
@@ -315,9 +315,9 @@ define void @consecutive_load_with_first_order_recurrence_address(ptr noalias %a
 ; CHECK-NEXT:      EMIT ir<%inc> = add ir<%narrow>, ir<1>
 ; CHECK-NEXT:      EMIT-SCALAR ir<%ext> = zext ir<%inc> to i64
 ; CHECK-NEXT:      EMIT vp<[[VP4:%[0-9]+]]> = first-order splice ir<%prev>, ir<%ext>
-; CHECK-NEXT:      EMIT ir<%gep.a> = getelementptr inbounds ir<%a>, vp<[[VP4]]>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.a> = getelementptr inbounds i32, ir<%a>, vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT-SCALAR ir<%lv> = load ir<%gep.a>
-; CHECK-NEXT:      EMIT ir<%gep.b> = getelementptr inbounds ir<%b>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.b> = getelementptr inbounds i32, ir<%b>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP5:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.b>, ir<1>
 ; CHECK-NEXT:      WIDEN store vp<[[VP5]]>, ir<%lv>
 ; CHECK-NEXT:      EMIT ir<%ec> = icmp eq ir<%iv.next>, ir<%n>
@@ -370,18 +370,18 @@ define void @cond_load_store(ptr noalias %a, ptr noalias %b, ptr noalias %cond, 
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION nuw nsw ir<0>, ir<1>, vp<[[VP0]]>
-; CHECK-NEXT:      EMIT ir<%gep.cond> = getelementptr inbounds ir<%cond>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.cond> = getelementptr inbounds i32, ir<%cond>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP4:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.cond>, ir<1>
 ; CHECK-NEXT:      WIDEN ir<%c> = load vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT ir<%cmp> = icmp sgt ir<%c>, ir<0>
 ; CHECK-NEXT:    Successor(s): then
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    then:
-; CHECK-NEXT:      EMIT ir<%gep.a> = getelementptr inbounds ir<%a>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.a> = getelementptr inbounds i32, ir<%a>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP5:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.a>, ir<1>
 ; CHECK-NEXT:      WIDEN ir<%lv> = load vp<[[VP5]]>, ir<%cmp>
 ; CHECK-NEXT:      EMIT ir<%add> = add ir<%lv>, ir<1>, ir<%cmp>
-; CHECK-NEXT:      EMIT ir<%gep.b> = getelementptr inbounds ir<%b>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.b> = getelementptr inbounds i32, ir<%b>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP6:%[0-9]+]]> = vector-pointer inbounds i32, ir<%gep.b>, ir<1>
 ; CHECK-NEXT:      WIDEN store vp<[[VP6]]>, ir<%add>, ir<%cmp>
 ; CHECK-NEXT:    Successor(s): latch
@@ -445,7 +445,7 @@ define void @cond_reverse_load_store(ptr noalias %a, ptr noalias %b, ptr noalias
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    vector.body:
 ; CHECK-NEXT:      ir<%iv> = WIDEN-INDUCTION nsw ir<1023>, ir<-1>, vp<[[VP0]]>
-; CHECK-NEXT:      EMIT ir<%gep.cond> = getelementptr inbounds ir<%cond>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.cond> = getelementptr inbounds i32, ir<%cond>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP4:%[0-9]+]]> = vector-end-pointer inbounds i32, ir<%gep.cond>, vp<[[VP0]]>
 ; CHECK-NEXT:      WIDEN ir<%c> = load vp<[[VP4]]>
 ; CHECK-NEXT:      EMIT vp<[[VP5:%[0-9]+]]> = reverse ir<%c>
@@ -453,13 +453,13 @@ define void @cond_reverse_load_store(ptr noalias %a, ptr noalias %b, ptr noalias
 ; CHECK-NEXT:    Successor(s): then
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    then:
-; CHECK-NEXT:      EMIT ir<%gep.a> = getelementptr inbounds ir<%a>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.a> = getelementptr inbounds i32, ir<%a>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP6:%[0-9]+]]> = vector-end-pointer inbounds i32, ir<%gep.a>, vp<[[VP0]]>
 ; CHECK-NEXT:      EMIT vp<[[VP7:%[0-9]+]]> = reverse ir<%cmp>
 ; CHECK-NEXT:      WIDEN ir<%lv> = load vp<[[VP6]]>, vp<[[VP7]]>
 ; CHECK-NEXT:      EMIT vp<[[VP8:%[0-9]+]]> = reverse ir<%lv>
 ; CHECK-NEXT:      EMIT ir<%add> = add vp<[[VP8]]>, ir<1>, ir<%cmp>
-; CHECK-NEXT:      EMIT ir<%gep.b> = getelementptr inbounds ir<%b>, ir<%iv>
+; CHECK-NEXT:      EMIT-SCALAR ir<%gep.b> = getelementptr inbounds i32, ir<%b>, ir<%iv>
 ; CHECK-NEXT:      vp<[[VP9:%[0-9]+]]> = vector-end-pointer inbounds i32, ir<%gep.b>, vp<[[VP0]]>
 ; CHECK-NEXT:      EMIT vp<[[VP10:%[0-9]+]]> = reverse ir<%cmp>
 ; CHECK-NEXT:      EMIT vp<[[VP11:%[0-9]+]]> = reverse ir<%add>
