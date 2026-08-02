@@ -127,6 +127,10 @@ public:
     return reinterpret_cast<const CXXRecordDecl **>(
         this->allocate(Length * sizeof(CXXRecordDecl *)));
   }
+  PointerPathEntry *allocPointerPath(unsigned Length) {
+    return reinterpret_cast<PointerPathEntry *>(
+        this->allocate(Length * sizeof(PointerPathEntry)));
+  }
 
   /// Note that a step has been executed. If there are no more steps remaining,
   /// diagnoses and returns \c false.

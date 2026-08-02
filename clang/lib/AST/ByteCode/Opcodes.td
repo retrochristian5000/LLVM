@@ -564,6 +564,7 @@ class LoadOpcode : Opcode {
 def Load : LoadOpcode {}
 // [Pointer] -> [Value]
 def LoadPop : LoadOpcode {}
+def LoadPopL : Opcode {}
 
 class StoreOpcode : Opcode {
   let Types = [AllTypeClass];
@@ -617,6 +618,11 @@ def AddOffset : Opcode {
   let Types = [IntegralTypeClass];
   let HasGroup = 1;
 }
+
+def GetOpaquePtr : SuccessOpcode {
+  let Args = [ArgValueDecl];
+}
+
 // [Pointer, Integral] -> [Pointer]
 def SubOffset : Opcode {
   let Types = [IntegralTypeClass];

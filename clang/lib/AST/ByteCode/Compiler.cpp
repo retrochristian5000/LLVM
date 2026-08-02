@@ -453,8 +453,12 @@ bool Compiler<Emitter>::VisitCastExpr(const CastExpr *E) {
 
   switch (E->getCastKind()) {
   case CK_LValueToRValue: {
-    if (ToLValue && E->getType()->isPointerType())
-      return this->delegate(SubExpr);
+    if (ToLValue && E->getType()->isPointerType()) {
+      assert(!DiscardResult);
+      if (!this->visit(SubExpr))
+        return false;
+      return this->emitLoadPopL(E);
+    }
 
     if (SubExpr->getType().isVolatileQualified())
       return this->emitInvalidCast(CastKind::Volatile, /*Fatal=*/true, E);
@@ -8706,8 +8710,13 @@ bool Compiler<Emitter>::emitDestructionPop(const Descriptor *Desc,
 template <class Emitter>
 bool Compiler<Emitter>::emitDummyPtr(const DeclTy &D, const Expr *E, bool CU) {
   assert(!DiscardResult && "Should've been checked before");
-  unsigned DummyID = P.getOrCreateDummy(D, CU);
 
+  if (ToLValue) {
+    if (auto *VD = dyn_cast_if_present<ValueDecl>(D.dyn_cast<const Decl *>()))
+      return this->emitGetOpaquePtr(VD, E);
+  }
+
+  unsigned DummyID = P.getOrCreateDummy(D, CU);
   if (!this->emitGetPtrGlobal(DummyID, E))
     return false;
   if (E->getType()->isVoidType())

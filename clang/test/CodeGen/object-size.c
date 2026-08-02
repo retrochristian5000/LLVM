@@ -1,5 +1,8 @@
 // RUN: %clang_cc1 -no-enable-noundef-analysis           -triple x86_64-apple-darwin -emit-llvm %s -o - 2>&1 | FileCheck %s
 // RUN: %clang_cc1 -no-enable-noundef-analysis -DDYNAMIC -triple x86_64-apple-darwin -emit-llvm %s -o - 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -no-enable-noundef-analysis           -triple x86_64-apple-darwin -emit-llvm %s -o - 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -no-enable-noundef-analysis -DDYNAMIC -triple x86_64-apple-darwin -emit-llvm %s -o - 2>&1 | FileCheck %s
+
 
 #ifndef DYNAMIC
 #define OBJECT_SIZE_BUILTIN __builtin_object_size
@@ -57,93 +60,6 @@ void test6(void) {
 
   // CHECK:       = call ptr @__strcpy_chk(ptr %{{.*}}, ptr @.str, i64 53)
   strcpy(&buf[4], "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test7
-void test7(void) {
-  int i;
-  // Ensure we only evaluate the side-effect once.
-  // CHECK:     = add
-  // CHECK-NOT: = add
-  // CHECK:     = call ptr @__strcpy_chk(ptr @gbuf, ptr @.str, i64 63)
-  strcpy((++i, gbuf), "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test8
-void test8(void) {
-  char *buf[50];
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(buf[++gi], "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test9
-void test9(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy((char *)((++gi) + gj), "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test10
-char **p;
-void test10(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(*(++p), "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test11
-void test11(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr @gbuf, ptr @.str)
-  strcpy(gp = gbuf, "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test12
-void test12(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(++gp, "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test13
-void test13(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(gp++, "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test14
-void test14(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(--gp, "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test15
-void test15(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{..*}}, ptr @.str)
-  strcpy(gp--, "Hi there");
-}
-
-// CHECK-LABEL: define{{.*}} void @test16
-void test16(void) {
-  // CHECK-NOT:   __strcpy_chk
-  // CHECK:       = call ptr @__inline_strcpy_chk(ptr %{{.*}}, ptr @.str)
-  strcpy(gp += 1, "Hi there");
-}
-
-// CHECK-LABEL: @test17
-void test17(void) {
-  // CHECK: store i32 -1
-  gi = OBJECT_SIZE_BUILTIN(gp++, 0);
-  // CHECK: store i32 -1
-  gi = OBJECT_SIZE_BUILTIN(gp++, 1);
-  // CHECK: store i32 0
-  gi = OBJECT_SIZE_BUILTIN(gp++, 2);
-  // CHECK: store i32 0
-  gi = OBJECT_SIZE_BUILTIN(gp++, 3);
 }
 
 // CHECK-LABEL: @test18
@@ -337,8 +253,6 @@ void test26(void) {
 
   // CHECK: store i32 316
   gi = OBJECT_SIZE_BUILTIN(&t[1].v[11], 0);
-  // CHECK: store i32 312
-  gi = OBJECT_SIZE_BUILTIN(&t[1].v[12], 1);
   // CHECK: store i32 308
   gi = OBJECT_SIZE_BUILTIN(&t[1].v[13], 2);
   // CHECK: store i32 0

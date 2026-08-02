@@ -23001,7 +23001,10 @@ std::optional<uint64_t> Expr::tryEvaluateObjectSize(const ASTContext &Ctx,
   Expr::EvalStatus Status;
   EvalInfo Info(Ctx, Status, EvaluationMode::ConstantFold);
   if (Info.EnableNewConstInterp)
-    return Info.Ctx.getInterpContext().tryEvaluateObjectSize(Info, this, Type);
+    return Info.Ctx.getInterpContext().tryEvaluateObjectSize(
+        Info, this, Type,
+        /*IsDynamic=*/false);
+
   return tryEvaluateBuiltinObjectSize(this, Type, Info);
 }
 

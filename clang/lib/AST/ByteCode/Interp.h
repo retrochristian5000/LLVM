@@ -2252,6 +2252,40 @@ bool LoadPop(InterpState &S, CodePtr OpPC) {
   return true;
 }
 
+/// Like LoadPop above, but if any of the checks fail, we
+/// turn the pointer into an opaque pointer of appropriate type.
+inline bool LoadPopL(InterpState &S, CodePtr OpPC) {
+  const Pointer &Ptr = S.Stk.pop<Pointer>();
+  auto P = S.getEvalStatus().Diag;
+  S.getEvalStatus().Diag = nullptr;
+
+  bool Failed = false;
+  if (!CheckLoad(S, OpPC, Ptr))
+    Failed = true;
+  if (!Ptr.isBlockPointer())
+    Failed = true;
+  if (!Ptr.canDeref(PT_Ptr))
+    Failed = true;
+  S.getEvalStatus().Diag = P;
+
+  if (Failed) {
+    if (Ptr.isOpaquePointer()) {
+      QualType T = Ptr.getType();
+      if (T->isPointerType())
+        T = T->getPointeeType();
+      S.Stk.push<Pointer>(OpaqueTag{}, Ptr.asOpaquePointer().Base,
+                          T.getTypePtr());
+    } else {
+      S.Stk.push<Pointer>(OpaqueTag{}, Ptr.getDeclDesc()->asValueDecl(),
+                          Ptr.getType()->getPointeeType().getTypePtr());
+    }
+
+  } else {
+    S.Stk.push<Pointer>(Ptr.deref<Pointer>());
+  }
+  return true;
+}
+
 template <PrimType Name, class T = typename PrimConv<Name>::T>
 bool Store(InterpState &S, CodePtr OpPC) {
   const T &Value = S.Stk.pop<T>();
@@ -2646,10 +2680,16 @@ std::optional<Pointer> OffsetHelper(InterpState &S, CodePtr OpPC,
   return Ptr.atIndex(static_cast<uint64_t>(Result));
 }
 
+bool addSubOffsetOpaque(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
+                        uint64_t Offset, bool Add);
 template <PrimType Name, class T = typename PrimConv<Name>::T>
 bool AddOffset(InterpState &S, CodePtr OpPC) {
   const T &Offset = S.Stk.pop<T>();
   const Pointer &Ptr = S.Stk.pop<Pointer>().expand();
+
+  if (Ptr.isOpaquePointer())
+    return addSubOffsetOpaque(S, OpPC, Ptr, static_cast<uint64_t>(Offset),
+                              /*Add=*/true);
 
   if (std::optional<Pointer> Result = OffsetHelper<T, ArithOp::Add>(
           S, OpPC, Offset, Ptr, /*IsPointerArith=*/true)) {
@@ -2664,12 +2704,21 @@ bool SubOffset(InterpState &S, CodePtr OpPC) {
   const T &Offset = S.Stk.pop<T>();
   const Pointer &Ptr = S.Stk.pop<Pointer>().expand();
 
+  if (Ptr.isOpaquePointer())
+    return addSubOffsetOpaque(S, OpPC, Ptr, static_cast<uint64_t>(Offset),
+                              /*Add=*/false);
+
   if (std::optional<Pointer> Result = OffsetHelper<T, ArithOp::Sub>(
           S, OpPC, Offset, Ptr, /*IsPointerArith=*/true)) {
     S.Stk.push<Pointer>(Result->narrow());
     return true;
   }
   return false;
+}
+
+inline bool GetOpaquePtr(InterpState &S, const ValueDecl *VD) {
+  S.Stk.push<Pointer>(OpaqueTag{}, VD);
+  return true;
 }
 
 template <ArithOp Op>
@@ -3432,6 +3481,42 @@ inline bool ExpandPtr(InterpState &S) {
   return true;
 }
 
+bool arrayElemPtrOpaque(InterpState &S, CodePtr OpPC, const OpaquePointer &OP,
+                        uint64_t Offset);
+
+// Implementation for ArrayElemPtr and ArrayElemPtrPop ops.
+template <typename T>
+inline bool arrayElemPtr(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
+                         const T &Offset) {
+  if (Ptr.isOpaquePointer())
+    return arrayElemPtrOpaque(S, OpPC, Ptr.asOpaquePointer(),
+                              static_cast<int64_t>(Offset));
+
+  if (!Ptr.isZero() && !Offset.isZero()) {
+    if (!CheckArray(S, OpPC, Ptr))
+      return false;
+  }
+
+  if (Offset.isZero()) {
+    if (const Descriptor *Desc = Ptr.getFieldDesc();
+        Desc && Desc->isArray() && Ptr.getIndex() == 0) {
+      S.Stk.push<Pointer>(Ptr.atIndex(0).narrow());
+      return true;
+    }
+    S.Stk.push<Pointer>(Ptr.narrow());
+    return true;
+  }
+
+  assert(!Offset.isZero());
+
+  if (std::optional<Pointer> Result =
+          OffsetHelper<T, ArithOp::Add>(S, OpPC, Offset, Ptr)) {
+    S.Stk.push<Pointer>(Result->narrow());
+    return true;
+  }
+  return false;
+}
+
 // 1) Pops an integral value from the stack
 // 2) Peeks a pointer
 // 3) Pushes a new pointer that's a narrowed array
@@ -3445,30 +3530,7 @@ inline bool ArrayElemPtr(InterpState &S, CodePtr OpPC) {
   const T &Offset = S.Stk.pop<T>();
   const Pointer &Ptr = S.Stk.peek<Pointer>();
 
-  if (!Ptr.isZero() && !Offset.isZero()) {
-    if (!CheckArray(S, OpPC, Ptr))
-      return false;
-  }
-
-  if (Offset.isZero()) {
-    if (const Descriptor *Desc = Ptr.getFieldDesc();
-        Desc && Desc->isArray() && Ptr.getIndex() == 0) {
-      S.Stk.push<Pointer>(Ptr.atIndex(0).narrow());
-      return true;
-    }
-    S.Stk.push<Pointer>(Ptr.narrow());
-    return true;
-  }
-
-  assert(!Offset.isZero());
-
-  if (std::optional<Pointer> Result =
-          OffsetHelper<T, ArithOp::Add>(S, OpPC, Offset, Ptr)) {
-    S.Stk.push<Pointer>(Result->narrow());
-    return true;
-  }
-
-  return false;
+  return arrayElemPtr<T>(S, OpPC, Ptr, Offset);
 }
 
 template <PrimType Name, class T = typename PrimConv<Name>::T>
@@ -3476,29 +3538,7 @@ inline bool ArrayElemPtrPop(InterpState &S, CodePtr OpPC) {
   const T &Offset = S.Stk.pop<T>();
   const Pointer &Ptr = S.Stk.pop<Pointer>();
 
-  if (!Ptr.isZero() && !Offset.isZero()) {
-    if (!CheckArray(S, OpPC, Ptr))
-      return false;
-  }
-
-  if (Offset.isZero()) {
-    if (const Descriptor *Desc = Ptr.getFieldDesc();
-        Desc && Desc->isArray() && Ptr.getIndex() == 0) {
-      S.Stk.push<Pointer>(Ptr.atIndex(0).narrow());
-      return true;
-    }
-    S.Stk.push<Pointer>(Ptr.narrow());
-    return true;
-  }
-
-  assert(!Offset.isZero());
-
-  if (std::optional<Pointer> Result =
-          OffsetHelper<T, ArithOp::Add>(S, OpPC, Offset, Ptr)) {
-    S.Stk.push<Pointer>(Result->narrow());
-    return true;
-  }
-  return false;
+  return arrayElemPtr<T>(S, OpPC, Ptr, Offset);
 }
 
 template <PrimType Name, class T = typename PrimConv<Name>::T>
@@ -3568,6 +3608,11 @@ inline bool ArrayDecay(InterpState &S, CodePtr OpPC) {
   if (!Ptr.isZeroSizeArray()) {
     if (!CheckRange(S, OpPC, Ptr, CSK_ArrayToPointer))
       return false;
+  }
+
+  if (Ptr.isOpaquePointer()) {
+    S.Stk.push<Pointer>(Ptr);
+    return true;
   }
 
   if (Ptr.isRoot() || !Ptr.isUnknownSizeArray()) {

@@ -50,7 +50,7 @@ size_t strnlen(const char *s, size_t maxlen)
                            "chosen when 'maxlen' is known to be less than or equal to the buffer size")))
   __asm__("strnlen_real2");
 
-size_t strnlen(const char *s, size_t maxlen) // ref-note {{'strnlen' has been explicitly marked unavailable here}}
+size_t strnlen(const char *s, size_t maxlen) // both-note {{'strnlen' has been explicitly marked unavailable here}}
   __attribute__((overloadable))
   __attribute__((enable_if(__builtin_object_size(s, 0) != -1,
                            "chosen when target buffer size is known")))
@@ -70,7 +70,7 @@ void test2(const char *s, int i) {
   strnlen(c, i);
 // CHECK: call {{.*}}strnlen_chk
 #ifndef CODEGEN
-  strnlen(c, 999);  // ref-error{{'strnlen' is unavailable: 'maxlen' is larger than the buffer size}}
+  strnlen(c, 999);  // both-error{{'strnlen' is unavailable: 'maxlen' is larger than the buffer size}}
 #endif
 }
 
