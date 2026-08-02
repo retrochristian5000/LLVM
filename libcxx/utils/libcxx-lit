@@ -41,9 +41,13 @@ fi
 build_dir="${1}"
 shift
 
+if [ -z ${CMAKE+x} ]; then
+    CMAKE=cmake
+fi
+
 if [[ "${type}" == "runtimes" ]]; then
         echo "N.B.: In a bootstrap build, lit needs a prefix to work correctly;"
         echo "      See libcxx/docs/Testinglibcxx.rst for more information."
 fi
-cmake --build "${build_dir}" --target ${type}-test-depends
+"${CMAKE}" --build "${build_dir}" --target ${type}-test-depends
 "${build_dir}/bin/llvm-lit" ${@}
