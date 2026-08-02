@@ -40,6 +40,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <cassert>
 #include <optional>
@@ -94,6 +95,7 @@ STATISTIC(NumSMinMax,
 STATISTIC(NumUDivURemsNarrowedExpanded,
           "Number of bound udiv's/urem's expanded");
 STATISTIC(NumNNeg, "Number of zext/uitofp non-negative deductions");
+STATISTIC(NumMemSetsGuarded, "Number of memsets guarded for a zero length");
 
 static Constant *getConstantAt(Value *V, Instruction *At, LazyValueInfo *LVI) {
   if (Constant *C = LVI->getConstant(V, At))
@@ -680,6 +682,22 @@ static bool processSaturatingInst(SaturatingInst *SI, LazyValueInfo *LVI) {
   return true;
 }
 
+// Return the nonzero length when MI's length is known to be in [0, 1].
+// Return nullptr for constants and for ranges containing any other value.
+static ConstantInt *getMemSetNonZeroLength(MemSetInst *MI, LazyValueInfo *LVI) {
+  Value *Len = MI->getLength();
+  auto *LenTy = dyn_cast<IntegerType>(Len->getType());
+  if (!LenTy || isa<ConstantInt>(Len))
+    return nullptr;
+
+  ConstantRange Range = LVI->getConstantRangeAtUse(MI->getArgOperandUse(2),
+                                                   /*UndefAllowed=*/false);
+  if (!Range.getUnsignedMin().isZero() || !Range.getUnsignedMax().isOne())
+    return nullptr;
+
+  return ConstantInt::get(LenTy, 1);
+}
+
 /// Infer nonnull attributes for the arguments at the specified callsite.
 static bool processCallSite(CallBase &CB, LazyValueInfo *LVI) {
 
@@ -1264,6 +1282,7 @@ static bool processTrunc(TruncInst *TI, LazyValueInfo *LVI) {
 static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
                     const SimplifyQuery &SQ) {
   bool FnChanged = false;
+  SmallVector<std::pair<MemSetInst *, ConstantInt *>, 4> MemSetsToGuard;
   std::optional<ConstantRange> RetRange;
   if (F.hasExactDefinition() && F.getReturnType()->isIntOrIntVectorTy())
     RetRange =
@@ -1290,6 +1309,9 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
         break;
       case Instruction::Call:
       case Instruction::Invoke:
+        if (auto *MI = dyn_cast<MemSetInst>(&II))
+          if (ConstantInt *NonZeroLen = getMemSetNonZeroLength(MI, LVI))
+            MemSetsToGuard.emplace_back(MI, NonZeroLen);
         BBChanged |= processCallSite(cast<CallBase>(II), LVI);
         break;
       case Instruction::SRem:
@@ -1357,6 +1379,26 @@ static bool runImpl(Function &F, LazyValueInfo *LVI, DominatorTree *DT,
     }
 
     FnChanged |= BBChanged;
+  }
+
+  // Query all ranges before changing the CFG.  LVI is not used after this
+  // point while the dominator tree is updated for each inserted guard.
+  if (!MemSetsToGuard.empty()) {
+    DomTreeUpdater DTU(*DT, DomTreeUpdater::UpdateStrategy::Lazy);
+    for (auto [MI, NonZeroLen] : MemSetsToGuard) {
+      IRBuilder<> B(MI);
+      B.SetCurrentDebugLocation(MI->getDebugLoc());
+      Value *IsNonZero = B.CreateICmpNE(
+          MI->getLength(), ConstantInt::get(MI->getLength()->getType(), 0),
+          "memset.notzero");
+      Instruction *ThenTerm = SplitBlockAndInsertIfThen(
+          IsNonZero, MI->getIterator(), /*Unreachable=*/false,
+          /*BranchWeights=*/nullptr, &DTU);
+      MI->moveBefore(ThenTerm);
+      MI->setLength(NonZeroLen);
+      ++NumMemSetsGuarded;
+    }
+    FnChanged = true;
   }
 
   // Infer range attribute on return value.
