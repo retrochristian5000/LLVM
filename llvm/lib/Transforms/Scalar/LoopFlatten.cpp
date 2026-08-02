@@ -929,8 +929,11 @@ static bool FlattenLoopPair(FlattenInfo &FI, DominatorTree *DT, LoopInfo *LI,
   // 'RepeatedInstructionThreshold' is set to only 2, which can probably be
   // relaxed. Because this is making a code change (the IV widening, but not
   // the flattening), we return true here.
-  if (FI.Widened && !CanFlatten)
+  if (FI.Widened && !CanFlatten) {
+    SE->forgetLoop(FI.OuterLoop);
+    SE->forgetBlockAndLoopDispositions();
     return true;
+  }
 
   // If we have widened and can perform the transformation, do that here.
   if (CanFlatten)
