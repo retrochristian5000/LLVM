@@ -1379,6 +1379,9 @@ void collectEnclosingConstructTraits(
   for (; op; op = op->getParentOp()) {
     if (mlir::isa<mlir::omp::WsloopOp>(op))
       constructTraits.push_back(llvm::omp::TraitProperty::construct_for_for);
+    if (mlir::isa<mlir::omp::DispatchOp>(op))
+      constructTraits.push_back(
+          llvm::omp::TraitProperty::construct_dispatch_dispatch);
     if (mlir::isa<mlir::omp::ParallelOp>(op))
       constructTraits.push_back(
           llvm::omp::TraitProperty::construct_parallel_parallel);
@@ -1445,6 +1448,15 @@ resolveDeclareVariantCallee(const semantics::Symbol &base,
   if (bestIdx < 0)
     return nullptr;
   return variants[bestIdx];
+}
+
+mlir::Value getEnclosingDispatchNovariants(mlir::OpBuilder &builder) {
+  mlir::Block *block = builder.getInsertionBlock();
+  for (mlir::Operation *op = block ? block->getParentOp() : nullptr; op;
+       op = op->getParentOp())
+    if (auto dispatch = mlir::dyn_cast<mlir::omp::DispatchOp>(op))
+      return dispatch.getNovariants();
+  return {};
 }
 
 } // namespace omp
