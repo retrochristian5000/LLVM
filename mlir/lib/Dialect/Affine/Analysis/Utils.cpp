@@ -91,9 +91,8 @@ static bool mayHaveEffect(Operation *op, Value memref) {
   return llvm::is_contained(values, canonicalizeMemref(memref));
 }
 
-// LoopNestStateCollector walks loop nests and collects load and store
-// operations, and whether or not a region holding op other than ForOp and IfOp
-// was encountered in the loop nest.
+// LoopNestStateCollector walks loop nests and collects affine and non-affine
+// memory operations.
 void LoopNestStateCollector::collect(Operation *opToWalk) {
   opToWalk->walk([&](Operation *op) {
     if (auto forOp = dyn_cast<AffineForOp>(op)) {
