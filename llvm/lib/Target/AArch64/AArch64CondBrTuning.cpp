@@ -96,7 +96,14 @@ MachineInstr *AArch64CondBrTuning::convertToFlagSetting(MachineInstr &MI,
   }
   unsigned NewOpc = TII->convertToFlagSettingOpc(MI.getOpcode());
   Register NewDestReg = MI.getOperand(0).getReg();
-  if (MRI->hasOneNonDBGUse(MI.getOperand(0).getReg()))
+
+  // If the value computed isn't used apart from testing it via the flags, we
+  // can compute it in a zero register. However this isn't safe if the
+  // instruction has a frame index operand: that can expand later into multiple
+  // instructions, potentially illegal and calculating the wrong value.
+  if (MRI->hasOneNonDBGUse(MI.getOperand(0).getReg()) &&
+      !any_of(MI.operands(),
+              [](const MachineOperand &Op) { return Op.isFI(); }))
     NewDestReg = Is64Bit ? AArch64::XZR : AArch64::WZR;
 
   MachineInstrBuilder MIB = BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
