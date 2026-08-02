@@ -1483,6 +1483,11 @@ module std {
     export *
   }
 
+  module generator {
+    header "generator"
+    export *
+  }
+
   module iomanip {
     header "iomanip"
     export *

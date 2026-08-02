@@ -45,6 +45,8 @@ Implemented Papers
 - P3961R1: Less double indirection in ``function_ref`` (RU-220) (`Github <https://llvm.org/PR189606>`__)
 - P1901R2: Enabling the Use of ``weak_ptr`` as Keys in Unordered Associative Containers (`Github <https://llvm.org/PR105372>`__)
 - P0528R3: The Curious Case of Padding Bits, Featuring Atomic Compare-and-Exchange (`Github <https://llvm.org/PR76180>`__)
+- P2502R2: ``std::generator``: Synchronous Coroutine Generator for Ranges (`Github <https://llvm.org/PR105226>`__)
+- P2787R1: ``pmr::generator`` - Promise Types are not Values (`Github <https://llvm.org/PR105263>`__)
 
 Improvements and New Features
 -----------------------------
