@@ -114,6 +114,10 @@ public:
   }
 
 private:
+  const char *getTargetCPUFeatures() const noexcept {
+    return BI.processInfo().targetCPUFeatures().c_str();
+  }
+
   uint64_t getPageSize() const noexcept { return BI.processInfo().pageSize(); }
 
   static uint64_t getPageSizeEntry(void *BIA) noexcept {

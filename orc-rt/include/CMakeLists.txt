@@ -32,6 +32,8 @@ set(ORC_RT_HEADERS
     orc-rt/SimplePackedSerialization.h
     orc-rt/SimpleSymbolTable.h
     orc-rt/StandaloneMachOUnwindInfoRegistrar.h
+    orc-rt/StringExtras.h
+    orc-rt/TargetDetails.h
     orc-rt/TaskGroup.h
     orc-rt/ThreadPoolRunner.h
     orc-rt/WrapperFunction.h
