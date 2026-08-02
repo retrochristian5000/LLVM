@@ -137,8 +137,10 @@ public:
   void WillPublicStop() override;
 
   // Process Memory
-  size_t DoReadMemory(lldb::addr_t addr, void *buf, size_t size,
-                      Status &error) override;
+  size_t DoReadMemory(const ProcessAddress &process_addr, void *buf,
+                      size_t size, Status &error) override;
+
+  void DoResolveAddressSpaces() override;
 
   /// Override of DoReadMemoryRanges that uses MultiMemRead to perform this
   /// operation in a single packet.

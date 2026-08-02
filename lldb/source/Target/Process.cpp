@@ -2031,52 +2031,29 @@ Status Process::DisableSoftwareBreakpoint(BreakpointSite *bp_site) {
   return error;
 }
 
-// Uncomment to verify memory caching works after making changes to caching
-// code
-//#define VERIFY_MEMORY_READS
+size_t Process::ReadMemory(const ProcessAddress &process_addr, void *buf,
+                           size_t size, Status &error) {
+  error.Clear();
 
-size_t Process::ReadMemory(addr_t addr, void *buf, size_t size, Status &error) {
+  // Non-default address spaces bypass the (flat) memory cache and go straight
+  // to the process plugin.
+  if (!process_addr.IsInDefaultAddressSpace()) {
+    llvm::Expected<AddressSpaceInfo> info =
+        GetAddressSpaceInfo(process_addr.GetAddressSpace());
+    if (!info) {
+      error = Status::FromError(info.takeError());
+      return 0;
+    }
+    return DoReadMemory(process_addr, buf, size, error);
+  }
+
+  lldb::addr_t addr = process_addr.GetValue();
   if (ABISP abi_sp = GetABI())
     addr = abi_sp->FixAnyAddress(addr);
 
-  error.Clear();
-  if (!GetDisableMemoryCache()) {
-#if defined(VERIFY_MEMORY_READS)
-    // Memory caching is enabled, with debug verification
-
-    if (buf && size) {
-      // Uncomment the line below to make sure memory caching is working.
-      // I ran this through the test suite and got no assertions, so I am
-      // pretty confident this is working well. If any changes are made to
-      // memory caching, uncomment the line below and test your changes!
-
-      // Verify all memory reads by using the cache first, then redundantly
-      // reading the same memory from the inferior and comparing to make sure
-      // everything is exactly the same.
-      std::string verify_buf(size, '\0');
-      assert(verify_buf.size() == size);
-      const size_t cache_bytes_read =
-          m_memory_cache.Read(this, addr, buf, size, error);
-      Status verify_error;
-      const size_t verify_bytes_read =
-          ReadMemoryFromInferior(addr, const_cast<char *>(verify_buf.data()),
-                                 verify_buf.size(), verify_error);
-      assert(cache_bytes_read == verify_bytes_read);
-      assert(memcmp(buf, verify_buf.data(), verify_buf.size()) == 0);
-      assert(verify_error.Success() == error.Success());
-      return cache_bytes_read;
-    }
-    return 0;
-#else  // !defined(VERIFY_MEMORY_READS)
-    // Memory caching is enabled, without debug verification
-
+  if (!GetDisableMemoryCache())
     return m_memory_cache.Read(addr, buf, size, error);
-#endif // defined (VERIFY_MEMORY_READS)
-  } else {
-    // Memory caching is disabled
-
-    return ReadMemoryFromInferior(addr, buf, size, error);
-  }
+  return ReadMemoryFromInferior(addr, buf, size, error);
 }
 
 llvm::SmallVector<llvm::MutableArrayRef<uint8_t>>
@@ -7102,4 +7079,56 @@ void Process::SetAddressableBitMasks(AddressableBits bit_masks) {
     SetHighmemCodeAddressMask(high_addr_mask);
     SetHighmemDataAddressMask(high_addr_mask);
   }
+}
+
+void Process::ResolveAddressSpaces() {
+  llvm::call_once(m_address_spaces_resolved,
+                  [this] { DoResolveAddressSpaces(); });
+}
+
+llvm::Expected<AddressSpaceInfo>
+Process::GetAddressSpaceInfo(llvm::StringRef address_space_name) {
+  ResolveAddressSpaces();
+  if (m_address_spaces.empty())
+    return llvm::createStringError("process doesn't support address spaces");
+
+  for (const auto &address_space_info : m_address_spaces) {
+    if (address_space_info.name == address_space_name.str())
+      return address_space_info;
+  }
+
+  std::string error_str("invalid address space \"");
+  error_str.append(address_space_name.str());
+  error_str.append("\", address space must be one of:");
+  bool first = true;
+  for (const auto &addr_space_info : m_address_spaces) {
+    if (!first)
+      error_str.append(",");
+    error_str.append(" \"");
+    error_str.append(addr_space_info.name);
+    error_str.append("\"");
+    first = false;
+  }
+  return llvm::createStringError(error_str.c_str());
+}
+
+llvm::Expected<AddressSpaceInfo>
+Process::GetAddressSpaceInfo(uint64_t address_space_id) {
+  ResolveAddressSpaces();
+  if (m_address_spaces.empty())
+    return llvm::createStringError("process doesn't support address spaces");
+
+  for (const auto &address_space_info : m_address_spaces) {
+    if (address_space_info.value == address_space_id)
+      return address_space_info;
+  }
+
+  std::string error_str("invalid address space id, valid ids are:");
+  bool first = true;
+  for (const auto &addr_space_info : m_address_spaces) {
+    error_str.append(first ? " " : ", ");
+    error_str.append(std::to_string(addr_space_info.value));
+    first = false;
+  }
+  return llvm::createStringError(error_str.c_str());
 }

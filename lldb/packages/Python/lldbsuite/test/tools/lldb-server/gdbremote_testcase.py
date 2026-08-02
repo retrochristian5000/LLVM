@@ -932,6 +932,7 @@ class GdbRemoteTestCaseBase(Base, metaclass=GdbRemoteTestCaseFactory):
         "PacketSize",
         "QStartNoAckMode",
         "QThreadSuffixSupported",
+        "address-spaces",
         "QListThreadsInStopReply",
         "qXfer:auxv:read",
         "qXfer:libraries:read",

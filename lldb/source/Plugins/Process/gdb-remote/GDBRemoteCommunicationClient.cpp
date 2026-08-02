@@ -384,6 +384,7 @@ void GDBRemoteCommunicationClient::ResetDiscoverableSettings(bool did_exec) {
     m_attach_or_wait_reply = eLazyBoolCalculate;
     m_avoid_g_packets = eLazyBoolCalculate;
     m_supports_multiprocess = eLazyBoolCalculate;
+    m_supports_address_spaces = false;
     m_supports_qSaveCore = eLazyBoolCalculate;
     m_supports_qXfer_auxv_read = eLazyBoolCalculate;
     m_supports_qXfer_libraries_read = eLazyBoolCalculate;
@@ -451,6 +452,7 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
   m_supports_QPassSignals = eLazyBoolNo;
   m_supports_memory_tagging = eLazyBoolNo;
   m_supports_qSaveCore = eLazyBoolNo;
+  m_supports_address_spaces = false;
   m_uses_native_signals = eLazyBoolNo;
   m_x_packet_state.reset();
   m_supports_reverse_continue = eLazyBoolNo;
@@ -511,6 +513,8 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
         m_supports_memory_tagging = eLazyBoolYes;
       else if (x == "qSaveCore+")
         m_supports_qSaveCore = eLazyBoolYes;
+      else if (x == "address-spaces+")
+        m_supports_address_spaces = true;
       else if (x == "native-signals+")
         m_uses_native_signals = eLazyBoolYes;
       else if (x == "binary-upload+")
@@ -1158,6 +1162,35 @@ GDBRemoteCommunicationClient::GetProcessStandaloneBinaries() {
   if (m_qProcessInfo_is_valid == eLazyBoolCalculate)
     GetCurrentProcessInfo();
   return m_binary_addresses;
+}
+
+std::vector<AddressSpaceInfo> GDBRemoteCommunicationClient::GetAddressSpaces() {
+  if (!m_supports_address_spaces)
+    return {};
+
+  StringExtractorGDBRemote response;
+  response.SetResponseValidatorToJSON();
+  if (SendPacketAndWaitForResponse("jAddressSpacesInfo", response) !=
+      PacketResult::Success)
+    return {};
+
+  if (response.IsUnsupportedResponse() || response.IsErrorResponse()) {
+    m_supports_address_spaces = false;
+    return {};
+  }
+
+  llvm::Expected<std::vector<AddressSpaceInfo>> info =
+      llvm::json::parse<std::vector<AddressSpaceInfo>>(response.Peek(),
+                                                       "AddressSpaceInfo");
+  if (info)
+    return std::move(*info);
+
+  // Log the full response and parse error rather than surfacing it.
+  Log *log = GetLog(GDBRLog::Process);
+  LLDB_LOG_ERROR(log, info.takeError(),
+                 "malformed jAddressSpacesInfo response '{1}': {0}",
+                 response.GetStringRef());
+  return {};
 }
 
 bool GDBRemoteCommunicationClient::GetGDBServerVersion() {

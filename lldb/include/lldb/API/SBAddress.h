@@ -130,6 +130,33 @@ private:
 bool LLDB_API operator==(const SBAddress &lhs, const SBAddress &rhs);
 #endif
 
+/// A memory address that can name a non-default address space (see
+/// lldb_private::ProcessAddress).
+class LLDB_API SBProcessAddress {
+public:
+  SBProcessAddress(const SBProcessAddress &rhs);
+
+  /// A load address in the default address space.
+  SBProcessAddress(lldb::addr_t load_addr);
+
+  /// An address in the address space with the given id (0 = default).
+  SBProcessAddress(lldb::addr_t addr, uint64_t address_space_id);
+
+  ~SBProcessAddress();
+
+  const lldb::SBProcessAddress &operator=(const lldb::SBProcessAddress &rhs);
+
+protected:
+  friend class SBProcess;
+
+  lldb_private::ProcessAddress &ref();
+
+  const lldb_private::ProcessAddress &ref() const;
+
+private:
+  std::unique_ptr<lldb_private::ProcessAddress> m_opaque_up;
+};
+
 } // namespace lldb
 
 #endif // LLDB_API_SBADDRESS_H

@@ -20,6 +20,7 @@
 
 #include "lldb/Host/File.h"
 #include "lldb/Utility/AcceleratorGDBRemotePackets.h"
+#include "lldb/Utility/AddressSpace.h"
 #include "lldb/Utility/AddressableBits.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/GDBRemote.h"
@@ -34,6 +35,7 @@
 #include "llvm/Support/VersionTuple.h"
 
 namespace lldb_private {
+
 namespace process_gdb_remote {
 
 /// The offsets used by the target when relocating the executable. Decoded from
@@ -222,6 +224,13 @@ public:
                                   bool &value_is_offset);
 
   std::vector<lldb::addr_t> GetProcessStandaloneBinaries();
+
+  /// Query the process for its address spaces via "jAddressSpacesInfo"; empty
+  /// if unsupported.
+  std::vector<AddressSpaceInfo> GetAddressSpaces();
+
+  /// Whether the server advertised address-space support ("address-spaces+").
+  bool GetAddressSpacesSupported() { return m_supports_address_spaces; }
 
   void GetRemoteQSupported();
 
@@ -606,6 +615,7 @@ protected:
   LazyBool m_supports_error_string_reply = eLazyBoolCalculate;
   LazyBool m_supports_multiprocess = eLazyBoolCalculate;
   LazyBool m_supports_memory_tagging = eLazyBoolCalculate;
+  bool m_supports_address_spaces = false;
   LazyBool m_supports_qSaveCore = eLazyBoolCalculate;
   LazyBool m_uses_native_signals = eLazyBoolCalculate;
   std::optional<xPacketState> m_x_packet_state;
