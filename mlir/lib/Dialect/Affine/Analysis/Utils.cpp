@@ -116,19 +116,14 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
     } else {
       auto memInterface = dyn_cast<MemoryEffectOpInterface>(op);
       if (!memInterface) {
-        if (!hasUnknownEffects(op))
+        SmallVector<Value> affectedValues;
+        if (getMayAffectedValues<MemoryEffects::Read>(op, affectedValues) &&
+            affectedValues.empty())
           return;
-        if (isa<CallOpInterface>(op)) {
-          // Calls may access memory not represented by explicit operands.
-          memrefLoads.push_back(op);
-          memrefStores.push_back(op);
-        } else if (llvm::any_of(op->getOperands(), [](Value value) {
-                     return isa<BaseMemRefType>(value.getType());
-                   })) {
-          // Conservatively, assume all memref operands are read and written.
-          memrefLoads.push_back(op);
-          memrefStores.push_back(op);
-        }
+        // Unknown calls may access memory not represented by explicit
+        // operands; other unknown operations reach here with memref operands.
+        memrefLoads.push_back(op);
+        memrefStores.push_back(op);
       } else {
         // Non-affine loads, stores, and frees. Allocation effects are
         // intentionally omitted: they do not access existing memory, and
