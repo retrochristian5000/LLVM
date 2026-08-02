@@ -364,7 +364,8 @@ func.func @same_memref_load_multiple_stores(%producer : memref<32xf32>, %produce
 #map = affine_map<()[s0] -> (s0 + 5)>
 #map1 = affine_map<()[s0] -> (s0 + 17)>
 
-// Test with non-int/float memref types.
+// Test with non-int/float memref types. The non-affine memref.load in the
+// consumer is not modeled by the affine slice analysis, so fusion is refused.
 
 // PRODUCER-CONSUMER-MAXIMAL-LABEL: func @memref_index_type
 func.func @memref_index_type() {
@@ -388,9 +389,12 @@ func.func @memref_index_type() {
     %7 = memref.load %alloc[%5, %6] : memref<8x18xf32>
     affine.store %7, %alloc_1[%arg3] : memref<3xf32>
   }
-  // Expect fusion.
+  // Do not fuse a candidate loop containing a non-affine memory effect.
   // PRODUCER-CONSUMER-MAXIMAL: affine.for
-  // PRODUCER-CONSUMER-MAXIMAL-NOT: affine.for
+  // PRODUCER-CONSUMER-MAXIMAL:   affine.store
+  // PRODUCER-CONSUMER-MAXIMAL: }
+  // PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+  // PRODUCER-CONSUMER-MAXIMAL:   memref.load
   // PRODUCER-CONSUMER-MAXIMAL: return
   return
 }

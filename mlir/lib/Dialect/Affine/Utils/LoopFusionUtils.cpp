@@ -194,12 +194,20 @@ gatherLoadsAndStores(AffineForOp forOp,
 // The fusion transformation clones the complete source loop body into the
 // destination schedule. The affine slice and dependence analysis below does
 // not model the order of non-affine memory effects within that schedule, so
-// keep such effects out of candidate loops until that analysis is extended.
+// keep representable effects out of candidate loops until that analysis is
+// extended. Unknown effects are rejected during MDG construction.
 static bool hasUnmodeledMemoryEffects(AffineForOp forOp) {
-  LoopNestStateCollector collector;
-  collector.collect(forOp);
-  return !collector.memrefLoads.empty() || !collector.memrefStores.empty() ||
-         !collector.memrefFrees.empty();
+  bool hasEffects = false;
+  forOp.walk([&](Operation *op) {
+    if (hasEffects || isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+      return;
+    if (!isa<MemoryEffectOpInterface>(op))
+      return;
+    hasEffects = hasEffect<MemoryEffects::Read>(op) ||
+                 hasEffect<MemoryEffects::Write>(op) ||
+                 hasEffect<MemoryEffects::Free>(op);
+  });
+  return hasEffects;
 }
 
 // Returns true when accesses in two loop bodies use different views of the
