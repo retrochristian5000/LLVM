@@ -8752,7 +8752,7 @@ define void @store_i16_stride7_vf64(ptr %in.vecptr0, ptr %in.vecptr1, ptr %in.ve
 ; SSE-NEXT:    movaps %xmm5, {{[-0-9]+}}(%r{{[sb]}}p) # 16-byte Spill
 ; SSE-NEXT:    unpcklpd {{[-0-9]+}}(%r{{[sb]}}p), %xmm9 # 16-byte Folded Reload
 ; SSE-NEXT:    # xmm9 = xmm9[0],mem[0]
-; SSE-NEXT:    movaps {{[-0-9]+}}(%r{{[sb]}}p), %xmm0 # 16-byte Reload
+; SSE-NEXT:    movaps -{{[0-9]+}}(%rsp), %xmm0
 ; SSE-NEXT:    shufps $212, {{[-0-9]+}}(%r{{[sb]}}p), %xmm0 # 16-byte Folded Reload
 ; SSE-NEXT:    # xmm0 = xmm0[0,1],mem[1,3]
 ; SSE-NEXT:    shufps {{.*#+}} xmm9 = xmm9[2,0],xmm0[0,2]
