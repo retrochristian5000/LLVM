@@ -101,8 +101,7 @@ public:
   void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const override;
-  llvm::StringRef
-  GetCXXStdlibName(const llvm::opt::ArgList &DriverArgs) const override;
+
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &DriverArgs,
       llvm::opt::ArgStringList &CC1Args) const override;
@@ -163,6 +162,21 @@ protected:
   Tool *buildAssembler() const override;
 
 private:
+  CXXStdlibType GetDefaultCXXStdlibType() const override {
+    return ToolChain::CST_Msstl;
+  }
+  RuntimeLibType GetDefaultRuntimeLibType() const override {
+    return ToolChain::RLT_Vcruntime;
+  }
+  UnwindLibType GetDefaultUnwindLibType() const override {
+    return ToolChain::UNW_Vcruntime;
+  }
+  void addMsstlIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                            llvm::opt::ArgStringList &CC1Args) const;
+  void addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                             llvm::opt::ArgStringList &CC1Args) const;
+  void addLibStdCXXIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                llvm::opt::ArgStringList &CC1Args) const;
   std::optional<llvm::StringRef> WinSdkDir, WinSdkVersion, WinSysRoot;
   std::string VCToolChainPath;
   llvm::ToolsetLayout VSLayout = llvm::ToolsetLayout::OlderVS;
