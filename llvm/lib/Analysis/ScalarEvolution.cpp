@@ -13538,8 +13538,10 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
   } else if (!NoWrap) {
     // Avoid proven overflow cases: this will ensure that the backedge taken
     // count will not generate any unsigned overflow.
-    if (canIVOverflowOnLT(RHS, Stride, IsSigned))
-      return getCouldNotCompute();
+    if (canIVOverflowOnLT(RHS, Stride, IsSigned)) {
+      if (!AllowPredicates)
+        return getCouldNotCompute();
+    }
   }
 
   // On all paths just preceeding, we established the following invariant:
@@ -13568,6 +13570,26 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
     RHS = getPtrToAddrExpr(RHS);
     if (isa<SCEVCouldNotCompute>(RHS))
       return RHS;
+  }
+
+  // Now that RHS has been converted to an integer type (if it was a pointer),
+  // we can safely build the overflow predicate.  SCEVComparePredicate requires
+  // both operands to have identical LLVM types, which is guaranteed here
+  // because getConstant(Limit) uses the same BitWidth as RHS->getType().
+  if (!NoWrap && canIVOverflowOnLT(OrigRHS, Stride, IsSigned)) {
+    unsigned BitWidth = getTypeSizeInBits(RHS->getType());
+    const SCEV *One = getOne(Stride->getType());
+    const SCEV *StrideMinusOne = getMinusSCEV(Stride, One);
+
+    APInt MaxStrideMinusOne = IsSigned ? getSignedRangeMax(StrideMinusOne)
+                                       : getUnsignedRangeMax(StrideMinusOne);
+    APInt Limit = (IsSigned ? APInt::getSignedMaxValue(BitWidth)
+                            : APInt::getMaxValue(BitWidth)) -
+                  MaxStrideMinusOne;
+
+    Predicates.push_back(
+        getComparePredicate(IsSigned ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE,
+                            RHS, getConstant(Limit)));
   }
 
   const SCEV *End = nullptr, *BECount = nullptr,
