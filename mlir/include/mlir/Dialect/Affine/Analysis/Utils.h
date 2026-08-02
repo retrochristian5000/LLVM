@@ -32,9 +32,8 @@ class AffineForOp;
 class AffineValueMap;
 struct MemRefAccess;
 
-// LoopNestStateCollector walks loop nests and collects load and store
-// operations, and whether or not a region holding op other than ForOp and IfOp
-// was encountered in the loop nest.
+// LoopNestStateCollector walks loop nests and collects affine and non-affine
+// memory operations.
 struct LoopNestStateCollector {
   SmallVector<AffineForOp, 4> forOps;
   // Affine loads.
@@ -48,8 +47,7 @@ struct LoopNestStateCollector {
   // Free operations.
   SmallVector<Operation *, 4> memrefFrees;
 
-  // Collects load and store operations, and whether or not a region holding op
-  // other than ForOp and IfOp was encountered in the loop nest.
+  // Collects affine and non-affine memory operations in the loop nest.
   void collect(Operation *opToWalk);
 };
 
@@ -128,12 +126,14 @@ public:
     // 'Node.outEdges[i].id' is the identifier of the dest node of the edge.
     unsigned id;
     // The SSA value on which this edge represents a dependence.
-    // If the value is a memref, then the dependence is between graph nodes
-    // which contain accesses to the same memref 'value'. If the value is a
-    // non-memref value, then the dependence is between a graph node which
-    // defines an SSA value and another graph node which uses the SSA value
-    // (e.g. a constant or load operation defining a value which is used inside
-    // a loop nest).
+    // If the value is a memref and this is a memory dependence, then it is the
+    // canonical representative of the view-like storage class on which the
+    // dependence is based. Memref SSA dependences retain the defining value so
+    // that the defining operation remains observable to graph clients. If the
+    // value is a non-memref value, then the dependence is between a graph node
+    // which defines an SSA value and another graph node which uses the SSA
+    // value (e.g. a constant or load operation defining a value which is used
+    // inside a loop nest).
     Value value;
   };
 
@@ -158,8 +158,9 @@ public:
   // side-effect-free operations with zero results and no regions. Assigns each
   // node in the graph a node id based on the order in block. Fails if certain
   // kinds of operations, for which `Node` creation isn't supported, are
-  // encountered (unknown region holding ops). If `fullAffineDependences` is
-  // set, affine memory dependence analysis is performed before concluding that
+  // encountered (unknown effects or region holding ops). If
+  // `fullAffineDependences` is set, affine memory dependence analysis is
+  // performed before concluding that
   // conflicting affine memory accesses lead to a dependence check; otherwise, a
   // pair of conflicting affine memory accesses (where one of them is a store
   // and they are to the same memref) always leads to an edge (conservatively).
@@ -245,7 +246,7 @@ public:
                  ArrayRef<Operation *> memrefStores,
                  ArrayRef<Operation *> memrefFrees);
 
-  void clearNodeLoadAndStores(unsigned id);
+  void clearNodeMemoryOps(unsigned id);
 
   // Calls 'callback' for each input edge incident to node 'id' which carries a
   // memref dependence.

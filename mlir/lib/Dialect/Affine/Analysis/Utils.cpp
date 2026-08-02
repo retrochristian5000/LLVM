@@ -19,6 +19,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/MemRef/Utils/MemRefUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/IntegerSet.h"
 #include "llvm/ADT/SetVector.h"
@@ -38,9 +39,60 @@ using llvm::SmallDenseMap;
 
 using Node = MemRefDependenceGraph::Node;
 
-// LoopNestStateCollector walks loop nests and collects load and store
-// operations, and whether or not a region holding op other than ForOp and IfOp
-// was encountered in the loop nest.
+static Value canonicalizeMemref(Value value) {
+  if (!value || !isa<BaseMemRefType>(value.getType()))
+    return value;
+  // Use the storage source for graph identity. Keep the original view in
+  // MemRefAccess so affine maps remain expressed in their original
+  // coordinate systems.
+  return memref::skipViewLikeOps(cast<MemrefValue>(value));
+}
+
+static bool isSameMemref(Value lhs, Value rhs) {
+  return canonicalizeMemref(lhs) == canonicalizeMemref(rhs);
+}
+
+/// Returns the values that `op` may have a memref effect of type `EffectTys`
+/// on, not considering recursive effects. View-like values are canonicalized
+/// to their storage source so the MDG uses one key for a view chain while raw
+/// views remain available for affine-coordinate analysis. Unknown effects
+/// cannot be represented by the memref-keyed graph.
+/// Returns false if a selected effect cannot be represented by a memref value
+/// or if the operation's effects are unknown. The MDG has no resource-level or
+/// all-memory edges, so dropping such an effect would make fusion unsound.
+template <typename... EffectTys>
+static bool getMayAffectedValues(Operation *op,
+                                 SmallVectorImpl<Value> &values) {
+  auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
+  if (!memOp)
+    return !hasUnknownEffects(op);
+  SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
+  memOp.getEffects(effects);
+  for (auto &effect : effects) {
+    if (!isa<EffectTys...>(effect.getEffect()))
+      continue;
+    Value effectVal = effect.getValue();
+    if (!effectVal || !isa<BaseMemRefType>(effectVal.getType()))
+      return false;
+    values.push_back(canonicalizeMemref(effectVal));
+  };
+  return true;
+}
+
+/// Returns true if `op` may have a memory effect of type `EffectTys` on
+/// `memref`, i.e., whether `memref` is among the values returned by
+/// `getMayAffectedValues` for `op`. An unrepresentable effect is
+/// conservatively treated as affecting every memref.
+template <typename... EffectTys>
+static bool mayHaveEffect(Operation *op, Value memref) {
+  SmallVector<Value> values;
+  if (!getMayAffectedValues<EffectTys...>(op, values))
+    return true;
+  return llvm::is_contained(values, canonicalizeMemref(memref));
+}
+
+// LoopNestStateCollector walks loop nests and collects affine and non-affine
+// memory operations.
 void LoopNestStateCollector::collect(Operation *opToWalk) {
   opToWalk->walk([&](Operation *op) {
     if (auto forOp = dyn_cast<AffineForOp>(op)) {
@@ -52,19 +104,18 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
     } else {
       auto memInterface = dyn_cast<MemoryEffectOpInterface>(op);
       if (!memInterface) {
-        if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
-          // This op itself is memory-effect free.
+        SmallVector<Value> affectedValues;
+        if (getMayAffectedValues<MemoryEffects::Read>(op, affectedValues) &&
+            affectedValues.empty())
           return;
-        // Check operands. Eg. ops like the `call` op are handled here.
-        for (Value v : op->getOperands()) {
-          if (!isa<MemRefType>(v.getType()))
-            continue;
-          // Conservatively, we assume the memref is read and written to.
-          memrefLoads.push_back(op);
-          memrefStores.push_back(op);
-        }
+        // Unknown effects cannot be represented by the memref-keyed graph.
+        memrefLoads.push_back(op);
+        memrefStores.push_back(op);
       } else {
-        // Non-affine loads and stores.
+        // Non-affine loads, stores, and frees. Allocation effects are
+        // intentionally omitted: they do not access existing memory, and
+        // allocation results are handled by existing SSA and local-allocation
+        // analysis instead of the memref access graph.
         if (hasEffect<MemoryEffects::Read>(op))
           memrefLoads.push_back(op);
         if (hasEffect<MemoryEffects::Write>(op))
@@ -80,12 +131,9 @@ unsigned Node::getLoadOpCount(Value memref) const {
   unsigned loadOpCount = 0;
   for (Operation *loadOp : loads) {
     // Common case: affine reads.
-    if (auto affineLoad = dyn_cast<AffineReadOpInterface>(loadOp)) {
-      if (memref == affineLoad.getMemRef())
+    if (auto affineLoad = dyn_cast<AffineReadOpInterface>(loadOp))
+      if (isSameMemref(memref, affineLoad.getMemRef()))
         ++loadOpCount;
-    } else if (hasEffect<MemoryEffects::Read>(loadOp, memref)) {
-      ++loadOpCount;
-    }
   }
   return loadOpCount;
 }
@@ -96,10 +144,9 @@ unsigned Node::getStoreOpCount(Value memref) const {
   for (auto *storeOp : llvm::concat<Operation *const>(stores, memrefStores)) {
     // Common case: affine writes.
     if (auto affineStore = dyn_cast<AffineWriteOpInterface>(storeOp)) {
-      if (memref == affineStore.getMemRef())
+      if (isSameMemref(memref, affineStore.getMemRef()))
         ++storeOpCount;
-    } else if (hasEffect<MemoryEffects::Write>(const_cast<Operation *>(storeOp),
-                                               memref)) {
+    } else if (mayHaveEffect<MemoryEffects::Write>(storeOp, memref)) {
       ++storeOpCount;
     }
   }
@@ -112,9 +159,9 @@ unsigned Node::hasStore(Value memref) const {
       llvm::concat<Operation *const>(stores, memrefStores),
       [&](Operation *storeOp) {
         if (auto affineStore = dyn_cast<AffineWriteOpInterface>(storeOp)) {
-          if (memref == affineStore.getMemRef())
+          if (isSameMemref(memref, affineStore.getMemRef()))
             return true;
-        } else if (hasEffect<MemoryEffects::Write>(storeOp, memref)) {
+        } else if (mayHaveEffect<MemoryEffects::Write>(storeOp, memref)) {
           return true;
         }
         return false;
@@ -123,7 +170,7 @@ unsigned Node::hasStore(Value memref) const {
 
 unsigned Node::hasFree(Value memref) const {
   return llvm::any_of(memrefFrees, [&](Operation *freeOp) {
-    return hasEffect<MemoryEffects::Free>(freeOp, memref);
+    return mayHaveEffect<MemoryEffects::Free>(freeOp, memref);
   });
 }
 
@@ -131,7 +178,7 @@ unsigned Node::hasFree(Value memref) const {
 void Node::getStoreOpsForMemref(Value memref,
                                 SmallVectorImpl<Operation *> *storeOps) const {
   for (Operation *storeOp : stores) {
-    if (memref == cast<AffineWriteOpInterface>(storeOp).getMemRef())
+    if (isSameMemref(memref, cast<AffineWriteOpInterface>(storeOp).getMemRef()))
       storeOps->push_back(storeOp);
   }
 }
@@ -140,7 +187,7 @@ void Node::getStoreOpsForMemref(Value memref,
 void Node::getLoadOpsForMemref(Value memref,
                                SmallVectorImpl<Operation *> *loadOps) const {
   for (Operation *loadOp : loads) {
-    if (memref == cast<AffineReadOpInterface>(loadOp).getMemRef())
+    if (isSameMemref(memref, cast<AffineReadOpInterface>(loadOp).getMemRef()))
       loadOps->push_back(loadOp);
   }
 }
@@ -151,39 +198,15 @@ void Node::getLoadAndStoreMemrefSet(
     DenseSet<Value> *loadAndStoreMemrefSet) const {
   llvm::SmallDenseSet<Value, 2> loadMemrefs;
   for (Operation *loadOp : loads) {
-    loadMemrefs.insert(cast<AffineReadOpInterface>(loadOp).getMemRef());
+    loadMemrefs.insert(
+        canonicalizeMemref(cast<AffineReadOpInterface>(loadOp).getMemRef()));
   }
   for (Operation *storeOp : stores) {
-    auto memref = cast<AffineWriteOpInterface>(storeOp).getMemRef();
+    auto memref =
+        canonicalizeMemref(cast<AffineWriteOpInterface>(storeOp).getMemRef());
     if (loadMemrefs.count(memref) > 0)
       loadAndStoreMemrefSet->insert(memref);
   }
-}
-
-/// Returns the values that this op has a memref effect of type `EffectTys` on,
-/// not considering recursive effects.
-template <typename... EffectTys>
-static void getEffectedValues(Operation *op, SmallVectorImpl<Value> &values) {
-  auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
-  if (!memOp) {
-    if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
-      // No effects.
-      return;
-    // Memref operands have to be considered as being affected.
-    for (Value operand : op->getOperands()) {
-      if (isa<MemRefType>(operand.getType()))
-        values.push_back(operand);
-    }
-    return;
-  }
-  SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
-  memOp.getEffects(effects);
-  for (auto &effect : effects) {
-    Value effectVal = effect.getValue();
-    if (isa<EffectTys...>(effect.getEffect()) && effectVal &&
-        isa<MemRefType>(effectVal.getType()))
-      values.push_back(effectVal);
-  };
 }
 
 /// Add `op` to MDG creating a new node and adding its memory accesses (affine
@@ -200,42 +223,37 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   Node &node = nodes.insert({newNodeId, Node(newNodeId, nodeOp)}).first->second;
   for (Operation *op : collector.loadOpInsts) {
     node.loads.push_back(op);
-    auto memref = cast<AffineReadOpInterface>(op).getMemRef();
+    auto memref =
+        canonicalizeMemref(cast<AffineReadOpInterface>(op).getMemRef());
     memrefAccesses[memref].insert(node.id);
   }
   for (Operation *op : collector.storeOpInsts) {
     node.stores.push_back(op);
-    auto memref = cast<AffineWriteOpInterface>(op).getMemRef();
+    auto memref =
+        canonicalizeMemref(cast<AffineWriteOpInterface>(op).getMemRef());
     memrefAccesses[memref].insert(node.id);
   }
   for (Operation *op : collector.memrefLoads) {
-    SmallVector<Value> effectedValues;
-    getEffectedValues<MemoryEffects::Read>(op, effectedValues);
-    if (llvm::any_of(((ValueRange)effectedValues).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
-      // We do not know the interaction here.
+    SmallVector<Value> affectedValues;
+    if (!getMayAffectedValues<MemoryEffects::Read>(op, affectedValues))
       return nullptr;
-    for (Value memref : effectedValues)
+    for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
     node.memrefLoads.push_back(op);
   }
   for (Operation *op : collector.memrefStores) {
-    SmallVector<Value> effectedValues;
-    getEffectedValues<MemoryEffects::Write>(op, effectedValues);
-    if (llvm::any_of((ValueRange(effectedValues)).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
+    SmallVector<Value> affectedValues;
+    if (!getMayAffectedValues<MemoryEffects::Write>(op, affectedValues))
       return nullptr;
-    for (Value memref : effectedValues)
+    for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
     node.memrefStores.push_back(op);
   }
   for (Operation *op : collector.memrefFrees) {
-    SmallVector<Value> effectedValues;
-    getEffectedValues<MemoryEffects::Free>(op, effectedValues);
-    if (llvm::any_of((ValueRange(effectedValues)).getTypes(),
-                     [](Type type) { return !isa<MemRefType>(type); }))
+    SmallVector<Value> affectedValues;
+    if (!getMayAffectedValues<MemoryEffects::Free>(op, affectedValues))
       return nullptr;
-    for (Value memref : effectedValues)
+    for (Value memref : affectedValues)
       memrefAccesses[memref].insert(node.id);
     node.memrefFrees.push_back(op);
   }
@@ -243,17 +261,16 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   return &node;
 }
 
-/// Returns the memref being read/written by a memref/affine load/store op.
-static Value getMemRef(Operation *memOp) {
-  if (auto memrefLoad = dyn_cast<memref::LoadOp>(memOp))
-    return memrefLoad.getMemRef();
-  if (auto affineLoad = dyn_cast<AffineReadOpInterface>(memOp))
-    return affineLoad.getMemRef();
-  if (auto memrefStore = dyn_cast<memref::StoreOp>(memOp))
-    return memrefStore.getMemRef();
-  if (auto affineStore = dyn_cast<AffineWriteOpInterface>(memOp))
-    return affineStore.getMemRef();
-  llvm_unreachable("unexpected op");
+/// Returns true if `op` may access `memref`, including through a view-like
+/// operation. Unknown operations are handled conservatively through their
+/// memory effects rather than assuming a particular operation class.
+static bool mayAccessMemRef(Operation *op, Value memref) {
+  if (auto affineRead = dyn_cast<AffineReadOpInterface>(op))
+    return isSameMemref(affineRead.getMemRef(), memref);
+  if (auto affineWrite = dyn_cast<AffineWriteOpInterface>(op))
+    return isSameMemref(affineWrite.getMemRef(), memref);
+  return mayHaveEffect<MemoryEffects::Read>(op, memref) ||
+         mayHaveEffect<MemoryEffects::Write>(op, memref);
 }
 
 /// Returns true if there may be a dependence on `memref` from srcNode's
@@ -267,21 +284,24 @@ static bool mayDependence(const Node &srcNode, const Node &dstNode,
   assert(srcNode.op->getBlock() == dstNode.op->getBlock());
   if (!isa<AffineForOp>(srcNode.op) || !isa<AffineForOp>(dstNode.op))
     return true;
+  // Deallocation invalidates the whole storage object. Affine access
+  // relations cannot prove a free harmless by comparing indexed accesses.
+  if (srcNode.hasFree(memref) || dstNode.hasFree(memref))
+    return true;
 
   // Conservatively handle dependences involving non-affine load/stores. Return
   // true if there exists a conflicting read/write access involving such.
 
   // Check whether there is a dependence from a source read/write op to a
-  // destination read/write one; all expected to be memref/affine load/store.
+  // destination read/write one.
   auto hasNonAffineDep = [&](ArrayRef<Operation *> srcMemOps,
                              ArrayRef<Operation *> dstMemOps) {
     return llvm::any_of(srcMemOps, [&](Operation *srcOp) {
-      Value srcMemref = getMemRef(srcOp);
-      if (srcMemref != memref)
+      if (!mayAccessMemRef(srcOp, memref))
         return false;
-      return llvm::find_if(dstMemOps, [&](Operation *dstOp) {
-               return srcMemref == getMemRef(dstOp);
-             }) != dstMemOps.end();
+      return llvm::any_of(dstMemOps, [&](Operation *dstOp) {
+        return mayAccessMemRef(dstOp, memref);
+      });
     });
   };
 
@@ -318,13 +338,18 @@ static bool mayDependence(const Node &srcNode, const Node &dstNode,
   for (auto *srcMemOp :
        llvm::concat<Operation *const>(srcNode.stores, srcNode.loads)) {
     MemRefAccess srcAcc(srcMemOp);
-    if (srcAcc.memref != memref)
+    if (!isSameMemref(srcAcc.memref, memref))
       continue;
     for (auto *destMemOp :
          llvm::concat<Operation *const>(dstNode.stores, dstNode.loads)) {
       MemRefAccess destAcc(destMemOp);
-      if (destAcc.memref != memref)
+      if (!isSameMemref(destAcc.memref, memref))
         continue;
+      if (srcAcc.memref != destAcc.memref) {
+        if (srcAcc.isStore() || destAcc.isStore())
+          return true;
+        continue;
+      }
       // Check for a top-level dependence between srcNode and destNode's ops.
       if (!noDependence(checkMemrefAccessDependence(
               srcAcc, destAcc, getNestingDepth(srcNode.op) + 1)))
@@ -337,7 +362,7 @@ static bool mayDependence(const Node &srcNode, const Node &dstNode,
 bool MemRefDependenceGraph::init(bool fullAffineDependences) {
   LDBG() << "--- Initializing MDG ---";
   // Map from a memref to the set of ids of the nodes that have ops accessing
-  // the memref.
+  // the memref. View-like values use their canonical storage source here.
   DenseMap<Value, SetVector<unsigned>> memrefAccesses;
 
   // Create graph nodes.
@@ -352,14 +377,16 @@ bool MemRefDependenceGraph::init(bool fullAffineDependences) {
       // Create graph node for top-level load op.
       Node node(nextNodeId++, &op);
       node.loads.push_back(&op);
-      auto memref = cast<AffineReadOpInterface>(op).getMemRef();
+      auto memref =
+          canonicalizeMemref(cast<AffineReadOpInterface>(op).getMemRef());
       memrefAccesses[memref].insert(node.id);
       nodes.insert({node.id, node});
     } else if (isa<AffineWriteOpInterface>(op)) {
       // Create graph node for top-level store op.
       Node node(nextNodeId++, &op);
       node.stores.push_back(&op);
-      auto memref = cast<AffineWriteOpInterface>(op).getMemRef();
+      auto memref =
+          canonicalizeMemref(cast<AffineWriteOpInterface>(op).getMemRef());
       memrefAccesses[memref].insert(node.id);
       nodes.insert({node.id, node});
     } else if (op.getNumResults() > 0 && !op.use_empty()) {
@@ -532,11 +559,14 @@ bool MemRefDependenceGraph::hasEdge(unsigned srcId, unsigned dstId,
 // Adds an edge from node 'srcId' to node 'dstId' for 'value'.
 void MemRefDependenceGraph::addEdge(unsigned srcId, unsigned dstId,
                                     Value value) {
+  // Keep memref SSA edges in their raw form so their defining operation stays
+  // available to graph clients. Memory-dependence callers provide the
+  // canonical representative; count both kinds by canonical identity.
   if (!hasEdge(srcId, dstId, value)) {
     outEdges[srcId].push_back({dstId, value});
     inEdges[dstId].push_back({srcId, value});
-    if (isa<MemRefType>(value.getType()))
-      memrefEdgeCount[value]++;
+    if (isa<BaseMemRefType>(value.getType()))
+      memrefEdgeCount[canonicalizeMemref(value)]++;
   }
 }
 
@@ -545,9 +575,10 @@ void MemRefDependenceGraph::removeEdge(unsigned srcId, unsigned dstId,
                                        Value value) {
   assert(inEdges.count(dstId) > 0);
   assert(outEdges.count(srcId) > 0);
-  if (isa<MemRefType>(value.getType())) {
-    assert(memrefEdgeCount.count(value) > 0);
-    memrefEdgeCount[value]--;
+  if (isa<BaseMemRefType>(value.getType())) {
+    Value canonicalValue = canonicalizeMemref(value);
+    assert(memrefEdgeCount.count(canonicalValue) > 0);
+    memrefEdgeCount[canonicalValue]--;
   }
   // Remove 'srcId' from 'inEdges[dstId]'.
   for (auto *it = inEdges[dstId].begin(); it != inEdges[dstId].end(); ++it) {
@@ -607,7 +638,7 @@ unsigned MemRefDependenceGraph::getIncomingMemRefAccesses(unsigned id,
                                                           Value memref) const {
   unsigned inEdgeCount = 0;
   for (const Edge &inEdge : inEdges.lookup(id)) {
-    if (inEdge.value == memref) {
+    if (isSameMemref(inEdge.value, memref)) {
       const Node *srcNode = getNode(inEdge.id);
       // Only count in edges from 'srcNode' if 'srcNode' accesses 'memref'
       if (srcNode->getStoreOpCount(memref) > 0)
@@ -623,7 +654,7 @@ unsigned MemRefDependenceGraph::getOutEdgeCount(unsigned id,
                                                 Value memref) const {
   unsigned outEdgeCount = 0;
   for (const auto &outEdge : outEdges.lookup(id))
-    if (!memref || outEdge.value == memref)
+    if (!memref || isSameMemref(outEdge.value, memref))
       ++outEdgeCount;
   return outEdgeCount;
 }
@@ -635,7 +666,7 @@ void MemRefDependenceGraph::gatherDefiningNodes(
     // By definition of edge, if the edge value is a non-memref value,
     // then the dependence is between a graph node which defines an SSA value
     // and another graph node which uses the SSA value.
-    if (!isa<MemRefType>(edge.value.getType()))
+    if (!isa<BaseMemRefType>(edge.value.getType()))
       definingNodes.insert(edge.id);
 }
 
@@ -726,7 +757,9 @@ void MemRefDependenceGraph::updateEdges(unsigned srcId, unsigned dstId,
     SmallVector<Edge, 2> oldInEdges = inEdges[srcId];
     for (auto &inEdge : oldInEdges) {
       // Add edge from 'inEdge.id' to 'dstId' if it's not a private memref.
-      if (!privateMemRefs.contains(inEdge.value))
+      if (!llvm::any_of(privateMemRefs, [&](Value privateMemRef) {
+            return isSameMemref(privateMemRef, inEdge.value);
+          }))
         addEdge(inEdge.id, dstId, inEdge.value);
     }
   }
@@ -750,7 +783,9 @@ void MemRefDependenceGraph::updateEdges(unsigned srcId, unsigned dstId,
   if (inEdges.count(dstId) > 0 && !privateMemRefs.empty()) {
     SmallVector<Edge, 2> oldInEdges = inEdges[dstId];
     for (auto &inEdge : oldInEdges)
-      if (privateMemRefs.count(inEdge.value) > 0)
+      if (llvm::any_of(privateMemRefs, [&](Value privateMemRef) {
+            return isSameMemref(privateMemRef, inEdge.value);
+          }))
         removeEdge(inEdge.id, dstId, inEdge.value);
   }
 }
@@ -781,7 +816,7 @@ void MemRefDependenceGraph::updateEdges(unsigned sibId, unsigned dstId) {
   }
 }
 
-// Adds ops in 'loads' and 'stores' to node at 'id'.
+// Adds all collected memory operations to node at 'id'.
 void MemRefDependenceGraph::addToNode(unsigned id, ArrayRef<Operation *> loads,
                                       ArrayRef<Operation *> stores,
                                       ArrayRef<Operation *> memrefLoads,
@@ -795,10 +830,13 @@ void MemRefDependenceGraph::addToNode(unsigned id, ArrayRef<Operation *> loads,
   llvm::append_range(node->memrefFrees, memrefFrees);
 }
 
-void MemRefDependenceGraph::clearNodeLoadAndStores(unsigned id) {
+void MemRefDependenceGraph::clearNodeMemoryOps(unsigned id) {
   Node *node = getNode(id);
   node->loads.clear();
   node->stores.clear();
+  node->memrefLoads.clear();
+  node->memrefStores.clear();
+  node->memrefFrees.clear();
 }
 
 // Calls 'callback' for each input edge incident to node 'id' which carries a
@@ -823,7 +861,7 @@ void MemRefDependenceGraph::forEachMemRefEdge(
     ArrayRef<Edge> edges, const std::function<void(Edge)> &callback) {
   for (const auto &edge : edges) {
     // Skip if 'edge' is not a memref dependence edge.
-    if (!isa<MemRefType>(edge.value.getType()))
+    if (!isa<BaseMemRefType>(edge.value.getType()))
       continue;
     assert(nodes.count(edge.id) > 0);
     // Visit current input edge 'edge'.
