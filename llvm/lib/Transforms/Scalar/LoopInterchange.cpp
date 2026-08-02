@@ -506,6 +506,9 @@ public:
 private:
   bool tightlyNested(Loop *Outer, Loop *Inner);
   bool containsUnsafeInstructions(BasicBlock *BB, Instruction *Skip);
+  FreezeInst *findFreezeInReNestedBlocks(Loop *OuterLoop,
+                                         Loop *InnerLoop) const;
+  FreezeInst *findFreezeInInnerLatchCloneSet(Loop *InnerLoop) const;
 
   /// Traverse all PHI nodes in the header of each loop in the loop nest
   /// starting from \p OuterLoop, and perform the following checks:
@@ -811,6 +814,65 @@ bool LoopInterchangeLegality::containsUnsafeInstructions(BasicBlock *BB,
       return false;
     return I.mayHaveSideEffects() || I.mayReadFromMemory();
   });
+}
+
+FreezeInst *
+LoopInterchangeLegality::findFreezeInReNestedBlocks(Loop *OuterLoop,
+                                                    Loop *InnerLoop) const {
+  // adjustLoopLinks swaps the preheader bodies after changing their loop
+  // roles, so the original outer-preheader body remains outside the new outer
+  // loop and retains its execution count.
+  BasicBlock *Blocks[] = {
+      OuterLoop->getHeader(),
+      OuterLoop->getLoopLatch(),
+      InnerLoop->getLoopPreheader(),
+      InnerLoop->getExitBlock(),
+  };
+  for (BasicBlock *BB : Blocks)
+    if (BB)
+      for (Instruction &I : *BB)
+        if (auto *Freeze = dyn_cast<FreezeInst>(&I))
+          return Freeze;
+  return nullptr;
+}
+
+FreezeInst *
+LoopInterchangeLegality::findFreezeInInnerLatchCloneSet(Loop *InnerLoop) const {
+  // Trip-count and induction legality currently reject most freezes reachable
+  // here. Keep this worklist aligned with the transform's clone set so future
+  // analyzable latch forms cannot silently resample one.
+  SmallSetVector<Instruction *, 8> Worklist;
+  auto IsDirectInnerLoopBlock = [InnerLoop](BasicBlock *BB) {
+    return InnerLoop->contains(BB) &&
+           none_of(InnerLoop->getSubLoops(),
+                   [BB](Loop *SubLoop) { return SubLoop->contains(BB); });
+  };
+  auto *LatchBranch =
+      dyn_cast<CondBrInst>(InnerLoop->getLoopLatch()->getTerminator());
+  if (LatchBranch)
+    if (auto *Condition = dyn_cast<Instruction>(LatchBranch->getCondition()))
+      Worklist.insert(Condition);
+
+  for (PHINode *Induction : InnerLoopInductions) {
+    auto *Incoming = dyn_cast<Instruction>(
+        Induction->getIncomingValueForBlock(InnerLoop->getLoopLatch()));
+    if (Incoming && !is_contained(InnerLoopInductions, Incoming))
+      Worklist.insert(Incoming);
+  }
+
+  for (unsigned I = 0; I < Worklist.size(); ++I) {
+    Instruction *Current = Worklist[I];
+    if (auto *Freeze = dyn_cast<FreezeInst>(Current))
+      return Freeze;
+    for (Value *Operand : Current->operands()) {
+      auto *OperandI = dyn_cast<Instruction>(Operand);
+      if (!OperandI || !IsDirectInnerLoopBlock(OperandI->getParent()) ||
+          is_contained(InnerLoopInductions, OperandI))
+        continue;
+      Worklist.insert(OperandI);
+    }
+  }
+  return nullptr;
 }
 
 bool LoopInterchangeLegality::tightlyNested(Loop *OuterLoop, Loop *InnerLoop) {
@@ -1579,6 +1641,21 @@ bool LoopInterchangeLegality::canInterchangeLoops(unsigned InnerLoopId,
                                       InnerLoop->getHeader())
              << "Cannot interchange loops because unsupported PHI nodes found "
                 "in inner loop latch.";
+    });
+    return false;
+  }
+
+  FreezeInst *Freeze = findFreezeInReNestedBlocks(OuterLoop, InnerLoop);
+  if (!Freeze)
+    Freeze = findFreezeInInnerLatchCloneSet(InnerLoop);
+  if (Freeze) {
+    LLVM_DEBUG(dbgs() << "Interchange would re-nest or duplicate freeze\n");
+    ORE->emit([&]() {
+      return OptimizationRemarkMissed(DEBUG_TYPE, "UnsafeInst",
+                                      Freeze->getDebugLoc(),
+                                      Freeze->getParent())
+             << "Cannot interchange loops because re-nesting or duplicating "
+                "freeze may change its sampling behavior.";
     });
     return false;
   }
