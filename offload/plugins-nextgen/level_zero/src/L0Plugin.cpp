@@ -254,9 +254,15 @@ Error LevelZeroPluginTy::asyncBarrierImpl(omp_interop_val_t *Interop) {
   return Plugin::success();
 }
 
-LevelZeroPluginContextTy::~LevelZeroPluginContextTy() {
-  if (OwnsZeContext && ZeContext)
-    zeContextDestroy(ZeContext);
+Error LevelZeroPluginContextTy::deinit() {
+  if (auto Err = QueueCache.deinit())
+    return Err;
+  if (OwnsZeContext && ZeContext) {
+    CALL_ZE_RET_ERROR(zeContextDestroy, ZeContext);
+    ZeContext = nullptr;
+    OwnsZeContext = false;
+  }
+  return Plugin::success();
 }
 
 Expected<std::unique_ptr<PluginContextTy>>

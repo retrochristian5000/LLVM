@@ -249,8 +249,10 @@ void mock::MockLiboffload::initDefault() {
       });
 
   ON_CALL(*this, olCreateQueue)
-      .WillByDefault([this](ol_device_handle_t Device,
+      .WillByDefault([this](ol_context_handle_t Context,
+                            ol_device_handle_t Device,
                             ol_queue_handle_t *Queue) -> ol_result_t {
+        std::ignore = Context;
         if (!Device)
           return makeEmptyStrError(OL_ERRC_INVALID_NULL_HANDLE);
         if (!Queue)
