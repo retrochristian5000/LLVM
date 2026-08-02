@@ -5311,6 +5311,30 @@ TEST(Hover, FunctionParameters) {
   }
 }
 
+TEST(Hover, HLSLRegisterAttributeRange) {
+  Annotations T(R"cpp(
+    Texture2D tex : [[^register]]([[^t1]]);
+  )cpp");
+
+  TestTU TU = TestTU::withCode(T.code());
+  TU.Filename = "TestTU.hlsl";
+  TU.ExtraArgs = {
+      "-x",
+      "hlsl",
+      "--target=dxil-pc-shadermodel6.3-library",
+  };
+
+  auto AST = TU.build();
+
+  for (const auto &P : T.points()) {
+    auto H = getHover(AST, P, format::getLLVMStyle(), nullptr);
+
+    ASSERT_TRUE(H);
+    EXPECT_EQ(H->Name, "register");
+    EXPECT_FALSE(H->Documentation.empty());
+  }
+}
+
 } // namespace
 } // namespace clangd
 } // namespace clang
