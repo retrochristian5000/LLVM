@@ -1,4 +1,4 @@
-// RUN: %clangxx_asan -O0 %s -o %t -mllvm -asan-detect-invalid-pointer-pair
+// RUN: %clangxx_asan -O2 %s -o %t -mllvm -asan-detect-invalid-pointer-pair
 
 // RUN: %env_asan_opts=detect_invalid_pointer_pairs=1:halt_on_error=0 %run %t
 
