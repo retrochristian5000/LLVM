@@ -173,6 +173,7 @@ bool X86FixupInstTuningImpl::processSpills(MachineBasicBlock &MBB,
       // Calls clobber registers. Memory state (SpillMap) is preserved
       // because local stack slots don't escape through calls.
       RegToFI.clear();
+      SpillMap.clear();
       continue;
     }
 
@@ -304,13 +305,24 @@ bool X86FixupInstTuningImpl::processSpills(MachineBasicBlock &MBB,
     if (LoadedReg) {
       int MemIdx = X86::getFirstAddrOperandIdx(MI);
       if (MemIdx >= 0 && !MI.memoperands_empty()) {
-        RegEntry RE;
-        for (int i = 0; i < X86::AddrNumOperands; ++i)
-          RE.MOs.push_back(MI.getOperand(MemIdx + i));
-        RE.LoadMI = &MI;
-        RE.FI = LoadedFI;
-        RE.Size = MI.memoperands().front()->getSize();
-        RegToFI[LoadedReg] = RE;
+        bool ClobbersAddr = false;
+        for (int i = 0; i < X86::AddrNumOperands; ++i) {
+          const MachineOperand &MO = MI.getOperand(MemIdx + i);
+          if (MO.isReg() && MO.getReg() &&
+              MI.definesRegister(MO.getReg(), TRI)) {
+            ClobbersAddr = true;
+            break;
+          }
+        }
+        if (!ClobbersAddr) {
+          RegEntry RE;
+          for (int i = 0; i < X86::AddrNumOperands; ++i)
+            RE.MOs.push_back(MI.getOperand(MemIdx + i));
+          RE.LoadMI = &MI;
+          RE.FI = LoadedFI;
+          RE.Size = MI.memoperands().front()->getSize();
+          RegToFI[LoadedReg] = RE;
+        }
       }
     }
   }
