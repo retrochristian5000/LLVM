@@ -6,16 +6,38 @@ cir.func coroutine @bad_task() { // expected-error {{coroutine body must use at 
 // -----
 
 cir.func coroutine @missing_condition() {
-  cir.scope {
+  cir.coro.ret_point {
     cir.await(user, ready : { // expected-error {{ready region must end with cir.condition}}
       cir.yield
     }, suspend : {
-      cir.yield
+      cir.coro.suspend_point
     }, resume : {
       cir.yield
     },)
+    cir.coro.body {
+    }
+    cir.yield
+  }, ret : {
+      cir.return
   }
-  cir.coro.body {
+  cir.trap
+}
+
+cir.func coroutine @missing_suspend(%arg0 : !cir.bool) {
+  cir.coro.ret_point {
+    cir.coro.body {
+      cir.await(user, ready : { // expected-error {{suspend region must end with cir.coro.suspend_point}}
+        cir.condition(%arg0)
+      }, suspend : {
+        cir.yield
+      }, resume : {
+        cir.yield
+      },)
+      cir.yield
+    }
+    cir.yield
+  }, ret : {
+      cir.return
   }
-  cir.return
+  cir.trap
 }

@@ -15,7 +15,6 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/TargetInfo.h"
-#include "clang/CIR/Dialect/IR/CIRTypes.h"
 #include "clang/CIR/MissingFeatures.h"
 
 using namespace clang;
@@ -382,11 +381,25 @@ CIRGenFunction::emitCoroutineBody(const CoroutineBodyStmt &s) {
   // Handle allocation failure if 'ReturnStmtOnAllocFailure' was provided.
   if (s.getReturnStmtOnAllocFailure())
     cgm.errorNYI("handle coroutine return alloc failure");
-
+  cir::CoroRetPointOp coroRet = nullptr;
+  mlir::OpBuilder::InsertPoint coroRetRegion;
   {
     assert(!cir::MissingFeatures::generateDebugInfo());
     ParamReferenceReplacerRAII paramReplacer(localDeclMap);
     RunCleanupsScope resumeScope(*this);
+    mlir::OpBuilder::InsertPoint coroRetBody;
+    coroRet = cir::CoroRetPointOp::create(
+        builder, openCurlyLoc,
+        /*bodyBuilder=*/
+        [&](mlir::OpBuilder &b, mlir::Location) {
+          coroRetBody = b.saveInsertionPoint();
+        },
+        /*retBuilder=*/
+        [&](mlir::OpBuilder &b, mlir::Location) {
+          coroRetRegion = b.saveInsertionPoint();
+        });
+    mlir::OpBuilder::InsertionGuard guard(builder);
+    builder.restoreInsertionPoint(coroRetBody);
     ehStack.pushCleanup<CallCoroDelete>(NormalAndEHCleanup, s.getDeallocate());
     // Create mapping between parameters and copy-params for coroutine
     // function.
@@ -512,6 +525,15 @@ CIRGenFunction::emitCoroutineBody(const CoroutineBodyStmt &s) {
     }
   }
 
+  mlir::Block &coroRetBodyBlock = coroRet.getBodyRegion().back();
+  {
+    mlir::OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(&coroRetBodyBlock);
+    cir::YieldOp::create(builder, openCurlyLoc);
+  }
+
+  mlir::OpBuilder::InsertionGuard guard(builder);
+  builder.restoreInsertionPoint(coroRetRegion);
   emitCoroEndBuiltinCall(
       openCurlyLoc, builder.getNullPtr(builder.getVoidPtrTy(), openCurlyLoc));
   if (auto *ret = cast_or_null<ReturnStmt>(s.getReturnStmt())) {
@@ -521,6 +543,10 @@ CIRGenFunction::emitCoroutineBody(const CoroutineBodyStmt &s) {
     ret->setRetValue(nullptr);
     if (emitStmt(ret, /*useCurrentScope=*/true).failed())
       return mlir::failure();
+    mlir::Block *block = builder.getInsertionBlock();
+    // emitReturnStmt() always creates a new insertion block after emitting the
+    // return. That block is unreachable in this case, so erase it.
+    block->erase();
     // Set the return value back. The code generator, as the AST **Consumer**,
     // shouldn't change the AST.
     ret->setRetValue(previousRetValue);
@@ -595,7 +621,7 @@ emitSuspendExpression(CIRGenFunction &cgf, CGCoroData &coro,
         }
 
         // Signals the parent that execution flows to next region.
-        cir::YieldOp::create(builder, loc);
+        cir::CoroSuspendPoint::create(builder, loc);
       },
       /*resumeBuilder=*/
       [&](mlir::OpBuilder &b, mlir::Location loc) {
