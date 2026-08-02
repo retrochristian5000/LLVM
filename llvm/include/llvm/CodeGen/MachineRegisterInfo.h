@@ -1021,6 +1021,10 @@ public:
     LiveIns.push_back(std::make_pair(Reg, vreg));
   }
 
+  /// Replace a physical register in the function livein list. ToReg must not
+  /// already be a livein.
+  LLVM_ABI void replaceLiveInPhysReg(MCRegister FromReg, MCRegister ToReg);
+
   // Iteration support for the live-ins set.  It's kept in sorted order
   // by register number.
   using livein_iterator =

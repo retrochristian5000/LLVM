@@ -25,6 +25,7 @@ namespace llvm {
   public:
     SparcTargetLowering(const TargetMachine &TM, const SparcSubtarget &STI);
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+    void finalizeLowering(MachineFunction &MF) const override;
 
     bool useSoftFloat() const override;
 
