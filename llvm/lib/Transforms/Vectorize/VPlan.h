@@ -4387,6 +4387,8 @@ class LLVM_ABI_FOR_TEST VPBasicBlock : public VPBlockBase {
       appendRecipe(Recipe);
   }
 
+  bool IsConditional = false;
+
 public:
   using RecipeListTy = iplist<VPRecipeBase>;
 
@@ -4476,6 +4478,9 @@ public:
 
   VPRegionBlock *getEnclosingLoopRegion();
   const VPRegionBlock *getEnclosingLoopRegion() const;
+
+  void setConditional() { IsConditional = true; }
+  bool isConditional() { return IsConditional; }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this VPBsicBlock to \p O, prefixing all lines with \p Indent. \p
