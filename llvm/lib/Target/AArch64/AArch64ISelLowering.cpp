@@ -23647,6 +23647,24 @@ static SDValue performTruncateCombine(SDNode *N, SelectionDAG &DAG,
   SDLoc DL(N);
   EVT VT = N->getValueType(0);
   SDValue N0 = N->getOperand(0);
+
+  // Form the add/shift/truncate DAG matched by the ADDHN patterns.
+  if (DCI.isAfterLegalizeDAG() && N0.getOpcode() == ISD::OR && N0.hasOneUse()) {
+    EVT SrcVT = N0.getValueType();
+    const unsigned EltSize = SrcVT.getScalarSizeInBits();
+
+    // Let the later combine fold an immediately truncated pair of results;
+    // forming this pattern first would leave separate ADD and VLSHR nodes.
+    if (((VT == MVT::v8i8 && SrcVT == MVT::v8i16) ||
+         (VT == MVT::v4i16 && SrcVT == MVT::v4i32) ||
+         (VT == MVT::v2i32 && SrcVT == MVT::v2i64)) &&
+        DAG.ComputeNumSignBits(N0.getOperand(0)) == EltSize &&
+        DAG.ComputeNumSignBits(N0.getOperand(1)) == EltSize) {
+      return DAG.getNode(AArch64ISD::ADDHN, DL, VT, N0.getOperand(0),
+                         N0.getOperand(1));
+    }
+  }
+
   if (VT.isFixedLengthVector() && VT.is64BitVector() && N0.hasOneUse() &&
       N0.getOpcode() == AArch64ISD::DUP) {
     SDValue Op = N0.getOperand(0);
