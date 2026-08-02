@@ -42,7 +42,10 @@ using Node = MemRefDependenceGraph::Node;
 static Value canonicalizeMemref(Value value) {
   if (!value || !isa<BaseMemRefType>(value.getType()))
     return value;
-  return memref::skipFullyAliasingOperations(cast<MemrefValue>(value));
+  // Use the storage source for graph identity. Keep the original view in
+  // MemRefAccess so affine maps remain expressed in their original
+  // coordinate systems.
+  return memref::skipViewLikeOps(cast<MemrefValue>(value));
 }
 
 static bool isSameMemref(Value lhs, Value rhs) {
@@ -50,28 +53,19 @@ static bool isSameMemref(Value lhs, Value rhs) {
 }
 
 /// Returns the values that `op` may have a memref effect of type `EffectTys`
-/// on, not considering recursive effects. An op with unknown memory effects
-/// (e.g. a call to an external function without a memory-effect interface) is
-/// conservatively assumed to affect all its memref operands. Fully aliasing
-/// views are canonicalized so the MDG uses one key for the view and its source.
+/// on, not considering recursive effects. View-like values are canonicalized
+/// to their storage source so the MDG uses one key for a view chain while raw
+/// views remain available for affine-coordinate analysis. Unknown operations
+/// cannot be represented by the memref-keyed graph, so return false for them.
 /// Returns false if a selected effect cannot be represented by a memref value.
-/// The MDG has no resource-level edges, so dropping such an effect would make
-/// fusion unsound even when its resource is non-addressable.
+/// The MDG has no resource-level or all-memory edges, so dropping such an
+/// effect would make fusion unsound.
 template <typename... EffectTys>
 static bool getMayAffectedValues(Operation *op,
                                  SmallVectorImpl<Value> &values) {
   auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
-  if (!memOp) {
-    if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
-      // No effects.
-      return true;
-    // Memref operands have to be considered as being affected.
-    for (Value operand : op->getOperands()) {
-      if (isa<BaseMemRefType>(operand.getType()))
-        values.push_back(canonicalizeMemref(operand));
-    }
-    return true;
-  }
+  if (!memOp)
+    return !hasUnknownEffects(op);
   SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
   memOp.getEffects(effects);
   for (auto &effect : effects) {
@@ -111,17 +105,12 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
     } else {
       auto memInterface = dyn_cast<MemoryEffectOpInterface>(op);
       if (!memInterface) {
-        if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
-          // This op itself is memory-effect free.
+        if (!hasUnknownEffects(op))
           return;
-        // Check operands. E.g., ops like the `call` op are handled here.
-        if (llvm::any_of(op->getOperands(), [](Value value) {
-              return isa<BaseMemRefType>(value.getType());
-            })) {
-          // Conservatively, assume all memref operands are read and written.
-          memrefLoads.push_back(op);
-          memrefStores.push_back(op);
-        }
+        // Unknown effects may reach memory through globals or other state not
+        // represented by SSA memref operands. Keep the graph fail-closed.
+        memrefLoads.push_back(op);
+        memrefStores.push_back(op);
       } else {
         // Non-affine loads, stores, and frees. Allocation effects are
         // intentionally omitted: they do not access existing memory, and
@@ -272,9 +261,9 @@ addNodeToMDG(Operation *nodeOp, MemRefDependenceGraph &mdg,
   return &node;
 }
 
-/// Returns true if `op` may access `memref`, including through a fully aliasing
-/// view. Unknown operations are handled conservatively through their memory
-/// effects rather than assuming a particular operation class.
+/// Returns true if `op` may access `memref`, including through a view-like
+/// operation. Unknown operations are handled conservatively through their
+/// memory effects rather than assuming a particular operation class.
 static bool mayAccessMemRef(Operation *op, Value memref) {
   if (auto affineRead = dyn_cast<AffineReadOpInterface>(op))
     return isSameMemref(affineRead.getMemRef(), memref);
@@ -294,6 +283,10 @@ static bool mayDependence(const Node &srcNode, const Node &dstNode,
                           Value memref) {
   assert(srcNode.op->getBlock() == dstNode.op->getBlock());
   if (!isa<AffineForOp>(srcNode.op) || !isa<AffineForOp>(dstNode.op))
+    return true;
+  // Deallocation invalidates the whole storage object. Affine access
+  // relations cannot prove a free harmless by comparing indexed accesses.
+  if (srcNode.hasFree(memref) || dstNode.hasFree(memref))
     return true;
 
   // Conservatively handle dependences involving non-affine load/stores. Return
@@ -369,7 +362,7 @@ static bool mayDependence(const Node &srcNode, const Node &dstNode,
 bool MemRefDependenceGraph::init(bool fullAffineDependences) {
   LDBG() << "--- Initializing MDG ---";
   // Map from a memref to the set of ids of the nodes that have ops accessing
-  // the memref. Fully aliasing views use their canonical source value here.
+  // the memref. View-like values use their canonical storage source here.
   DenseMap<Value, SetVector<unsigned>> memrefAccesses;
 
   // Create graph nodes.

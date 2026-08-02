@@ -1576,9 +1576,9 @@ func.func @producer_consumer_with_outmost_user(%arg0 : f16) {
 
 // -----
 
-// Unknown operations nested in an affine loop may access their memref
-// operands. Dependence checking must handle them without assuming a load/store
-// operation class.
+// Unknown operations nested in an affine loop may access memory outside their
+// explicit operands. Fusion must leave the block unchanged when their effects
+// cannot be represented by the memref dependence graph.
 
 // CHECK-LABEL: func @nested_unknown_call
 // CHECK:       affine.for

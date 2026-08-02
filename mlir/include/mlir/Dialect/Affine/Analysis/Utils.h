@@ -129,7 +129,7 @@ public:
     unsigned id;
     // The SSA value on which this edge represents a dependence.
     // If the value is a memref and this is a memory dependence, then it is the
-    // canonical representative of the trivial alias class on which the
+    // canonical representative of the view-like storage class on which the
     // dependence is based. Memref SSA dependences retain the defining value so
     // that the defining operation remains observable to graph clients. If the
     // value is a non-memref value, then the dependence is between a graph node
@@ -160,8 +160,9 @@ public:
   // side-effect-free operations with zero results and no regions. Assigns each
   // node in the graph a node id based on the order in block. Fails if certain
   // kinds of operations, for which `Node` creation isn't supported, are
-  // encountered (unknown region holding ops). If `fullAffineDependences` is
-  // set, affine memory dependence analysis is performed before concluding that
+  // encountered (unknown effects or region holding ops). If
+  // `fullAffineDependences` is set, affine memory dependence analysis is
+  // performed before concluding that
   // conflicting affine memory accesses lead to a dependence check; otherwise, a
   // pair of conflicting affine memory accesses (where one of them is a store
   // and they are to the same memref) always leads to an edge (conservatively).

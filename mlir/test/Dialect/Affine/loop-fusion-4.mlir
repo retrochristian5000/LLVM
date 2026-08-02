@@ -1041,37 +1041,6 @@ func.func private @escape(memref<?xf64>)
 
 // -----
 
-// An external call on a distinct memref must not block an otherwise legal
-// producer-consumer fusion.
-
-// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @cast_alias_non_alias_call
-// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
-// PRODUCER-CONSUMER-MAXIMAL:       call @escape_other
-// PRODUCER-CONSUMER-MAXIMAL:       affine.for
-// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
-// PRODUCER-CONSUMER-MAXIMAL:       return
-func.func @cast_alias_non_alias_call(
-    %in: memref<32xf64>, %out: memref<32xf64>) {
-  %comm = memref.alloc() : memref<32xf64>
-  %other = memref.alloc() : memref<32xf64>
-  %view = memref.cast %other : memref<32xf64> to memref<?xf64>
-  %cst = arith.constant 1.0 : f64
-  affine.for %i = 0 to 16 {
-    %a = affine.load %in[%i] : memref<32xf64>
-    %b = arith.addf %a, %cst : f64
-    affine.store %b, %comm[%i] : memref<32xf64>
-  }
-  func.call @escape_other(%view) : (memref<?xf64>) -> ()
-  affine.for %j = 0 to 16 {
-    %c = affine.load %comm[%j] : memref<32xf64>
-    affine.store %c, %out[%j] : memref<32xf64>
-  }
-  return
-}
-func.func private @escape_other(memref<?xf64>)
-
-// -----
-
 // A zero-offset, unit-stride subview is a fully aliasing view and must retain
 // the same dependence as its source memref.
 
@@ -1104,36 +1073,123 @@ func.func private @escape_subview(memref<32xf64, strided<[1], offset: 0>>)
 
 // -----
 
-// A non-fully-aliasing subview of an unrelated memref must not block an
-// otherwise legal producer-consumer fusion.
+// A non-zero-offset subview of the producer's storage must retain a
+// dependence even though its affine coordinates use a different view.
 
-// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @subview_non_alias_call
-// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
-// PRODUCER-CONSUMER-MAXIMAL:       call @escape_subview_non_alias
-// PRODUCER-CONSUMER-MAXIMAL:       affine.for
-// PRODUCER-CONSUMER-MAXIMAL:         affine.load
-// PRODUCER-CONSUMER-MAXIMAL:       return
-// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
-func.func @subview_non_alias_call(
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @subview_overlap_memref_store
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      memref.subview
+// PRODUCER-CONSUMER-MAXIMAL:      memref.store
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @subview_overlap_memref_store(
     %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
-  %other = memref.alloc() : memref<32xf64>
-  %view = memref.subview %other[1] [16] [1]
-      : memref<32xf64> to memref<16xf64, strided<[1], offset: 1>>
+  %c0 = arith.constant 0 : index
+  %cst = arith.constant 1.0 : f64
   affine.for %i = 0 to 16 {
     %a = affine.load %in[%i] : memref<32xf64>
     %b = arith.addf %a, %a : f64
     affine.store %b, %comm[%i] : memref<32xf64>
   }
-  func.call @escape_subview_non_alias(%view)
-      : (memref<16xf64, strided<[1], offset: 1>>) -> ()
+  %view = memref.subview %comm[1] [16] [1]
+      : memref<32xf64> to memref<16xf64, strided<[1], offset: 1>>
+  memref.store %cst, %view[%c0]
+      : memref<16xf64, strided<[1], offset: 1>>
   affine.for %j = 0 to 16 {
     %c = affine.load %comm[%j] : memref<32xf64>
     affine.store %c, %out[%j] : memref<32xf64>
   }
   return
 }
-func.func private @escape_subview_non_alias(
-    memref<16xf64, strided<[1], offset: 1>>)
+
+// -----
+
+// A non-zero-offset subview of unrelated storage must not block an otherwise
+// legal producer-consumer fusion.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @subview_non_alias_memref_store
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+// PRODUCER-CONSUMER-MAXIMAL:       memref.store
+// PRODUCER-CONSUMER-MAXIMAL:       affine.for
+// PRODUCER-CONSUMER-MAXIMAL:         affine.load
+// PRODUCER-CONSUMER-MAXIMAL:       return
+// PRODUCER-CONSUMER-MAXIMAL-NOT:   affine.for
+func.func @subview_non_alias_memref_store(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  %other = memref.alloc() : memref<32xf64>
+  %view = memref.subview %other[1] [16] [1]
+      : memref<32xf64> to memref<16xf64, strided<[1], offset: 1>>
+  %c0 = arith.constant 0 : index
+  %cst = arith.constant 1.0 : f64
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    %b = arith.addf %a, %a : f64
+    affine.store %b, %comm[%i] : memref<32xf64>
+  }
+  memref.store %cst, %view[%c0]
+      : memref<16xf64, strided<[1], offset: 1>>
+  affine.for %j = 0 to 16 {
+    %c = affine.load %comm[%j] : memref<32xf64>
+    affine.store %c, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// -----
+
+// A represented free must remain a dependence through full affine filtering.
+// Otherwise fusing the first and third loops would move a store to %a past
+// its deallocation.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @representable_free_between_loops
+// PRODUCER-CONSUMER-MAXIMAL:      %[[A:.*]] = memref.alloc
+// PRODUCER-CONSUMER-MAXIMAL:      affine.store {{.*}}, %[[A]][
+// PRODUCER-CONSUMER-MAXIMAL:      memref.dealloc %[[A]]
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      affine.load
+func.func @representable_free_between_loops(
+    %in: memref<32xf64>, %out: memref<32xf64>) {
+  %a = memref.alloc() : memref<32xf64>
+  %b = memref.alloc() : memref<32xf64>
+  affine.for %i = 0 to 16 {
+    %v = affine.load %in[%i] : memref<32xf64>
+    affine.store %v, %a[%i] : memref<32xf64>
+    affine.store %v, %b[%i] : memref<32xf64>
+  }
+  affine.for %k = 0 to 1 {
+    memref.dealloc %a : memref<32xf64>
+  }
+  affine.for %j = 0 to 16 {
+    %v = affine.load %b[%j] : memref<32xf64>
+    affine.store %v, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// -----
+
+// An unknown call without memref operands can access a global memref and must
+// not become an isolated node that fusion can cross.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @unknown_call_global_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      call @touch_global
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @unknown_call_global_effect(
+    %in: memref<32xf64>, %out: memref<32xf64>) {
+  %global = memref.get_global @fusion_global : memref<32xf64>
+  affine.for %i = 0 to 16 {
+    %v = affine.load %in[%i] : memref<32xf64>
+    affine.store %v, %global[%i] : memref<32xf64>
+  }
+  func.call @touch_global() : () -> ()
+  affine.for %j = 0 to 16 {
+    %v = affine.load %global[%j] : memref<32xf64>
+    affine.store %v, %out[%j] : memref<32xf64>
+  }
+  return
+}
+memref.global "private" @fusion_global : memref<32xf64>
+func.func private @touch_global()
 
 // -----
 
