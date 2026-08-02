@@ -48,6 +48,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
   const LLT s32 = LLT::scalar(32);
   const LLT s64 = LLT::scalar(64);
   const LLT s128 = LLT::scalar(128);
+  const LLT v16s1 = LLT::fixed_vector(16, 1);
+  const LLT v8s1 = LLT::fixed_vector(8, 1);
   const LLT v16s8 = LLT::fixed_vector(16, 8);
   const LLT v8s8 = LLT::fixed_vector(8, 8);
   const LLT v4s8 = LLT::fixed_vector(4, 8);
@@ -595,7 +597,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
           },
           changeTo(0, s32))
       // TODO: Use BITCAST for v2i8, v2i16 after G_TRUNC gets sorted out
-      .bitcastIf(typeInSet(0, {v4s8}),
+      .bitcastIf(typeInSet(0, {v4s8, v8s1, v16s1}),
                  [=](const LegalityQuery &Query) {
                    const LLT VecTy = Query.Types[0];
                    return std::pair(0, LLT::integer(VecTy.getSizeInBits()));
@@ -638,6 +640,12 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
           {nxv4s32, p0, nxv4s32, 8},
           {nxv2s64, p0, nxv2s64, 8},
       })
+      // Handle i1 vector stores before the elements are widened to s8.
+      .customIf(all(typeInSet(0, {v8s1, v16s1}),
+                    LegalityPredicate([=](const LegalityQuery &Query) {
+                      return Query.Types[0].getSizeInBits() ==
+                             Query.MMODescrs[0].MemoryTy.getSizeInBits();
+                    })))
       .clampScalar(0, s8, s64)
       .minScalarOrElt(0, s8)
       .lowerIf([=](const LegalityQuery &Query) {
@@ -1553,8 +1561,12 @@ bool AArch64LegalizerInfo::legalizeCustom(
   case TargetOpcode::G_VAARG:
     return legalizeVaArg(MI, MRI, MIRBuilder);
   case TargetOpcode::G_LOAD:
-  case TargetOpcode::G_STORE:
+  case TargetOpcode::G_STORE: {
+    LLT ValTy = MRI.getType(MI.getOperand(0).getReg());
+    if (ValTy.isVector() && ValTy.getScalarSizeInBits() == 1)
+      return legalizeI1VecStore(MI, Helper);
     return legalizeLoadStore(MI, MRI, MIRBuilder, Observer);
+  }
   case TargetOpcode::G_SHL:
   case TargetOpcode::G_ASHR:
   case TargetOpcode::G_LSHR:
@@ -1604,15 +1616,99 @@ bool AArch64LegalizerInfo::legalizeCustom(
   llvm_unreachable("expected switch to return");
 }
 
+bool AArch64LegalizerInfo::legalizeI1VecStore(MachineInstr &MI,
+                                              LegalizerHelper &Helper) const {
+  auto &Store = cast<GStore>(MI);
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  Register ValReg = Store.getValueReg();
+  LLT ValTy = MRI.getType(ValReg);
+  MachineFunction &MF = MIB.getMF();
+
+  // If the stored value is a scalar bitcast to an i1 vector, store the
+  // scalar directly instead of expanding the vector value bit by bit.
+  MachineInstr *Def = MRI.getVRegDef(ValReg);
+  if (Def && Def->getOpcode() == TargetOpcode::G_BITCAST) {
+    Register SrcReg = Def->getOperand(1).getReg();
+    LLT SrcTy = MRI.getType(SrcReg);
+    if (SrcTy.isScalar() &&
+        SrcTy.getSizeInBits() ==
+            Store.getMMO().getMemoryType().getSizeInBits()) {
+      MachineMemOperand *NewMMO =
+          MF.getMachineMemOperand(&Store.getMMO(), /*Offset=*/0, SrcTy);
+      MIB.setInstrAndDebugLoc(MI);
+      MIB.buildStore(SrcReg, Store.getPointerReg(), *NewMMO);
+      MI.eraseFromParent();
+      return true;
+    }
+  }
+
+  // Similarly, an i1 vector copied from memory to memory can be copied as
+  // the equivalent integer. The replacement load is built at the original
+  // load's position to keep the memory operation order.
+  if (Def && Def->getOpcode() == TargetOpcode::G_LOAD &&
+      MRI.hasOneNonDBGUse(ValReg)) {
+    auto *Load = cast<GLoad>(Def);
+    if (Load->getMMO().getMemoryType() == ValTy &&
+        Store.getMMO().getMemoryType() == ValTy) {
+      LLT IntTy = LLT::integer(ValTy.getSizeInBits());
+      MachineMemOperand *LoadMMO =
+          MF.getMachineMemOperand(&Load->getMMO(), /*Offset=*/0, IntTy);
+      MachineMemOperand *StoreMMO =
+          MF.getMachineMemOperand(&Store.getMMO(), /*Offset=*/0, IntTy);
+      MIB.setInstrAndDebugLoc(*Load);
+      auto NewLoad = MIB.buildLoad(IntTy, Load->getPointerReg(), *LoadMMO);
+      MIB.setInstrAndDebugLoc(MI);
+      MIB.buildStore(NewLoad, Store.getPointerReg(), *StoreMMO);
+      MI.eraseFromParent();
+      return true;
+    }
+  }
+
+  // Otherwise widen the elements to s8, as the generic path would have.
+  return Helper.widenScalar(MI, /*TypeIdx=*/0, ValTy.changeElementSize(8)) ==
+         LegalizerHelper::Legalized;
+}
+
 bool AArch64LegalizerInfo::legalizeBitcast(MachineInstr &MI,
                                            LegalizerHelper &Helper) const {
   assert(MI.getOpcode() == TargetOpcode::G_BITCAST && "Unexpected opcode");
   auto [DstReg, DstTy, SrcReg, SrcTy] = MI.getFirst2RegLLTs();
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+
   // We're trying to handle casts from i1 vectors to scalars but reloading from
   // stack.
   if (!DstTy.isScalar() || !SrcTy.isVector() ||
       SrcTy.getElementType() != LLT::scalar(1))
     return false;
+
+  MachineInstr *SrcMI = MRI.getVRegDef(SrcReg);
+
+  // Fold a cast of a cast from the destination type, such as the inverse
+  // cast created when an i1 vector G_LOAD is legalized by bitcasting to a
+  // scalar.
+  if (SrcMI && SrcMI->getOpcode() == TargetOpcode::G_BITCAST &&
+      MRI.getType(SrcMI->getOperand(1).getReg()) == DstTy) {
+    MIB.setInstrAndDebugLoc(MI);
+    MIB.buildCopy(DstReg, SrcMI->getOperand(1).getReg());
+    MI.eraseFromParent();
+    return true;
+  }
+
+  // Fold a cast of an i1 vector G_LOAD into a scalar load of the same
+  // memory, instead of expanding the vector value bit by bit.
+  if (SrcMI && SrcMI->getOpcode() == TargetOpcode::G_LOAD &&
+      MRI.hasOneNonDBGUse(SrcReg)) {
+    auto *Load = cast<GLoad>(SrcMI);
+    MachineFunction &MF = MIB.getMF();
+    MachineMemOperand *NewMMO =
+        MF.getMachineMemOperand(&Load->getMMO(), /*Offset=*/0, DstTy);
+    MIB.setInstrAndDebugLoc(MI);
+    MIB.buildLoad(DstReg, Load->getPointerReg(), *NewMMO);
+    MI.eraseFromParent();
+    return true;
+  }
 
   Helper.createStackStoreLoad(DstReg, SrcReg);
   MI.eraseFromParent();
