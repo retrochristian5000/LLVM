@@ -213,9 +213,6 @@ def RetCC_SystemZ_XPLINK64 : CallingConv<[
 // examples.
 
 def CC_SystemZ_XPLINK64 : CallingConv<[
-  // XPLINK64 ABI compliant code widens integral types smaller than i64
-  // to i64 before placing the parameters either on the stack or in registers.
-  CCIfType<[i32], CCIfExtend<CCPromoteToType<i64>>>,
   // Promote f32 to f64 and bitcast to i64, if it needs to be passed in GPRs.
   // Although we assign the f32 vararg to be bitcast, it will first be promoted
   // to an f64 within convertValVTToLocVT().
@@ -242,9 +239,18 @@ def CC_SystemZ_XPLINK64 : CallingConv<[
   // If i128 is not legal, such values are already split into two i64 here,
   // so we have to use a custom handler.
   CCIfType<[i64], CCCustom<"CC_SystemZ_I128Indirect">>,
-  // The first 3 integer arguments are passed in registers R1D-R3D.
+  // The first 3 integer arguments are passed in registers R1-R3.
+  // i32 is promoted to i64 (AExt) unconditionally so that the full 64-bit
+  // register (R1D/R2D/R3D) is written by the caller.  Callees compiled by
+  // other compilers (e.g. xlc / @@CLASSB) read the full GPR; writing only
+  // the 32-bit sub-register leaves the upper half undefined and produces
+  // wrong results (e.g. isinf returning 1 instead of 0).
+  // Note: CCPromoteToType sets LocInfo=AExt when no signext/zeroext flag is
+  // present, so formal-arg lowering truncates back to i32 via TRUNCATE,
+  // leaving the callee's view of the value correct at its natural width.
   // The rest will be passed in the user area. The address offset of the user
   // area can be found in register R4D.
+  CCIfType<[i32], CCPromoteToType<i64>>,
   CCIfType<[i64], CCAssignToRegAndStack<[R1D, R2D, R3D], 8, 8>>,
 
   // The first 8 named vector arguments are passed in V24-V31. Sub-128 vectors

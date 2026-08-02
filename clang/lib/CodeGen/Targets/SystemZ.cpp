@@ -618,13 +618,11 @@ bool ZOSXPLinkABIInfo::isPromotableIntegerTypeForABI(QualType Ty) const {
       return true;
 
   // In addition to the usual promotable integer types, we also need to
-  // extend all 32-bit types, since the ABI requires promotion to 64 bits.
+  // extend 32-bit types, since the ABI requires promotion to 64 bits.
   if (const BuiltinType *BT = Ty->getAs<BuiltinType>())
     switch (BT->getKind()) {
     case BuiltinType::Int:
     case BuiltinType::UInt:
-    case BuiltinType::ULong:
-    case BuiltinType::Long:
       return true;
     default:
       break;
@@ -825,9 +823,25 @@ ABIArgInfo ZOSXPLinkABIInfo::classifyArgumentType(QualType Ty, bool IsNamedArg,
     return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                    RAA == CGCXXABI::RAA_DirectInMemory);
 
-  // Integers and enums are extended to full register width.
-  if (isPromotableIntegerTypeForABI(Ty))
+  // The XPLINK64 ABI does not mandate any widening of named integer arguments;
+  // other compilers (e.g. xlc) may leave the upper 32 bits of a GPR undefined
+  // when passing a sub-64-bit value.  Emitting signext/zeroext on named
+  // parameters would cause clang-as-callee to add prologue sign/zero-extension
+  // that could conflict with an xlc caller that did not extend.
+  //
+  // The caller is still required to fill the full 64-bit register (per
+  // CCPromoteToType<i64> / AExt in the backend).  Use getDirect so that
+  // no extend attribute appears in the IR; AExt is applied by the calling
+  // convention tables.
+  //
+  // Variadic arguments are different: the callee has no prototype and reads
+  // the full 64-bit GPR, so the upper bits must be clean.  getExtend emits
+  // a zero-extend (for unsigned types) or sign-extend (for signed types).
+  if (isPromotableIntegerTypeForABI(Ty)) {
+    if (IsNamedArg)
+      return ABIArgInfo::getDirect(CGT.ConvertType(Ty));
     return ABIArgInfo::getExtend(Ty, CGT.ConvertType(Ty));
+  }
 
   // For non-C calling conventions, compound types passed by address copy.
   if ((CallConv != llvm::CallingConv::C) && isCompoundType(Ty))

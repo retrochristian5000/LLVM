@@ -1914,14 +1914,26 @@ static SDValue convertLocVTToValVT(SelectionDAG &DAG, const SDLoc &DL,
 // Value is a value of type VA.getValVT() that we need to copy into
 // the location described by VA.  Return a copy of Value converted to
 // VA.getValVT().  The caller is responsible for handling indirect values.
+//
+// IsCallArg: true when converting an outgoing call argument.  For AExt
+// (any-extend), ZERO_EXTEND is used instead of ANY_EXTEND to prevent the
+// backend from selecting LGF (sign-extend) when reloading a 32-bit value
+// from a spill slot into a 64-bit register at -O0 on big-endian S390.
+// For return values (IsCallArg=false) the original ANY_EXTEND is kept so
+// that no unnecessary sign/zero-extension instruction is emitted.
 static SDValue convertValVTToLocVT(SelectionDAG &DAG, const SDLoc &DL,
-                                   CCValAssign &VA, SDValue Value) {
+                                   CCValAssign &VA, SDValue Value,
+                                   bool IsCallArg = false) {
   switch (VA.getLocInfo()) {
   case CCValAssign::SExt:
     return DAG.getNode(ISD::SIGN_EXTEND, DL, VA.getLocVT(), Value);
   case CCValAssign::ZExt:
     return DAG.getNode(ISD::ZERO_EXTEND, DL, VA.getLocVT(), Value);
   case CCValAssign::AExt:
+    // For call arguments, use ZERO_EXTEND so that a spilled i32 is reloaded
+    // with LLGF (zero-extend) rather than LGF (sign-extend) at -O0.
+    if (IsCallArg)
+      return DAG.getNode(ISD::ZERO_EXTEND, DL, VA.getLocVT(), Value);
     return DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), Value);
   case CCValAssign::BCvt: {
     assert(VA.getLocVT() == MVT::i64 || VA.getLocVT() == MVT::i128);
@@ -2418,7 +2430,7 @@ SystemZTargetLowering::LowerCall(CallLoweringInfo &CLI,
       }
       ArgValue = SpillSlot;
     } else
-      ArgValue = convertValVTToLocVT(DAG, DL, VA, ArgValue);
+      ArgValue = convertValVTToLocVT(DAG, DL, VA, ArgValue, /*IsCallArg=*/true);
 
     if (VA.isRegLoc()) {
       // In XPLINK64, for the 128-bit vararg case, ArgValue is bitcasted to a
