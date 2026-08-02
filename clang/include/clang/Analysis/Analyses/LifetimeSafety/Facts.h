@@ -20,6 +20,7 @@
 #include "clang/Analysis/Analyses/LifetimeSafety/Utils.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
@@ -389,6 +390,14 @@ public:
 
   unsigned getNumFacts() const { return NextFactID.Value; }
 
+  /// Returns a bit vector, indexed by origin ID, marking the origins that are
+  /// referenced from more than one basic block. Only those need to survive
+  /// block boundaries in the dataflow analyses; the rest are block-local.
+  ///
+  /// Computed on first use and shared by every analysis, so that they all
+  /// agree on which origins cross boundaries.
+  const llvm::BitVector &getPersistentOrigins(const CFG &Cfg);
+
   LoanManager &getLoanMgr() { return LoanMgr; }
   const LoanManager &getLoanMgr() const { return LoanMgr; }
   OriginManager &getOriginMgr() { return OriginMgr; }
@@ -401,6 +410,7 @@ private:
   /// Facts for each CFG block, indexed by block ID.
   llvm::SmallVector<llvm::SmallVector<const Fact *>> BlockToFacts;
   llvm::BumpPtrAllocator FactAllocator;
+  std::optional<llvm::BitVector> PersistentOrigins;
 };
 } // namespace clang::lifetimes::internal
 
