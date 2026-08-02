@@ -1701,6 +1701,8 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   //   E or of the same unambiguous public base class of E, ...
   if (checkMemberDecomposition(*this, Bindings, DD, DecompType, RD))
     DD->setInvalidDecl();
+
+  CleanupVarDeclMarking();
 }
 
 UnsignedOrNone Sema::GetDecompositionElementCount(QualType T,
