@@ -211,14 +211,14 @@ static bool hasConflictingStorageAccesses(ArrayRef<Operation *> firstOps,
                                           ArrayRef<Operation *> secondOps) {
   for (Operation *firstOp : firstOps) {
     MemRefAccess firstAccess(firstOp);
-    Value firstStorage = memref::skipViewLikeOps(
-        cast<MemrefValue>(firstAccess.memref));
+    Value firstStorage =
+        memref::skipViewLikeOps(cast<MemrefValue>(firstAccess.memref));
     for (Operation *secondOp : secondOps) {
       MemRefAccess secondAccess(secondOp);
       if (firstAccess.memref == secondAccess.memref)
         continue;
-      Value secondStorage = memref::skipViewLikeOps(
-          cast<MemrefValue>(secondAccess.memref));
+      Value secondStorage =
+          memref::skipViewLikeOps(cast<MemrefValue>(secondAccess.memref));
       if (firstStorage != secondStorage)
         continue;
       if (firstAccess.isStore() || secondAccess.isStore())
