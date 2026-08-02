@@ -140,6 +140,12 @@ public:
            hasPTXWithAccelSMs(86, {100, 101});
   }
 
+  // Checks Rubin family extensions support.
+  //  - tcgen05.commit
+  bool hasTcgen05RubinFamilySupport() const {
+    return hasPTXWithFamilySMs(94, {107});
+  }
+
   // Checks tcgen05.shift instruction support.
   bool hasTcgen05ShiftSupport() const {
     // sm_101 renamed to sm_110 in PTX 9.0
