@@ -1143,7 +1143,7 @@ lldb::SBValue SBValue::EvaluateExpression(const char *expr,
     return SBValue();
   }
 
-  std::lock_guard<std::recursive_mutex> guard(target_sp->GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(target_sp->GetAPIMutex());
   ExecutionContext exe_ctx(target_sp.get());
 
   StackFrame *frame = exe_ctx.GetFramePtr();

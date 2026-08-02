@@ -33,6 +33,7 @@
 #include "lldb/Target/SectionLoadHistory.h"
 #include "lldb/Target/Statistics.h"
 #include "lldb/Target/SyntheticFrameProvider.h"
+#include "lldb/Target/TargetAPILock.h"
 #include "lldb/Target/ThreadSpec.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/Broadcaster.h"
@@ -765,7 +766,7 @@ public:
 
   static TargetProperties &GetGlobalProperties();
 
-  std::recursive_mutex &GetAPIMutex();
+  TargetAPILock &GetAPIMutex();
 
   void DeleteCurrentProcess();
 
@@ -2085,6 +2086,11 @@ protected:
   /// that led us to run the code.  We hand out this mutex instead when we
   /// detect that code is running on the private state thread.
   std::recursive_mutex m_private_mutex;
+  /// Persistent TargetAPILock handles wrapping m_mutex/m_private_mutex
+  /// above, so GetAPIMutex() can return a stable reference rather than a
+  /// temporary.
+  TargetAPILock m_mutex_lock{m_mutex};
+  TargetAPILock m_private_mutex_lock{m_private_mutex};
   Arch m_arch;
   std::string m_label;
   ModuleList m_images; ///< The list of images for this process (shared

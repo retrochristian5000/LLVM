@@ -3851,9 +3851,9 @@ bool ValueImpl::IsValid() {
   return target_sp && target_sp->IsValid();
 }
 
-lldb::ValueObjectSP
-ValueImpl::GetSP(Process::StopLocker &stop_locker,
-                 std::unique_lock<std::recursive_mutex> &lock, Status &error) {
+lldb::ValueObjectSP ValueImpl::GetSP(Process::StopLocker &stop_locker,
+                                     std::unique_lock<TargetAPILock> &lock,
+                                     Status &error) {
   if (!m_valobj_sp) {
     error = Status::FromErrorString("invalid value object");
     return m_valobj_sp;
@@ -3869,7 +3869,7 @@ ValueImpl::GetSP(Process::StopLocker &stop_locker,
   if (!target)
     return ValueObjectSP();
 
-  lock = std::unique_lock<std::recursive_mutex>(target->GetAPIMutex());
+  lock = std::unique_lock<TargetAPILock>(target->GetAPIMutex());
 
   ProcessSP process_sp(value_sp->GetProcessSP());
   if (process_sp && !stop_locker.TryLock(&process_sp->GetRunLock())) {

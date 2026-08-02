@@ -129,10 +129,10 @@ SBInstructionList SBFunction::GetInstructions(SBTarget target,
   SBInstructionList sb_instructions;
   if (m_opaque_ptr) {
     TargetSP target_sp(target.GetSP());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     ModuleSP module_sp(m_opaque_ptr->GetAddress().GetModule());
     if (target_sp && module_sp) {
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
       const bool force_live_memory = true;
       sb_instructions.SetDisassembler(Disassembler::DisassembleRange(
           module_sp->GetArchitecture(), nullptr, flavor,

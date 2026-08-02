@@ -10,8 +10,9 @@
 #define LLDB_API_SBMUTEX_H
 
 #include "lldb/API/SBDefines.h"
+#include "lldb/Target/TargetAPILock.h"
 #include "lldb/lldb-forward.h"
-#include <mutex>
+#include <memory>
 
 namespace lldb {
 
@@ -41,7 +42,7 @@ private:
   SBMutex(lldb::TargetSP target_sp);
   friend class SBTarget;
 
-  std::shared_ptr<std::recursive_mutex> m_opaque_sp;
+  std::shared_ptr<lldb_private::TargetAPILock> m_opaque_sp;
 };
 
 } // namespace lldb

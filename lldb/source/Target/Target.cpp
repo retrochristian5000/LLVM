@@ -6013,12 +6013,12 @@ Target::TargetEventData::GetModuleListFromEvent(const Event *event_ptr) {
   return module_list;
 }
 
-std::recursive_mutex &Target::GetAPIMutex() {
+TargetAPILock &Target::GetAPIMutex() {
   Policy policy = PolicyStack::Get().Current();
   if (policy.view == Policy::View::Private)
-    return m_private_mutex;
+    return m_private_mutex_lock;
 
-  return m_mutex;
+  return m_mutex_lock;
 }
 
 /// Get metrics associated with this target in JSON format.

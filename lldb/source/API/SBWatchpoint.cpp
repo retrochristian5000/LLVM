@@ -108,7 +108,7 @@ addr_t SBWatchpoint::GetWatchAddress() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     ret_addr = watchpoint_sp->GetLoadAddress();
   }
@@ -123,7 +123,7 @@ size_t SBWatchpoint::GetWatchSize() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     watch_size = watchpoint_sp->GetByteSize();
   }
@@ -137,7 +137,7 @@ void SBWatchpoint::SetEnabled(bool enabled) {
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
     Target &target = watchpoint_sp->GetTarget();
-    std::lock_guard<std::recursive_mutex> guard(target.GetAPIMutex());
+    std::lock_guard<TargetAPILock> guard(target.GetAPIMutex());
     ProcessSP process_sp = target.GetProcessSP();
     const bool notify = true;
     if (process_sp) {
@@ -156,7 +156,7 @@ bool SBWatchpoint::IsEnabled() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     return watchpoint_sp->IsEnabled();
   } else
@@ -169,7 +169,7 @@ uint32_t SBWatchpoint::GetHitCount() {
   uint32_t count = 0;
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     count = watchpoint_sp->GetHitCount();
   }
@@ -182,7 +182,7 @@ uint32_t SBWatchpoint::GetIgnoreCount() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     return watchpoint_sp->GetIgnoreCount();
   } else
@@ -194,7 +194,7 @@ void SBWatchpoint::SetIgnoreCount(uint32_t n) {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     watchpoint_sp->SetIgnoreCount(n);
   }
@@ -207,7 +207,7 @@ const char *SBWatchpoint::GetCondition() {
   if (!watchpoint_sp)
     return nullptr;
 
-  std::lock_guard<std::recursive_mutex> guard(
+  std::lock_guard<TargetAPILock> guard(
       watchpoint_sp->GetTarget().GetAPIMutex());
   return ConstString(watchpoint_sp->GetConditionText()).GetCString();
 }
@@ -217,7 +217,7 @@ void SBWatchpoint::SetCondition(const char *condition) {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     watchpoint_sp->SetCondition(condition);
   }
@@ -231,7 +231,7 @@ bool SBWatchpoint::GetDescription(SBStream &description,
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     watchpoint_sp->GetDescription(&strm, level);
     strm.EOL();
@@ -291,7 +291,7 @@ lldb::SBType SBWatchpoint::GetType() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     const CompilerType &type = watchpoint_sp->GetCompilerType();
     return lldb::SBType(type);
@@ -304,7 +304,7 @@ WatchpointValueKind SBWatchpoint::GetWatchValueKind() {
 
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
     if (watchpoint_sp->IsWatchVariable())
       return WatchpointValueKind::eWatchPointValueKindVariable;
@@ -320,7 +320,7 @@ const char *SBWatchpoint::GetWatchSpec() {
   if (!watchpoint_sp)
     return nullptr;
 
-  std::lock_guard<std::recursive_mutex> guard(
+  std::lock_guard<TargetAPILock> guard(
       watchpoint_sp->GetTarget().GetAPIMutex());
   // Store the result of `GetWatchSpec()` as a ConstString
   // so that the C string we return has a sufficiently long
@@ -333,7 +333,7 @@ bool SBWatchpoint::IsWatchingReads() {
   LLDB_INSTRUMENT_VA(this);
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
 
     return watchpoint_sp->WatchpointRead();
@@ -346,7 +346,7 @@ bool SBWatchpoint::IsWatchingWrites() {
   LLDB_INSTRUMENT_VA(this);
   lldb::WatchpointSP watchpoint_sp(GetSP());
   if (watchpoint_sp) {
-    std::lock_guard<std::recursive_mutex> guard(
+    std::lock_guard<TargetAPILock> guard(
         watchpoint_sp->GetTarget().GetAPIMutex());
 
     return watchpoint_sp->WatchpointWrite() ||

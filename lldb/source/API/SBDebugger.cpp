@@ -531,9 +531,9 @@ void SBDebugger::HandleCommand(const char *command) {
   if (m_opaque_sp) {
     TargetSP target_sp(
         m_opaque_sp->GetCommandInterpreter().GetSelectedTarget());
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<TargetAPILock> lock;
     if (target_sp)
-      lock = std::unique_lock<std::recursive_mutex>(target_sp->GetAPIMutex());
+      lock = std::unique_lock<TargetAPILock>(target_sp->GetAPIMutex());
 
     SBCommandInterpreter sb_interpreter(GetCommandInterpreter());
     SBCommandReturnObject result;
@@ -606,7 +606,7 @@ void SBDebugger::HandleProcessEvent(const SBProcess &process,
   char stdio_buffer[1024];
   size_t len;
 
-  std::lock_guard<std::recursive_mutex> guard(target_sp->GetAPIMutex());
+  std::lock_guard<TargetAPILock> guard(target_sp->GetAPIMutex());
 
   if (event_type &
       (Process::eBroadcastBitSTDOUT | Process::eBroadcastBitStateChanged)) {
