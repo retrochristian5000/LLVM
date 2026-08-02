@@ -1087,8 +1087,11 @@ MachineBasicBlock *MachineBasicBlock::splitAt(MachineInstr &MI,
   if (UpdateLiveIns)
     addLiveIns(*SplitBB, LiveRegs);
 
+  // splitAt() may have moved regmask-bearing instructions (e.g. calls) into
+  // SplitBB; LIS::splitAt() inserts it into the maps and fixes up the per-block
+  // regmask table so the allocator still sees call clobbers across the split.
   if (LIS)
-    LIS->insertMBBInMaps(SplitBB);
+    LIS->splitAt(*this, *SplitBB);
 
   return SplitBB;
 }

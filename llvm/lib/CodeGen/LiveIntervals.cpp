@@ -294,6 +294,48 @@ void LiveIntervals::computeRegMasks() {
   }
 }
 
+void LiveIntervals::reassignRegMaskSlots(MachineBasicBlock &Orig,
+                                         MachineBasicBlock &SplitBB) {
+  assert(&Orig != &SplitBB && "expected distinct blocks");
+  std::pair<unsigned, unsigned> &OrigRMB = RegMaskBlocks[Orig.getNumber()];
+  std::pair<unsigned, unsigned> &SplitRMB = RegMaskBlocks[SplitBB.getNumber()];
+
+  // splitAt moved the tail of Orig into SplitBB. RegMaskSlots is sorted, so the
+  // slots now belonging to SplitBB are those in Orig's slice at/after SplitBB's
+  // start index.
+  ArrayRef<SlotIndex> OrigSlots =
+      getRegMaskSlots().slice(OrigRMB.first, OrigRMB.second);
+  unsigned KeptCount = llvm::lower_bound(OrigSlots, getMBBStartIdx(&SplitBB)) -
+                       OrigSlots.begin();
+  if (KeptCount == OrigRMB.second)
+    return; // No regmask slots moved into SplitBB.
+
+  SplitRMB.first = OrigRMB.first + KeptCount;
+  SplitRMB.second = OrigRMB.second - KeptCount;
+  OrigRMB.second = KeptCount;
+}
+
+void LiveIntervals::insertMBBInMapsImpl(MachineBasicBlock *MBB,
+                                        [[maybe_unused]] bool CalledBySplitAt) {
+#ifdef EXPENSIVE_CHECKS
+  // Outside of splitAt(), the block is recorded as having no regmask slots, so
+  // it must not contain any.
+  assert((CalledBySplitAt ||
+          none_of(*MBB,
+                  [](const MachineInstr &MI) {
+                    return any_of(MI.operands(), [](const MachineOperand &MO) {
+                      return MO.isRegMask();
+                    });
+                  })) &&
+         "insertMBBInMaps expects a block with no regmask operands; use "
+         "LiveIntervals::splitAt() to split a block containing calls");
+#endif
+  Indexes->insertMBBInMaps(MBB);
+  assert(unsigned(MBB->getNumber()) == RegMaskBlocks.size() &&
+         "Blocks must be added in order.");
+  RegMaskBlocks.push_back(std::make_pair(RegMaskSlots.size(), 0));
+}
+
 //===----------------------------------------------------------------------===//
 //                           Register Unit Liveness
 //===----------------------------------------------------------------------===//
