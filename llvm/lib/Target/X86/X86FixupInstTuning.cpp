@@ -23,14 +23,19 @@
 
 #include "X86.h"
 #include "X86InstrInfo.h"
-#include "X86RegisterInfo.h"
 #include "X86Subtarget.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionAnalysisManager.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachinePassManager.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/IR/Analysis.h"
 
@@ -188,6 +193,10 @@ bool X86FixupInstTuningImpl::processSpills(MachineBasicBlock &MBB,
         SpillEntry &SE = It->second;
         const MachineMemOperand *MMO = MI.memoperands().front();
         if (MMO->getSize() == SE.Size && MMO->getOffset() == SE.Offset) {
+          MachineFrameInfo &MFI = MF.getFrameInfo();
+          int64_t OrigSize = MFI.getObjectSize(SE.OrigFI);
+          if (SE.Size.hasValue() && OrigSize < (int64_t)SE.Size.getValue())
+            continue;
           SE.UseCount++;
           if (!SE.Invalid) {
             int MemIdx = X86::getFirstAddrOperandIdx(MI);
@@ -224,6 +233,10 @@ bool X86FixupInstTuningImpl::processSpills(MachineBasicBlock &MBB,
           if (It != SpillMap.end()) {
             SpillEntry &SE = It->second;
             if (MMO->getSize() == SE.Size && MMO->getOffset() == SE.Offset) {
+              MachineFrameInfo &MFI = MF.getFrameInfo();
+              int64_t OrigSize = MFI.getObjectSize(SE.OrigFI);
+              if (SE.Size.hasValue() && OrigSize < (int64_t)SE.Size.getValue())
+                break;
               SE.UseCount++;
               if (!SE.Invalid) {
                 for (int i = 0; i < X86::AddrNumOperands; ++i)
