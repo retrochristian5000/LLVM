@@ -558,15 +558,16 @@ class _LIBCPP_NO_SPECIALIZATIONS tuple {
   _BaseT __base_;
 
   template <size_t _Jp, class... _Up>
-  friend _LIBCPP_CONSTEXPR_SINCE_CXX14 typename tuple_element<_Jp, tuple<_Up...> >::type& get(tuple<_Up...>&) _NOEXCEPT;
+  friend _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 typename tuple_element<_Jp, tuple<_Up...> >::type&
+  get(tuple<_Up...>&) _NOEXCEPT;
   template <size_t _Jp, class... _Up>
-  friend _LIBCPP_CONSTEXPR_SINCE_CXX14 const typename tuple_element<_Jp, tuple<_Up...> >::type&
+  friend _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 const typename tuple_element<_Jp, tuple<_Up...> >::type&
   get(const tuple<_Up...>&) _NOEXCEPT;
   template <size_t _Jp, class... _Up>
-  friend _LIBCPP_CONSTEXPR_SINCE_CXX14 typename tuple_element<_Jp, tuple<_Up...> >::type&&
+  friend _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 typename tuple_element<_Jp, tuple<_Up...> >::type&&
   get(tuple<_Up...>&&) _NOEXCEPT;
   template <size_t _Jp, class... _Up>
-  friend _LIBCPP_CONSTEXPR_SINCE_CXX14 const typename tuple_element<_Jp, tuple<_Up...> >::type&&
+  friend _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 const typename tuple_element<_Jp, tuple<_Up...> >::type&&
   get(const tuple<_Up...>&&) _NOEXCEPT;
 
 public:
@@ -1165,8 +1166,8 @@ template <class... _Tp, class... _Up>
              { __t == __u } -> __boolean_testable;
            }...>::value && (sizeof...(_Tp) == sizeof...(_Up)))
 #    endif
-inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 bool
-operator==(const tuple<_Tp...>& __x, const tuple<_Up...>& __y) {
+inline _LIBCPP_HIDE_FROM_ABI
+_LIBCPP_CONSTEXPR_SINCE_CXX14 bool operator==(const tuple<_Tp...>& __x, const tuple<_Up...>& __y) {
   static_assert(sizeof...(_Tp) == sizeof...(_Up), "Can't compare tuples of different sizes");
   return std::__tuple_compare_equal<sizeof...(_Tp)>(__x, __y);
 }
@@ -1186,8 +1187,8 @@ operator<=>(const tuple<_Tp...>& __x, const tuple<_Up...>& __y) {
 #    else // _LIBCPP_STD_VER >= 20
 
 template <class... _Tp, class... _Up>
-inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 bool
-operator!=(const tuple<_Tp...>& __x, const tuple<_Up...>& __y) {
+inline _LIBCPP_HIDE_FROM_ABI
+_LIBCPP_CONSTEXPR_SINCE_CXX14 bool operator!=(const tuple<_Tp...>& __x, const tuple<_Up...>& __y) {
   return !(__x == __y);
 }
 

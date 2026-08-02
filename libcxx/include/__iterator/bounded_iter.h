@@ -105,7 +105,7 @@ private:
   }
 
   template <class _It>
-  friend _LIBCPP_CONSTEXPR __bounded_iter<_It> __make_bounded_iter(_It, _It, _It);
+  friend _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR __bounded_iter<_It> __make_bounded_iter(_It, _It, _It);
 
 public:
   // Dereference and indexing operations.
@@ -214,8 +214,8 @@ public:
   }
 
 #if _LIBCPP_STD_VER <= 17
-  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR friend bool
-  operator!=(__bounded_iter const& __x, __bounded_iter const& __y) _NOEXCEPT {
+  _LIBCPP_HIDE_FROM_ABI
+  _LIBCPP_CONSTEXPR friend bool operator!=(__bounded_iter const& __x, __bounded_iter const& __y) _NOEXCEPT {
     return __x.__current_ != __y.__current_;
   }
 
