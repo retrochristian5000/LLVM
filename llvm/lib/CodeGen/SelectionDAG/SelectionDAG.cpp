@@ -13334,6 +13334,18 @@ void SelectionDAG::ReplaceAllUsesOfValueWith(SDValue From, SDValue To){
   RAUWUpdateListener Listener(*this, UI, UE);
   while (UI != UE) {
     SDNode *User = UI->getUser();
+
+    // Don't replace uses of the To node if is is self-referential.
+    // If CSE tries to merge the Use with another node post-replacement
+    // it'll try to remove the same node from the CSE map twice, causing a
+    // crash.
+    if (User == To.getNode()) {
+      do {
+        ++UI;
+      } while (UI != UE && UI->getUser() == User);
+      continue;
+    }
+
     bool UserRemovedFromCSEMaps = false;
 
     // A user can appear in a use list multiple times, and when this
