@@ -18,6 +18,7 @@
 #include "bolt/Core/Relocation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCAsmBackend.h"
@@ -52,6 +53,7 @@ namespace bolt {
 class BinaryBasicBlock;
 class BinaryContext;
 class BinaryFunction;
+class DataflowInfoManager;
 
 /// Different types of indirect branches encountered during disassembly.
 enum class IndirectBranchType : char {
@@ -71,6 +73,14 @@ enum BTIKind {
   C, /// Accepting calls, and jumps using x16/x17.
   J, /// Accepting jumps.
   JC /// Accepting both.
+};
+
+struct BranchLivenessInfo {
+  DenseSet<const MCInst *> FlagsDead;
+
+  bool mustPreserveFlags(const MCInst &Inst) const {
+    return !FlagsDead.count(&Inst);
+  }
 };
 
 class MCPlusBuilder {
@@ -474,8 +484,16 @@ public:
     return false;
   }
 
+  /// Return liveness info required for branch transformations.
+  virtual BranchLivenessInfo
+  createBranchLivenessInfo(BinaryFunction &BF, DataflowInfoManager &DIM) const {
+    return BranchLivenessInfo();
+  }
+
   /// Check whether this conditional branch can be reversed
-  virtual bool isReversibleBranch(const MCInst &Inst) const {
+  virtual bool
+  isReversibleBranch(const MCInst &Inst,
+                     const BranchLivenessInfo *BLI = nullptr) const {
     assert(!isUnsupportedInstruction(Inst) && isConditionalBranch(Inst) &&
            "Instruction is not known conditional branch");
 
@@ -2151,8 +2169,12 @@ public:
   }
 
   /// Reverses the branch condition in Inst and update its taken target to TBB.
-  virtual void reverseBranchCondition(MCInst &Inst, const MCSymbol *TBB,
-                                      MCContext *Ctx) const {
+  /// Assumes that the branch is reversible. It may replace Inst with a longer
+  /// instruction sequence on some targets.
+  virtual void
+  reverseBranchCondition(BinaryBasicBlock *Parent, MCInst &Inst,
+                         const MCSymbol *TBB, MCContext *Ctx,
+                         const BranchLivenessInfo *BLI = nullptr) const {
     llvm_unreachable("not implemented");
   }
 
