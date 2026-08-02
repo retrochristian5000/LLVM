@@ -57,6 +57,8 @@
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/MC/MCSchedule.h"
+#include <cmath>
 #include <optional>
 
 using namespace llvm;
@@ -6466,24 +6468,171 @@ InstructionCost X86TTIImpl::getCFInstrCost(unsigned Opcode,
   return TTI::TCC_Free;
 }
 
-int X86TTIImpl::getGatherOverhead() const {
+int X86TTIImpl::getGatherOverhead(Type *SrcVTy) const {
   // Some CPUs have more overhead for gather. The specified overhead is relative
   // to the Load operation. "2" is the number provided by Intel architects. This
   // parameter is used for cost estimation of Gather Op and comparison with
   // other alternatives.
   // TODO: Remove the explicit hasAVX512()?, That would mean we would only
   // enable gather with a -march.
+
+  // AMD znver4+ targets enable per-shape costs measured on the hardware via
+  // TuningPreferGSCostTable. Pre-AVX-512 Zen parts take the scalarise path
+  // for masked gather instead.
+  if (ST->hasPreferGSCostTable() && SrcVTy) {
+    // Per-shape gather break-even overhead: the empirical cost at which the
+    // LoopVectorizer stops preferring the gather over the scalar fallback,
+    // measured by sweeping a forced overhead over a gather micro-benchmark.
+    // For shapes the znver4+ schedule model carries it is added on top of the
+    // measured hardware reciprocal-throughput in getGSVectorCost; otherwise it
+    // is the flat overhead of the generic formula. Values are non-monotonic in
+    // VF, and the i64 overhead exceeds f64 because the i64 scalar fallback runs
+    // on the cheaper integer pipeline and is harder to beat.
+    static const CostTblEntry ZenGatherCostTable[] = {
+        {ISD::LOAD, MVT::v4i32,  7},  {ISD::LOAD, MVT::v8i32,  17},
+        {ISD::LOAD, MVT::v16i32, 14}, {ISD::LOAD, MVT::v4f32,  7},
+        {ISD::LOAD, MVT::v8f32,  17}, {ISD::LOAD, MVT::v16f32, 14},
+        {ISD::LOAD, MVT::v4f64,  7},  {ISD::LOAD, MVT::v8f64,  17},
+        {ISD::LOAD, MVT::v4i64,  10}, {ISD::LOAD, MVT::v8i64,  22},
+    };
+    EVT VT = TLI->getValueType(DL, SrcVTy);
+    if (VT.isSimple()) {
+      MVT SimpleVT = VT.getSimpleVT();
+      assert(SimpleVT.getVectorNumElements() >= 4 &&
+             "VF<4 gather should be force-scalarised on AVX-512+VLX before "
+             "reaching here. Add a v{1,2} table row if "
+             "forceScalarizeMaskedGather is relaxed");
+      assert(SimpleVT != MVT::v16f64 &&
+             "v16f64 gather should be split by type legalisation in "
+             "getGSVectorCost before reaching here. Add a v16f64 table row "
+             "if that path changes");
+      if (const auto *E =
+              CostTableLookup(ZenGatherCostTable, ISD::LOAD, SimpleVT))
+        return E->Cost;
+    }
+  }
+
   if (ST->hasAVX512() || (ST->hasAVX2() && ST->hasFastGather()))
     return 2;
 
   return 1024;
 }
 
-int X86TTIImpl::getScatterOverhead() const {
+int X86TTIImpl::getScatterOverhead(Type *SrcVTy) const {
+  if (ST->hasPreferGSCostTable() && ST->hasAVX512() && SrcVTy) {
+    static const CostTblEntry ZenScatterCostTable[] = {
+        {ISD::STORE, MVT::v4i32, 12}, {ISD::STORE, MVT::v8i32, 14},
+        {ISD::STORE, MVT::v16i32, 6}, {ISD::STORE, MVT::v4f32, 12},
+        {ISD::STORE, MVT::v8f32, 14}, {ISD::STORE, MVT::v16f32, 6},
+        {ISD::STORE, MVT::v4f64, 5},  {ISD::STORE, MVT::v8f64, 15},
+        {ISD::STORE, MVT::v4i64, 10}, {ISD::STORE, MVT::v8i64, 22},
+    };
+    EVT VT = TLI->getValueType(DL, SrcVTy);
+    if (VT.isSimple()) {
+      MVT SimpleVT = VT.getSimpleVT();
+      assert(SimpleVT.getVectorNumElements() >= 4 &&
+             "VF<4 scatter should be force-scalarised on AVX-512+VLX before "
+             "reaching here. Add a v{1,2} table row if "
+             "forceScalarizeMaskedScatter is relaxed");
+      assert(SimpleVT != MVT::v16f64 &&
+             "v16f64 scatter should be split by type legalisation in "
+             "getGSVectorCost before reaching here. Add a v16f64 table row "
+             "if that path changes");
+      if (const auto *E =
+              CostTableLookup(ZenScatterCostTable, ISD::STORE, SimpleVT))
+        return E->Cost;
+    }
+  }
+
   if (ST->hasAVX512())
     return 2;
 
   return 1024;
+}
+
+// Map a non-split masked gather/scatter shape to a representative AVX-512
+// opcode for the schedule-model query. Uses the matched index/data-width form
+// (not the mixed VPGATHERDQ/QD forms, which not all AVX-512 models carry) and
+// distinguishes int vs FP because Zen's 64-bit entries are element-type
+// dependent. Returns 0 for shapes we do not model.
+static unsigned getAVX512GSRepresentativeOpcode(bool IsLoad, MVT VT) {
+  if (!VT.isVector())
+    return 0;
+  unsigned NumElts = VT.getVectorNumElements();
+  unsigned EltBits = VT.getScalarSizeInBits();
+  const bool IsFP = VT.getScalarType().isFloatingPoint();
+  if (IsLoad) {
+    if (EltBits == 32)
+      return NumElts == 4    ? (IsFP ? X86::VGATHERDPSZ128rm : X86::VPGATHERDDZ128rm)
+             : NumElts == 8  ? (IsFP ? X86::VGATHERDPSZ256rm : X86::VPGATHERDDZ256rm)
+             : NumElts == 16 ? (IsFP ? X86::VGATHERDPSZrm : X86::VPGATHERDDZrm)
+                             : 0;
+    if (EltBits == 64)
+      return NumElts == 4   ? (IsFP ? X86::VGATHERQPDZ256rm : X86::VPGATHERQQZ256rm)
+             : NumElts == 8 ? (IsFP ? X86::VGATHERQPDZrm : X86::VPGATHERQQZrm)
+                            : 0;
+    return 0;
+  }
+  if (EltBits == 32)
+    return NumElts == 4    ? (IsFP ? X86::VSCATTERDPSZ128mr : X86::VPSCATTERDDZ128mr)
+           : NumElts == 8  ? (IsFP ? X86::VSCATTERDPSZ256mr : X86::VPSCATTERDDZ256mr)
+           : NumElts == 16 ? (IsFP ? X86::VSCATTERDPSZmr : X86::VPSCATTERDDZmr)
+                           : 0;
+  if (EltBits == 64)
+    return NumElts == 4   ? (IsFP ? X86::VSCATTERQPDZ256mr : X86::VPSCATTERQQZ256mr)
+           : NumElts == 8 ? (IsFP ? X86::VSCATTERQPDZmr : X86::VPSCATTERQQZmr)
+                          : 0;
+  return 0;
+}
+
+// Read the whole-instruction cost of a single opcode from the subtarget's
+// schedule model for the requested cost kind, or nullopt so the caller can
+// fall back.
+static std::optional<unsigned>
+getSchedModelCostForOpcode(unsigned Opc, TTI::TargetCostKind CostKind,
+                           const X86Subtarget *ST) {
+  const MCSchedModel &SM = ST->getSchedModel();
+  if (!SM.hasInstrSchedModel())
+    return std::nullopt;
+
+  unsigned SClassID = ST->getInstrInfo()->get(Opc).getSchedClass();
+  const MCSchedClassDesc *SCDesc = SM.getSchedClassDesc(SClassID);
+  if (!SCDesc || !SCDesc->isValid() || SCDesc->isVariant())
+    return std::nullopt;
+
+  switch (CostKind) {
+  case TTI::TCK_RecipThroughput: {
+    double RThru = MCSchedModel::getReciprocalThroughput(*ST, *SCDesc);
+    if (RThru < 0.0)
+      return std::nullopt;
+    return static_cast<unsigned>(std::lround(RThru));
+  }
+  case TTI::TCK_Latency:
+  case TTI::TCK_SizeAndLatency: {
+    int Lat = MCSchedModel::computeInstrLatency(*ST, *SCDesc);
+    if (Lat < 0)
+      return std::nullopt;
+    return static_cast<unsigned>(Lat);
+  }
+  case TTI::TCK_CodeSize:
+    // Encoded size is not a schedule-model property; let the caller decide.
+    return std::nullopt;
+  }
+  llvm_unreachable("Unknown TargetCostKind");
+}
+
+std::optional<unsigned>
+X86TTIImpl::getModeledGSInstrCost(bool IsLoad, Type *SrcVTy,
+                                  TTI::TargetCostKind CostKind) const {
+  if (!ST->hasAVX512() || !ST->hasPreferGSCostTable())
+    return std::nullopt;
+  EVT VT = TLI->getValueType(DL, SrcVTy);
+  if (!VT.isSimple())
+    return std::nullopt;
+  unsigned Opc = getAVX512GSRepresentativeOpcode(IsLoad, VT.getSimpleVT());
+  if (!Opc)
+    return std::nullopt;
+  return getSchedModelCostForOpcode(Opc, CostKind, ST);
 }
 
 // Return an average cost of Gather / Scatter instruction, maybe improved later.
@@ -6549,12 +6698,28 @@ InstructionCost X86TTIImpl::getGSVectorCost(unsigned Opcode,
   if (CostKind == TTI::TCK_CodeSize)
     return 1;
 
-  // The gather / scatter cost is given by Intel architects. It is a rough
-  // number since we are looking at one instruction in a time.
-  const int GSOverhead = (Opcode == Instruction::Load) ? getGatherOverhead()
-                                                       : getScatterOverhead();
-  return GSOverhead + VF * getMemoryOpCost(Opcode, SrcVTy->getScalarType(),
-                                           Alignment, AddressSpace, CostKind);
+  const bool IsLoad = Opcode == Instruction::Load;
+
+  // A masked gather/scatter cost is a fixed vectorize-vs-scalarize break-even
+  // overhead plus the cost of the instruction body:
+  //
+  //   cost = break-even overhead + instruction body cost
+  //
+  // The overhead is a (shape, element type) function that cannot be derived
+  // from the schedule model, so it lives in the per-shape TTI tables (flat
+  // default otherwise). The body cost is the measured schedule-model cost where
+  // we have one (getModeledGSInstrCost, Zen AVX-512 today, keeping the .td
+  // honest for llvm-mca), else the synthetic VF * scalar-memory-op estimate.
+  const int GSOverhead =
+      IsLoad ? getGatherOverhead(SrcVTy) : getScatterOverhead(SrcVTy);
+  InstructionCost BodyCost;
+  if (std::optional<unsigned> HW =
+          getModeledGSInstrCost(IsLoad, SrcVTy, CostKind))
+    BodyCost = *HW;
+  else
+    BodyCost = VF * getMemoryOpCost(Opcode, SrcVTy->getScalarType(), Alignment,
+                                    AddressSpace, CostKind);
+  return GSOverhead + BodyCost;
 }
 
 /// Calculate the cost of Gather / Scatter operation

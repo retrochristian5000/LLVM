@@ -104,6 +104,13 @@ Makes programs 10x faster by doing Special New Thing.
 
 ### Changes to the X86 Backend
 
+* Masked gather and scatter cost overheads are now per-shape on AMD znver4
+  and znver5 targets via a new `TuningPreferGSCostTable` subtarget
+  feature (set in ZN4Tuning, inherited by ZN5Tuning), replacing the
+  single flat overhead inherited from the generic AVX-512 path. The
+  per-shape costs use empirical break-even values measured on Zen 4 /
+  Zen 5 hardware.
+
 ### Changes to the OCaml bindings
 
 ### Changes to the Python bindings

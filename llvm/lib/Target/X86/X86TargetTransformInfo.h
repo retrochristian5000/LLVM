@@ -273,8 +273,11 @@ private:
                                   Type *DataTy, const Value *Ptr,
                                   Align Alignment, unsigned AddressSpace) const;
 
-  int getGatherOverhead() const;
-  int getScatterOverhead() const;
+  int getGatherOverhead(Type *SrcVTy) const;
+  int getScatterOverhead(Type *SrcVTy) const;
+  std::optional<unsigned>
+  getModeledGSInstrCost(bool IsLoad, Type *SrcVTy,
+                        TTI::TargetCostKind CostKind) const;
 
   /// @}
 };
