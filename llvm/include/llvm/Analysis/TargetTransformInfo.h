@@ -235,9 +235,7 @@ public:
   const SmallVectorImpl<const Value *> &getArgs() const { return Arguments; }
   const SmallVectorImpl<Type *> &getArgTypes() const { return ParamTys; }
 
-  bool isTypeBasedOnly() const {
-    return Arguments.empty();
-  }
+  bool isTypeBasedOnly() const { return Arguments.empty(); }
 
   bool skipScalarizationCost() const { return ScalarizationCost.isValid(); }
 };
@@ -546,6 +544,26 @@ public:
 
   /// Return false if a \p AS0 address cannot possibly alias a \p AS1 address.
   LLVM_ABI bool addrspacesMayAlias(unsigned AS0, unsigned AS1) const;
+
+  /// Describes a single address space exposed by the target.
+  struct PointerInfo {
+    /// The address space number, in the target's own numbering.
+    unsigned AddrSpace = 0;
+    /// The target's name for this address space, e.g. "global". Empty if the
+    /// target does not name it.
+    StringRef Name;
+  };
+
+  /// Returns every address space the target gives a meaning to, sorted by
+  /// address space number.
+  ///
+  /// \returns an empty list for targets that do not describe their address
+  /// spaces.
+  LLVM_ABI SmallVector<PointerInfo, 8> getPointerInfos() const;
+
+  /// Returns the description of address space \p AS, or std::nullopt if the
+  /// target does not describe it.
+  LLVM_ABI std::optional<PointerInfo> getPointerInfo(unsigned AS) const;
 
   /// Returns the address space ID for a target's 'flat' address space. Note
   /// this is not necessarily the same as addrspace(0), which LLVM sometimes
@@ -1266,9 +1284,9 @@ public:
     SK_PermuteSingleSrc, ///< Shuffle elements of single source vector with any
                          ///< shuffle mask.
     SK_Splice            ///< Concatenates elements from the first input vector
-                         ///< with elements of the second input vector. Returning
-                         ///< a vector of the same type as the input vectors.
-                         ///< Index indicates start offset in first input vector.
+              ///< with elements of the second input vector. Returning
+              ///< a vector of the same type as the input vectors.
+              ///< Index indicates start offset in first input vector.
   };
 
   /// Additional information about an operand's possible values.
@@ -1294,21 +1312,16 @@ public:
     OperandValueProperties Properties = OP_None;
 
     bool isConstant() const {
-      return Kind == OK_UniformConstantValue || Kind == OK_NonUniformConstantValue;
+      return Kind == OK_UniformConstantValue ||
+             Kind == OK_NonUniformConstantValue;
     }
     bool isUniform() const {
       return Kind == OK_UniformConstantValue || Kind == OK_UniformValue;
     }
-    bool isPowerOf2() const {
-      return Properties == OP_PowerOf2;
-    }
-    bool isNegatedPowerOf2() const {
-      return Properties == OP_NegatedPowerOf2;
-    }
+    bool isPowerOf2() const { return Properties == OP_PowerOf2; }
+    bool isNegatedPowerOf2() const { return Properties == OP_NegatedPowerOf2; }
 
-    OperandValueInfo getNoProps() const {
-      return {Kind, OP_None};
-    }
+    OperandValueInfo getNoProps() const { return {Kind, OP_None}; }
 
     OperandValueInfo mergeWith(const OperandValueInfo OpInfoY) {
       OperandValueKind MergeKind = OK_AnyValue;
