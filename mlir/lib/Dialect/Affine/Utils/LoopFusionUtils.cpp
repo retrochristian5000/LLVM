@@ -191,6 +191,43 @@ gatherLoadsAndStores(AffineForOp forOp,
   return !hasIfOp;
 }
 
+// The fusion transformation clones the complete source loop body into the
+// destination schedule. The affine slice and dependence analysis below does
+// not model the order of non-affine memory effects within that schedule, so
+// keep such effects out of candidate loops until that analysis is extended.
+static bool hasUnmodeledMemoryEffects(AffineForOp forOp) {
+  LoopNestStateCollector collector;
+  collector.collect(forOp);
+  return !collector.memrefLoads.empty() || !collector.memrefStores.empty() ||
+         !collector.memrefFrees.empty();
+}
+
+// Returns true when accesses in two loop bodies use different views of the
+// same storage and at least one access writes. The raw view remains important
+// for affine coordinate analysis, but a storage-level conflict is enough to
+// reject fusion because this check protects the frame condition of the
+// complete loop bodies before strategy-specific filtering.
+static bool hasConflictingStorageAccesses(ArrayRef<Operation *> firstOps,
+                                          ArrayRef<Operation *> secondOps) {
+  for (Operation *firstOp : firstOps) {
+    MemRefAccess firstAccess(firstOp);
+    Value firstStorage = memref::skipViewLikeOps(
+        cast<MemrefValue>(firstAccess.memref));
+    for (Operation *secondOp : secondOps) {
+      MemRefAccess secondAccess(secondOp);
+      if (firstAccess.memref == secondAccess.memref)
+        continue;
+      Value secondStorage = memref::skipViewLikeOps(
+          cast<MemrefValue>(secondAccess.memref));
+      if (firstStorage != secondStorage)
+        continue;
+      if (firstAccess.isStore() || secondAccess.isStore())
+        return true;
+    }
+  }
+  return false;
+}
+
 /// Returns the maximum loop depth at which we could fuse producer loop
 /// 'srcForOp' into consumer loop 'dstForOp' without violating data dependences.
 // TODO: Generalize this check for sibling and more generic fusion scenarios.
@@ -289,6 +326,12 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
     return FusionResult::FailPrecondition;
   }
 
+  if (hasUnmodeledMemoryEffects(srcForOp) ||
+      hasUnmodeledMemoryEffects(dstForOp)) {
+    LDBG() << "Cannot fuse loop nests with unmodeled non-affine memory effects";
+    return FusionResult::FailFusionDependence;
+  }
+
   // Return 'failure' if no valid insertion point for fused loop nest in 'block'
   // exists which would preserve dependences.
   if (!getFusedLoopNestInsertionPoint(srcForOp, dstForOp)) {
@@ -314,6 +357,12 @@ FusionResult mlir::affine::canFuseLoops(AffineForOp srcForOp,
   if (!gatherLoadsAndStores(forOpB, opsB)) {
     LDBG() << "Fusing loops with affine.if unsupported";
     return FusionResult::FailPrecondition;
+  }
+
+  if (hasConflictingStorageAccesses(opsA, opsB)) {
+    LDBG() << "Fusion would change ordering of accesses through different "
+              "views of the same storage";
+    return FusionResult::FailFusionDependence;
   }
 
   // Return 'failure' if fusing loops at depth 'dstLoopDepth' wouldn't preserve

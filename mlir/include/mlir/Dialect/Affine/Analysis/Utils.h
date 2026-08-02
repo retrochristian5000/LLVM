@@ -32,9 +32,8 @@ class AffineForOp;
 class AffineValueMap;
 struct MemRefAccess;
 
-// LoopNestStateCollector walks loop nests and collects load and store
-// operations, and whether or not a region holding op other than ForOp and IfOp
-// was encountered in the loop nest.
+// LoopNestStateCollector walks loop nests and collects affine and non-affine
+// memory operations.
 struct LoopNestStateCollector {
   SmallVector<AffineForOp, 4> forOps;
   // Affine loads.
@@ -48,8 +47,7 @@ struct LoopNestStateCollector {
   // Free operations.
   SmallVector<Operation *, 4> memrefFrees;
 
-  // Collects load and store operations, and whether or not a region holding op
-  // other than ForOp and IfOp was encountered in the loop nest.
+  // Collects affine and non-affine memory operations in the loop nest.
   void collect(Operation *opToWalk);
 };
 
@@ -248,7 +246,7 @@ public:
                  ArrayRef<Operation *> memrefStores,
                  ArrayRef<Operation *> memrefFrees);
 
-  void clearNodeLoadAndStores(unsigned id);
+  void clearNodeMemoryOps(unsigned id);
 
   // Calls 'callback' for each input edge incident to node 'id' which carries a
   // memref dependence.

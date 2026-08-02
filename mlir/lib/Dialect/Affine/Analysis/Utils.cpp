@@ -817,7 +817,7 @@ void MemRefDependenceGraph::updateEdges(unsigned sibId, unsigned dstId) {
   }
 }
 
-// Adds ops in 'loads' and 'stores' to node at 'id'.
+// Adds all collected memory operations to node at 'id'.
 void MemRefDependenceGraph::addToNode(unsigned id, ArrayRef<Operation *> loads,
                                       ArrayRef<Operation *> stores,
                                       ArrayRef<Operation *> memrefLoads,
@@ -831,10 +831,13 @@ void MemRefDependenceGraph::addToNode(unsigned id, ArrayRef<Operation *> loads,
   llvm::append_range(node->memrefFrees, memrefFrees);
 }
 
-void MemRefDependenceGraph::clearNodeLoadAndStores(unsigned id) {
+void MemRefDependenceGraph::clearNodeMemoryOps(unsigned id) {
   Node *node = getNode(id);
   node->loads.clear();
   node->stores.clear();
+  node->memrefLoads.clear();
+  node->memrefStores.clear();
+  node->memrefFrees.clear();
 }
 
 // Calls 'callback' for each input edge incident to node 'id' which carries a

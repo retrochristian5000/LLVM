@@ -1382,3 +1382,96 @@ func.func @value_less_nonaddressable_free_effect(
   }
   return
 }
+
+// Non-affine memory effects inside candidate loops are not included in the
+// affine slice analysis, so fusion must preserve the two complete loops.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @non_affine_effects_inside_candidate_loops
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        memref.load
+// PRODUCER-CONSUMER-MAXIMAL:        memref.store
+// PRODUCER-CONSUMER-MAXIMAL:      }
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        memref.load
+func.func @non_affine_effects_inside_candidate_loops(
+    %in: memref<8xi32>, %out: memref<8xi32>) {
+  %tmp = memref.alloc() : memref<8xi32>
+  %counter = memref.alloc() : memref<1xi32>
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : i32
+  affine.for %i = 0 to 8 {
+    %v = affine.load %in[%i] : memref<8xi32>
+    %old = memref.load %counter[%c0] : memref<1xi32>
+    %next = arith.addi %old, %c1 : i32
+    memref.store %next, %counter[%c0] : memref<1xi32>
+    affine.store %v, %tmp[%i] : memref<8xi32>
+  }
+  affine.for %j = 0 to 8 {
+    %v = affine.load %tmp[%j] : memref<8xi32>
+    %current = memref.load %counter[%c0] : memref<1xi32>
+    %result = arith.addi %v, %current : i32
+    affine.store %result, %out[%j] : memref<8xi32>
+  }
+  return
+}
+
+// A source read and destination write through overlapping non-trivial views
+// must not be interleaved by producer-consumer fusion.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @overlapping_subviews_inside_loops
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.load
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+// PRODUCER-CONSUMER-MAXIMAL:      }
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+func.func @overlapping_subviews_inside_loops(%root: memref<32xf32>) {
+  %a = memref.subview %root[0] [16] [1]
+      : memref<32xf32> to memref<16xf32, strided<[1], offset: 0>>
+  %b = memref.subview %root[1] [16] [1]
+      : memref<32xf32> to memref<16xf32, strided<[1], offset: 1>>
+  %tmp = memref.alloc() : memref<16xf32>
+  affine.for %i = 0 to 16 {
+    %v = affine.load %a[%i]
+        : memref<16xf32, strided<[1], offset: 0>>
+    affine.store %v, %tmp[%i] : memref<16xf32>
+  }
+  affine.for %j = 0 to 16 {
+    %v = affine.load %tmp[%j] : memref<16xf32>
+    affine.store %v, %b[%j]
+        : memref<16xf32, strided<[1], offset: 1>>
+  }
+  return
+}
+
+// The reverse read/write direction is covered independently so the guard is
+// not accidentally limited to source-read/destination-write pairs.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @overlapping_subviews_write_read
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.store
+// PRODUCER-CONSUMER-MAXIMAL:      }
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+// PRODUCER-CONSUMER-MAXIMAL:        affine.load
+func.func @overlapping_subviews_write_read(
+    %root: memref<32xf32>, %out: memref<16xf32>) {
+  %a = memref.subview %root[0] [16] [1]
+      : memref<32xf32> to memref<16xf32, strided<[1], offset: 0>>
+  %b = memref.subview %root[1] [16] [1]
+      : memref<32xf32> to memref<16xf32, strided<[1], offset: 1>>
+  %tmp = memref.alloc() : memref<16xf32>
+  %cst = arith.constant 1.0 : f32
+  affine.for %i = 0 to 16 {
+    affine.store %cst, %a[%i]
+        : memref<16xf32, strided<[1], offset: 0>>
+    affine.store %cst, %tmp[%i] : memref<16xf32>
+  }
+  affine.for %j = 0 to 16 {
+    %v = affine.load %tmp[%j] : memref<16xf32>
+    %other = affine.load %b[%j]
+        : memref<16xf32, strided<[1], offset: 1>>
+    %sum = arith.addf %v, %other : f32
+    affine.store %sum, %out[%j] : memref<16xf32>
+  }
+  return
+}

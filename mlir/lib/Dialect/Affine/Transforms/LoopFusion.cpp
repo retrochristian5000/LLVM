@@ -1175,8 +1175,8 @@ public:
         LoopNestStateCollector dstLoopCollector;
         dstLoopCollector.collect(dstAffineForOp);
 
-        // Clear and add back loads and stores.
-        mdg->clearNodeLoadAndStores(dstNode->id);
+        // Clear and add back all memory operations.
+        mdg->clearNodeMemoryOps(dstNode->id);
         mdg->addToNode(
             dstId, dstLoopCollector.loadOpInsts, dstLoopCollector.storeOpInsts,
             dstLoopCollector.memrefLoads, dstLoopCollector.memrefStores,
@@ -1527,8 +1527,8 @@ public:
     auto dstForInst = cast<AffineForOp>(dstNode->op);
     LoopNestStateCollector dstLoopCollector;
     dstLoopCollector.collect(dstForInst);
-    // Clear and add back loads and stores
-    mdg->clearNodeLoadAndStores(dstNode->id);
+    // Clear and add back all memory operations.
+    mdg->clearNodeMemoryOps(dstNode->id);
     mdg->addToNode(dstNode->id, dstLoopCollector.loadOpInsts,
                    dstLoopCollector.storeOpInsts, dstLoopCollector.memrefLoads,
                    dstLoopCollector.memrefStores, dstLoopCollector.memrefFrees);
