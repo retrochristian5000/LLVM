@@ -48,6 +48,7 @@ public:
     pipe,
     plus,
     plusequal,
+    question,
     r_paren,
     r_square,
     slash,
