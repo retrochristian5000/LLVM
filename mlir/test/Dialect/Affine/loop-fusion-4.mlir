@@ -1182,21 +1182,101 @@ func.func @symbol_addressable_effect(
 }
 func.func private @effect_target()
 
-// A value-less effect on a non-addressable resource is disjoint from memref
-// accesses, so the otherwise legal producer-consumer fusion remains enabled.
+// An addressable effect on a non-memref SSA value is not representable by the
+// per-memref dependence graph. Fusion must be skipped for the block.
 
-// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_nonaddressable_effect
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_addressable_nonmemref_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
 // PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
 // PRODUCER-CONSUMER-MAXIMAL:      affine.for
-// PRODUCER-CONSUMER-MAXIMAL-NOT:  affine.for
-func.func @value_less_nonaddressable_effect(
+func.func @value_addressable_nonmemref_effect(
     %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
   affine.for %i = 0 to 16 {
     %a = affine.load %in[%i] : memref<32xf64>
     affine.store %a, %comm[%i] : memref<32xf64>
   }
   %effect = "test.side_effect_op"() {
-    effects = [{effect = "write", test_nonaddressable_resource}]
+    effects = [{effect = "write", on_result}]
+  } : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// A value-less effect on a non-addressable resource cannot be represented by
+// the per-memref dependence graph. Effects on the same resource must still be
+// ordered, so fusion must be skipped for the block.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_nonaddressable_write_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @value_less_nonaddressable_write_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+    "test.side_effect_op"() {
+      effects = [{effect = "write", test_nonaddressable_resource}]
+    } : () -> i32
+  }
+  "test.side_effect_op"() {
+    effects = [{effect = "read", test_nonaddressable_resource}]
+  } : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// Value-less reads on a non-addressable resource are also unrepresentable.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_nonaddressable_read_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+func.func @value_less_nonaddressable_read_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+  }
+  "test.side_effect_op"() {
+    effects = [{effect = "read", test_nonaddressable_resource}]
+  } : () -> i32
+  affine.for %j = 0 to 16 {
+    %a = affine.load %comm[%j] : memref<32xf64>
+    affine.store %a, %out[%j] : memref<32xf64>
+    "test.side_effect_op"() {
+      effects = [{effect = "write", test_nonaddressable_resource}]
+    } : () -> i32
+  }
+  return
+}
+
+// Free effects follow the same conservative rule.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @value_less_nonaddressable_free_effect
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      test.side_effect_op
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+func.func @value_less_nonaddressable_free_effect(
+    %in: memref<32xf64>, %comm: memref<32xf64>, %out: memref<32xf64>) {
+  affine.for %i = 0 to 16 {
+    %a = affine.load %in[%i] : memref<32xf64>
+    affine.store %a, %comm[%i] : memref<32xf64>
+    "test.side_effect_op"() {
+      effects = [{effect = "free", test_nonaddressable_resource}]
+    } : () -> i32
+  }
+  "test.side_effect_op"() {
+    effects = [{effect = "read", test_nonaddressable_resource}]
   } : () -> i32
   affine.for %j = 0 to 16 {
     %a = affine.load %comm[%j] : memref<32xf64>

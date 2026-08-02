@@ -54,8 +54,9 @@ static bool isSameMemref(Value lhs, Value rhs) {
 /// (e.g. a call to an external function without a memory-effect interface) is
 /// conservatively assumed to affect all its memref operands. Fully aliasing
 /// views are canonicalized so the MDG uses one key for the view and its source.
-/// Returns false if an addressable effect cannot be represented by a memref
-/// value, in which case the MDG must not be used for fusion.
+/// Returns false if a selected effect cannot be represented by a memref value.
+/// The MDG has no resource-level edges, so dropping such an effect would make
+/// fusion unsound even when its resource is non-addressable.
 template <typename... EffectTys>
 static bool getMayAffectedValues(Operation *op,
                                  SmallVectorImpl<Value> &values) {
@@ -77,29 +78,16 @@ static bool getMayAffectedValues(Operation *op,
     if (!isa<EffectTys...>(effect.getEffect()))
       continue;
     Value effectVal = effect.getValue();
-    if (!effectVal) {
-      // A value-less or symbol-associated effect on an addressable resource
-      // cannot be represented by a per-memref graph edge. Refuse to fuse the
-      // block rather than silently dropping the effect.
-      if (effect.getResource()->isAddressable())
-        return false;
-      continue;
-    }
-    if (isa<BaseMemRefType>(effectVal.getType())) {
-      values.push_back(canonicalizeMemref(effectVal));
-      continue;
-    }
-    // An addressable effect on a non-memref value (for example, a pointer) is
-    // equally unrepresentable by the memref dependence graph.
-    if (effect.getResource()->isAddressable())
+    if (!effectVal || !isa<BaseMemRefType>(effectVal.getType()))
       return false;
+    values.push_back(canonicalizeMemref(effectVal));
   };
   return true;
 }
 
 /// Returns true if `op` may have a memory effect of type `EffectTys` on
 /// `memref`, i.e., whether `memref` is among the values returned by
-/// `getMayAffectedValues` for `op`. An unrepresentable addressable effect is
+/// `getMayAffectedValues` for `op`. An unrepresentable effect is
 /// conservatively treated as affecting every memref.
 template <typename... EffectTys>
 static bool mayHaveEffect(Operation *op, Value memref) {
@@ -135,7 +123,10 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
           memrefStores.push_back(op);
         }
       } else {
-        // Non-affine loads and stores.
+        // Non-affine loads, stores, and frees. Allocation effects are
+        // intentionally omitted: they do not access existing memory, and
+        // allocation results are handled by existing SSA and local-allocation
+        // analysis instead of the memref access graph.
         if (hasEffect<MemoryEffects::Read>(op))
           memrefLoads.push_back(op);
         if (hasEffect<MemoryEffects::Write>(op))
