@@ -890,6 +890,29 @@ private:
       default:
         State = IES_ERROR;
         break;
+      case IES_DIVIDE:
+      case IES_MOD: {
+        auto HasError = [&ErrMsg](IntelExprState IES, int64_t TmpInt) {
+          if (TmpInt != 0)
+            return false;
+          switch (IES) {
+          case IES_DIVIDE:
+            ErrMsg = "division by zero in assembly expression";
+            break;
+          case IES_MOD:
+            ErrMsg = "modulo by zero in assembly expression";
+            break;
+          default:
+            llvm_unreachable("unreachable");
+          }
+          return true;
+        };
+        if (HasError(State, TmpInt)) {
+          State = IES_ERROR;
+          return true;
+        }
+        [[fallthrough]];
+      }
       case IES_PLUS:
       case IES_MINUS:
       case IES_NOT:
@@ -904,8 +927,6 @@ private:
       case IES_GE:
       case IES_LSHIFT:
       case IES_RSHIFT:
-      case IES_DIVIDE:
-      case IES_MOD:
       case IES_MULTIPLY:
       case IES_LPAREN:
       case IES_INIT:
