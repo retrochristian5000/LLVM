@@ -1006,7 +1006,8 @@ public:
       }
 
       // Recognize UnmergeSrc that can be unmerged to DstTy directly.
-      // Types have to be either both vector or both non-vector types.
+      // Types have to be either both vector or both non-vector types, or
+      // UnmergeSrcTy is vector and DstTy is scalar.
       // In case of vector types, the scalar elements need to match.
       // Merge-like opcodes are combined one at the time. First one creates new
       // unmerge, following should use the same unmerge (builder performs CSE).
@@ -1016,14 +1017,22 @@ public:
       // %AnotherDst:_(DstTy) = G_merge_like_opcode %2:_(EltTy), %3
       //
       // %Dst:_(DstTy), %AnotherDst = G_UNMERGE_VALUES %UnmergeSrc
-      if (((!DstTy.isVector() && !UnmergeSrcTy.isVector()) ||
-           (DstTy.isVector() && UnmergeSrcTy.isVector() &&
+      if ((!DstTy.isVector() ||
+           (UnmergeSrcTy.isVector() &&
             DstTy.getScalarType() == UnmergeSrcTy.getScalarType())) &&
           (Elt0UnmergeIdx % NumMIElts == 0) &&
+          (DstTy.getSizeInBits() < UnmergeSrcTy.getSizeInBits()) &&
           getCoverTy(UnmergeSrcTy, DstTy) == UnmergeSrcTy) {
         if (!isSequenceFromUnmerge(MI, 0, Unmerge, Elt0UnmergeIdx, NumMIElts,
                                    EltSize, false))
           return false;
+        if (!DstTy.isVector() && UnmergeSrcTy.isVector()) {
+          LegalizeActionStep ActionStep = LI.getAction(
+              {TargetOpcode::G_UNMERGE_VALUES, {DstTy, UnmergeSrcTy}});
+          if (ActionStep.Action != LegalizeAction::Legal) {
+            return false;
+          }
+        }
         MIB.setInstrAndDebugLoc(MI);
         auto NewUnmerge = MIB.buildUnmerge(DstTy, Unmerge->getSourceReg());
         unsigned DstIdx = (Elt0UnmergeIdx * EltSize) / DstTy.getSizeInBits();
