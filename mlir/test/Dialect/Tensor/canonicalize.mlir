@@ -623,6 +623,49 @@ func.func @trivial_slice(%arg0 : tensor<4x6x16x32xi8>) -> tensor<4x6x16x32xi8> {
 
 // -----
 
+// CHECK-LABEL: func @fold_extract_slice_of_expand_shape
+//  CHECK-SAME:   %[[ARG0:.*]]: tensor<4096xf32>
+//   CHECK-NOT:   tensor.expand_shape
+//   CHECK-NOT:   tensor.extract_slice
+//       CHECK:   return %[[ARG0]] : tensor<4096xf32>
+func.func @fold_extract_slice_of_expand_shape(
+    %arg0 : tensor<4096xf32>) -> tensor<4096xf32> {
+  %expanded = tensor.expand_shape %arg0 [[0, 1]] output_shape [4096, 1]
+    : tensor<4096xf32> into tensor<4096x1xf32>
+  %slice = tensor.extract_slice %expanded[0, 0] [4096, 1] [1, 1]
+    : tensor<4096x1xf32> to tensor<4096xf32>
+  return %slice : tensor<4096xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @dont_fold_extract_slice_of_expand_shape_with_different_sizes
+//       CHECK:   tensor.expand_shape
+//       CHECK:   tensor.extract_slice
+func.func @dont_fold_extract_slice_of_expand_shape_with_different_sizes(
+    %arg0 : tensor<4096xf32>) -> tensor<1024xf32> {
+  %expanded = tensor.expand_shape %arg0 [[0, 1]] output_shape [4096, 1]
+    : tensor<4096xf32> into tensor<4096x1xf32>
+  %slice = tensor.extract_slice %expanded[0, 0] [1024, 1] [1, 1]
+    : tensor<4096x1xf32> to tensor<1024xf32>
+  return %slice : tensor<1024xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @fold_extract_slice_of_empty
+//   CHECK-NOT:   tensor.extract_slice
+//       CHECK:   %[[EMPTY:.*]] = tensor.empty() : tensor<4096xf32>
+//       CHECK:   return %[[EMPTY]] : tensor<4096xf32>
+func.func @fold_extract_slice_of_empty() -> tensor<4096xf32> {
+  %empty = tensor.empty() : tensor<4096x1xf32>
+  %slice = tensor.extract_slice %empty[0, 0] [4096, 1] [1, 1]
+    : tensor<4096x1xf32> to tensor<4096xf32>
+  return %slice : tensor<4096xf32>
+}
+
+// -----
+
 // CHECK-LABEL: func @trivial_insert_slice
 //  CHECK-SAME:   %[[ARG0:.[a-z0-9A-Z_]+]]: tensor<4x6x16x32xi8>
 //   CHECK-NOT:   tensor.extract_slice

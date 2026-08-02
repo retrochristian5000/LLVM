@@ -2612,6 +2612,96 @@ public:
   }
 };
 
+/// Fold a full-slice rank-reducing extract_slice of an expand_shape back to
+/// the expand_shape source when the expanded and sliced dimensions match.
+///
+/// Example:
+/// ```
+///   %expanded = tensor.expand_shape %src [[0, 1]] output_shape [4096, 1]
+///       : tensor<4096xf32> into tensor<4096x1xf32>
+///   %slice = tensor.extract_slice %expanded[0, 0] [4096, 1] [1, 1]
+///       : tensor<4096x1xf32> to tensor<4096xf32>
+/// ```
+///
+class FoldExtractSliceOfExpandShape final
+    : public OpRewritePattern<ExtractSliceOp> {
+public:
+  using OpRewritePattern<ExtractSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtractSliceOp sliceOp,
+                                PatternRewriter &rewriter) const override {
+    auto expandOp = sliceOp.getSource().getDefiningOp<ExpandShapeOp>();
+    if (!expandOp)
+      return failure();
+
+    if (sliceOp.getType() != expandOp.getSrcType())
+      return failure();
+
+    SmallVector<OpFoldResult> mixedExpandedSizes =
+        expandOp.getMixedOutputShape();
+    if (mixedExpandedSizes.size() != sliceOp.getMixedSizes().size())
+      return failure();
+
+    for (auto [offset, size, stride, expandedSize] :
+         llvm::zip_equal(sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
+                         sliceOp.getMixedStrides(), mixedExpandedSizes)) {
+      if (getConstantIntValue(offset) != static_cast<int64_t>(0) ||
+          getConstantIntValue(stride) != static_cast<int64_t>(1))
+        return failure();
+      if (size != expandedSize)
+        return failure();
+    }
+
+    rewriter.replaceOp(sliceOp, expandOp.getSrc());
+    return success();
+  }
+};
+
+/// Fold a rank-reducing no-op extract_slice of a tensor.empty into a smaller
+/// tensor.empty.
+///
+/// The slice must be a full/identity slice: all offsets are 0, all strides are
+/// 1, and each size matches the corresponding tensor.empty source dimension.
+/// The slice must also be rank-reducing. Restricting to this case avoids
+/// undoing transforms that intentionally allocate a larger tensor.empty and
+/// then slice it (e.g. transform.tensor.make_loop_independent).
+class FoldExtractSliceOfEmpty final : public OpRewritePattern<ExtractSliceOp> {
+public:
+  using OpRewritePattern<ExtractSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtractSliceOp sliceOp,
+                                PatternRewriter &rewriter) const override {
+    if (!sliceOp.getSource().getDefiningOp<EmptyOp>())
+      return failure();
+
+    // Only fold rank-reducing slices. Non-rank-reducing identity slices are
+    // already handled by ExtractSliceOp::fold.
+    if (sliceOp.getType().getRank() >= sliceOp.getSourceType().getRank())
+      return failure();
+
+    // Only fold full/identity slices: all offsets are 0, all strides are 1,
+    // and each size matches the corresponding (static) source dimension.
+    ArrayRef<int64_t> sourceShape = sliceOp.getSourceType().getShape();
+    for (auto [offset, size, stride, srcDim] :
+         llvm::zip_equal(sliceOp.getMixedOffsets(), sliceOp.getMixedSizes(),
+                         sliceOp.getMixedStrides(), sourceShape)) {
+      if (getConstantIntValue(offset) != static_cast<int64_t>(0) ||
+          getConstantIntValue(stride) != static_cast<int64_t>(1))
+        return failure();
+      // Bail out if the source dim is dynamic or the size does not provably
+      // match it.
+      if (ShapedType::isDynamic(srcDim) || getConstantIntValue(size) != srcDim)
+        return failure();
+    }
+
+    rewriter.replaceOp(sliceOp,
+                       EmptyOp::create(rewriter, sliceOp.getLoc(),
+                                       sliceOp.getType(), sliceOp.getSizes())
+                           .getResult());
+    return success();
+  }
+};
+
 /// Slice elements from `values` into `outValues`. `counts` represents the
 /// numbers of elements to stride in the original values for each dimension.
 /// The output values can be used to construct a DenseElementsAttr.
@@ -2768,6 +2858,7 @@ void ExtractSliceOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<
       OpWithOffsetSizesAndStridesConstantArgumentFolder<
           ExtractSliceOp, SliceReturnTypeCanonicalizer, SliceCanonicalizer>,
+      FoldExtractSliceOfEmpty, FoldExtractSliceOfExpandShape,
       ExtractSliceOpCastFolder>(context);
 }
 
