@@ -1046,6 +1046,18 @@ InstructionCost GCNTTIImpl::getVectorInstrCost(
                                        VIC);
     }
 
+    // Gfx9 packed f32 pair formation for v_pk_*_f32: load-fed inserts are free;
+    // compute-fed inserts cost scales with legalization (wide vectors split to
+    // native <2 x f32>).
+    if (Opcode == Instruction::InsertElement && EltSize == 32 &&
+        ST->hasPackedFP32Ops())
+      if (auto *VecTy = dyn_cast<FixedVectorType>(ValTy))
+        if (VecTy->getElementType()->isFloatTy()) {
+          if (Op1 && isa<LoadInst>(Op1))
+            return 0;
+          return getTypeLegalizationCost(ValTy).first;
+        }
+
     // Extracts are just reads of a subregister, so are free. Inserts are
     // considered free because we don't want to have any cost for scalarizing
     // operations, and we don't have to copy into a different register class.
@@ -1348,6 +1360,28 @@ InstructionCost GCNTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
   Kind = improveShuffleKindFromMask(Kind, Mask, SrcTy, Index, SubTp);
 
   unsigned ScalarSize = DL.getTypeSizeInBits(SrcTy->getElementType());
+
+  // Legal <2 x f32> shuffles for v_pk_*_f32 sources. Identity and broadcasts
+  // are free via op_sel on packed ops; high-to-low lane swap within an aligned
+  // pair is lowered to v_pk_mov_b32.
+  if (ST->hasPackedFP32Ops() && ScalarSize == 32) {
+    auto *DstVecTy = dyn_cast<FixedVectorType>(DstTy);
+    auto *SrcVecTy = dyn_cast<FixedVectorType>(SrcTy);
+    if (DstVecTy && SrcVecTy && DstVecTy->getNumElements() == 2 &&
+        SrcVecTy->getNumElements() == 2 &&
+        DstVecTy->getElementType()->isFloatTy()) {
+      switch (Kind) {
+      case TTI::SK_Broadcast:
+      case TTI::SK_PermuteSingleSrc:
+        return 0;
+      case TTI::SK_Reverse:
+        return 1;
+      default:
+        break;
+      }
+    }
+  }
+
   if (ST->getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS &&
       (ScalarSize == 16 || ScalarSize == 8)) {
     // Larger vector widths may require additional instructions, but are
