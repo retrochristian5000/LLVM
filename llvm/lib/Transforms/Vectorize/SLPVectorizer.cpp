@@ -29479,6 +29479,7 @@ namespace {
 class HorizontalReduction {
   using ReductionOpsType = SmallVector<Value *, 16>;
   using ReductionOpsListType = SmallVector<ReductionOpsType, 2>;
+
   ReductionOpsListType ReductionOps;
   /// List of possibly reduced values.
   SmallVector<SmallVector<Value *>> ReducedVals;
@@ -29508,6 +29509,26 @@ class HorizontalReduction {
   static bool isBoolLogicOp(Instruction *I) {
     return isa<SelectInst>(I) &&
            (match(I, m_LogicalAnd()) || match(I, m_LogicalOr()));
+  }
+
+  /// Return CmpZero for a scalar OR/UMax reduction whose only use is an eq/ne
+  /// comparison against zero.
+  TTI::VectorInstrContext getReductionContext() const {
+    auto *Root = dyn_cast<Instruction>(ReductionRoot);
+    if (!Root || !Root->getType()->isIntegerTy() || !Root->hasOneUse() ||
+        (RdxKind != RecurKind::Or && RdxKind != RecurKind::UMax))
+      return TTI::VectorInstrContext::None;
+
+    CmpPredicate Pred;
+    if (!match(*Root->user_begin(),
+               m_c_ICmp(Pred, m_Specific(Root), m_ZeroInt())) ||
+        !ICmpInst::isEquality(Pred))
+      return TTI::VectorInstrContext::None;
+    return TTI::VectorInstrContext::CmpZero;
+  }
+
+  static bool isZeroCmpContext(TTI::VectorInstrContext Context) {
+    return Context == TTI::VectorInstrContext::CmpZero;
   }
 
   /// Checks if instruction is associative and can be vectorized.
@@ -30312,6 +30333,7 @@ public:
     if (RK == ReductionOrdering::Ordered)
       IgnoreList.clear();
     bool IsCmpSelMinMax = isCmpSelMinMax(cast<Instruction>(ReductionRoot));
+    TTI::VectorInstrContext RdxContext = getReductionContext();
 
     // Need to track reduced vals, they may be changed during vectorization of
     // subvectors.
@@ -30331,6 +30353,8 @@ public:
     // nodes and thus requiring extract if fully vectorized in other trees.
     SmallPtrSet<Value *, 4> RequiredExtract;
     WeakTrackingVH VectorizedTree = nullptr;
+    TTI::VectorInstrContext VectorizedReductionContext =
+        TTI::VectorInstrContext::None;
     bool CheckForReusedReductionOps = false;
     // Try to vectorize elements based on their type.
     SmallVector<InstructionsState> States;
@@ -30709,6 +30733,16 @@ public:
             LocalExternallyUsedValues.insert(RdxVal);
         V.buildExternalUses(LocalExternallyUsedValues);
 
+        // Use the zero-test cost only for a complete, standalone scalar
+        // reduction that can become one vector comparison and i1 reduction.
+        TTI::VectorInstrContext CostContext = TTI::VectorInstrContext::None;
+        if (isZeroCmpContext(RdxContext) && this->ReducedVals.size() == 1 &&
+            VL.size() == this->ReducedVals.front().size() &&
+            VectorValuesAndScales.empty() && !VectorizedTree &&
+            !isa<VectorType>(VL.front()->getType()) && !allConstant(VL) &&
+            !V.isReducedBitcastRoot() && !V.isReducedCmpBitcastRoot())
+          CostContext = RdxContext;
+
         // Estimate cost.
         InstructionCost ReductionCost;
         if (RK == ReductionOrdering::Ordered || V.isReducedBitcastRoot() ||
@@ -30717,7 +30751,7 @@ public:
         else
           ReductionCost =
               getReductionCost(TTI, VL, SameValuesCounter, IsCmpSelMinMax,
-                               RdxFMF, V, DT, DL, TLI);
+                               CostContext, RdxFMF, V, DT, DL, TLI);
         // If the root is a select (min/max idiom), the insert point is the
         // compare condition of that select.
         Instruction *RdxRootInst = cast<Instruction>(ReductionRoot);
@@ -30821,6 +30855,8 @@ public:
         Type *ScalarTy = VL.front()->getType();
         Type *VecTy = VectorizedRoot->getType();
         Type *RedScalarTy = VecTy->getScalarType();
+        if (isZeroCmpContext(CostContext))
+          VectorizedReductionContext = CostContext;
         VectorValuesAndScales.emplace_back(
             VectorizedRoot,
             OptReusedScalars && SameScaleFactor
@@ -30866,8 +30902,8 @@ public:
 
     if (!VectorValuesAndScales.empty())
       VectorizedTree = GetNewVectorizedTree(
-          VectorizedTree,
-          emitReduction(Builder, *TTI, ReductionRoot->getType()));
+          VectorizedTree, emitReduction(Builder, *TTI, ReductionRoot->getType(),
+                                        VectorizedReductionContext));
 
     if (!VectorizedTree) {
       if (!CheckForReusedReductionOps) {
@@ -30985,7 +31021,18 @@ public:
     }
     VectorizedTree = ExtraReductions.front().second;
 
-    ReductionRoot->replaceAllUsesWith(VectorizedTree);
+    if (isZeroCmpContext(VectorizedReductionContext)) {
+      auto *Cmp =
+          cast<ICmpInst>(*cast<Instruction>(ReductionRoot)->user_begin());
+      VectorizedTree->takeName(Cmp);
+      Cmp->replaceAllUsesWith(VectorizedTree);
+      salvageDebugInfo(*Cmp);
+      Cmp->dropAllReferences();
+      Cmp->removeFromParent();
+      V.eraseInstruction(Cmp);
+    } else {
+      ReductionRoot->replaceAllUsesWith(VectorizedTree);
+    }
 
     // The original scalar reduction is expected to have no remaining
     // uses outside the reduction tree itself.  Assert that we got this
@@ -31140,9 +31187,10 @@ public:
           V.calculateTreeCostAndTrimNonProfitable(VL, RdxRootInst);
       V.buildExternalUses(LocalExternallyUsedValues);
 
-      InstructionCost ReductionCost =
-          getReductionCost(TTI, VL, EmptySameValuesCounter,
-                           /*IsCmpSelMinMax=*/false, RdxFMF, V, DT, DL, TLI);
+      InstructionCost ReductionCost = getReductionCost(
+          TTI, VL, EmptySameValuesCounter,
+          /*IsCmpSelMinMax=*/false, TTI::VectorInstrContext::None, RdxFMF, V,
+          DT, DL, TLI);
       InstructionCost Cost =
           V.getTreeCost(TreeCost, VL, ReductionCost, RdxRootInst);
       LLVM_DEBUG(dbgs() << "SLP: Found cost = " << Cost
@@ -31325,8 +31373,9 @@ private:
   InstructionCost getReductionCost(
       TargetTransformInfo *TTI, ArrayRef<Value *> ReducedVals,
       const SmallMapVector<Value *, unsigned, 16> SameValuesCounter,
-      bool IsCmpSelMinMax, FastMathFlags FMF, const BoUpSLP &R,
-      DominatorTree &DT, const DataLayout &DL, const TargetLibraryInfo &TLI) {
+      bool IsCmpSelMinMax, TargetTransformInfo::VectorInstrContext Context,
+      FastMathFlags FMF, const BoUpSLP &R, DominatorTree &DT,
+      const DataLayout &DL, const TargetLibraryInfo &TLI) {
     TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
     Type *ScalarTy = ReducedVals.front()->getType();
     unsigned ReduxWidth = ReducedVals.size();
@@ -31409,6 +31458,38 @@ private:
     // 2. The storage does not have any vector with full vector use (first
     // vector with full register use).
     bool DoesRequireReductionOp = !AllConsts && VectorValuesAndScales.empty();
+    InstructionCost CmpReductionCost = InstructionCost::getInvalid();
+    if (isZeroCmpContext(Context)) {
+      // For a complete OR/UMax reduction used only by an eq/ne zero test,
+      // account for moving the comparison before the reduction:
+      //
+      //   %rdx = call iN @llvm.vector.reduce.or/umax(<VF x iN> %vec)
+      //   %cmp = icmp eq/ne iN %rdx, 0
+      //
+      // becomes:
+      //
+      //   %lane.cmp = icmp eq/ne <VF x iN> %vec, zeroinitializer
+      //   %cmp = call i1 @llvm.vector.reduce.and/or(<VF x i1> %lane.cmp)
+      //
+      // Equality requires every lane to be zero, so it uses an AND reduction;
+      // inequality requires any lane to be nonzero, so it uses OR. Add the
+      // vector comparison and boolean reduction costs, then remove the scalar
+      // comparison cost eliminated by this replacement.
+      assert(DoesRequireReductionOp && !isa<VectorType>(ScalarTy) &&
+             (RdxKind == RecurKind::Or || RdxKind == RecurKind::UMax) &&
+             "Unexpected zero comparison reduction");
+      auto *ScalarCmp =
+          cast<ICmpInst>(*cast<Instruction>(ReductionRoot)->user_begin());
+      CmpPredicate Pred = ScalarCmp->getPredicate();
+      auto *CmpTy = cast<VectorType>(CmpInst::makeCmpResultType(VectorTy));
+      unsigned ReductionOpcode =
+          Pred == ICmpInst::ICMP_EQ ? Instruction::And : Instruction::Or;
+      CmpReductionCost = TTI->getCmpSelInstrCost(Instruction::ICmp, VectorTy,
+                                                 CmpTy, Pred, CostKind) +
+                         TTI->getArithmeticReductionCost(ReductionOpcode, CmpTy,
+                                                         {}, CostKind) -
+                         TTI->getInstructionCost(ScalarCmp, CostKind);
+    }
     switch (RdxKind) {
     case RecurKind::Add:
     case RecurKind::Mul:
@@ -31420,7 +31501,9 @@ private:
       unsigned RdxOpcode = RecurrenceDescriptor::getOpcode(RdxKind);
       if (!AllConsts) {
         if (DoesRequireReductionOp) {
-          if (auto *VecTy = dyn_cast<FixedVectorType>(ScalarTy)) {
+          if (isZeroCmpContext(Context)) {
+            VectorCost = CmpReductionCost;
+          } else if (auto *VecTy = dyn_cast<FixedVectorType>(ScalarTy)) {
             assert(SLPReVec && "FixedVectorType is not expected.");
             unsigned ScalarTyNumElements = VecTy->getNumElements();
             for (unsigned I : seq<unsigned>(ReducedVals.size())) {
@@ -31525,7 +31608,11 @@ private:
       Intrinsic::ID Id = getMinMaxReductionIntrinsicOp(RdxKind);
       if (!AllConsts) {
         if (DoesRequireReductionOp) {
-          VectorCost = TTI->getMinMaxReductionCost(Id, VectorTy, FMF, CostKind);
+          if (isZeroCmpContext(Context))
+            VectorCost = CmpReductionCost;
+          else
+            VectorCost =
+                TTI->getMinMaxReductionCost(Id, VectorTy, FMF, CostKind);
         } else {
           // Check if the previous reduction already exists and account it as
           // series of operations + single reduction.
@@ -31565,7 +31652,25 @@ private:
   /// sub-registers, combines them with the given reduction operation as a
   /// vector operation and then performs single (small enough) reduction.
   Value *emitReduction(IRBuilderBase &Builder, const TargetTransformInfo &TTI,
-                       Type *DestTy) {
+                       Type *DestTy,
+                       TargetTransformInfo::VectorInstrContext Context) {
+    if (isZeroCmpContext(Context)) {
+      assert(VectorValuesAndScales.size() == 1 &&
+             !std::get<3>(VectorValuesAndScales.front()) &&
+             "Expected one complete vector reduction");
+      Value *Vec = std::get<0>(VectorValuesAndScales.front());
+      auto *VecTy = cast<VectorType>(Vec->getType());
+      auto *ScalarCmp =
+          cast<ICmpInst>(*cast<Instruction>(ReductionRoot)->user_begin());
+      CmpPredicate Pred = ScalarCmp->getPredicate();
+      Builder.SetCurrentDebugLocation(ScalarCmp->getDebugLoc());
+      Value *Cmp = Builder.CreateICmp(Pred, Vec, Constant::getNullValue(VecTy));
+      RecurKind BoolRdxKind =
+          Pred == ICmpInst::ICMP_EQ ? RecurKind::And : RecurKind::Or;
+      NumVectorInstructions += 2;
+      return createSimpleReduction(Builder, Cmp, BoolRdxKind);
+    }
+
     Value *ReducedSubTree = nullptr;
     // Creates reduction and combines with the previous reduction.
     auto CreateSingleOp = [&](Value *Vec, unsigned Scale, bool IsSigned,
