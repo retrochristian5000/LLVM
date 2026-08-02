@@ -15,6 +15,7 @@
 namespace lldb_private {
 
 class ABI;
+class APIMutexHandle;
 class ASTResultSynthesizer;
 class ASTStructExtractor;
 class Address;
