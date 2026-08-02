@@ -505,6 +505,8 @@ public:
     return true;
   }
 
+  virtual bool shouldExpandVectorMatch() const { return true; }
+
   virtual bool shouldExpandGetVectorLength(EVT CountVT, unsigned VF,
                                            bool IsScalable) const {
     return true;
@@ -519,13 +521,6 @@ public:
   unsigned getBitWidthForCttzElements(EVT RetVT, ElementCount EC,
                                       bool ZeroIsPoison,
                                       const ConstantRange *VScaleRange) const;
-
-  /// Return true if the @llvm.experimental.vector.match intrinsic should be
-  /// expanded for vector type `VT' and search size `SearchSize' using generic
-  /// code in SelectionDAGBuilder.
-  virtual bool shouldExpandVectorMatch(EVT VT, unsigned SearchSize) const {
-    return true;
-  }
 
   // Return true if op(vecreduce(x), vecreduce(y)) should be reassociated to
   // vecreduce(op(x, y)) for the reduction opcode RedOpc.
@@ -5764,6 +5759,11 @@ public:
   /// \param N Node to expand
   /// \returns The expansion result or SDValue() if it fails.
   SDValue expandVPCTTZElements(SDNode *N, SelectionDAG &DAG) const;
+
+  /// Expand VECTOR_MATCH nodes.
+  /// \param N Node to expand
+  /// \returns The expansion result or SDValue() if it fails.
+  SDValue expandVectorMatch(SDNode *N, SelectionDAG &DAG) const;
 
   /// Expand VECTOR_FIND_LAST_ACTIVE nodes
   /// \param N Node to expand
