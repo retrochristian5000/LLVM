@@ -94,7 +94,7 @@
 // CUDA-NEXT:   br i1 %1, label %while.entry, label %while.end
 //
 //      CUDA: while.entry:
-// CUDA-NEXT:   %entry1 = phi ptr [ @__start_llvm_offload_entries, %entry ], [ %16, %if.end ]
+// CUDA-NEXT:   %entry1 = phi ptr [ @__start_llvm_offload_entries, %entry ], [ %17, %if.end ]
 // CUDA-NEXT:   %2 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i32 0, i32 4
 // CUDA-NEXT:   %addr = load ptr, ptr %2, align 8
 // CUDA-NEXT:   %3 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i32 0, i32 8
@@ -117,15 +117,16 @@
 // CUDA-NEXT:   %constant = lshr i32 %11, 4
 // CUDA-NEXT:   %12 = and i32 %flags, 32
 // CUDA-NEXT:   %normalized = lshr i32 %12, 5
-// CUDA-NEXT:   %13 = icmp eq i16 %kind, 2
-// CUDA-NEXT:   br i1 %13, label %if.kind, label %if.end
+// CUDA-NEXT:   %13 = and i16 %kind, 2
+// CUDA-NEXT:   %14 = icmp ne i16 %13, 0
+// CUDA-NEXT:   br i1 %14, label %if.kind, label %if.end
 //
 //      CUDA: if.kind:
-// CUDA-NEXT:   %14 = icmp eq i64 %size, 0
-// CUDA-NEXT:   br i1 %14, label %if.then, label %if.else
+// CUDA-NEXT:   %15 = icmp eq i64 %size, 0
+// CUDA-NEXT:   br i1 %15, label %if.then, label %if.else
 //
 //      CUDA: if.then:
-// CUDA-NEXT:   %15 = call i32 @__cudaRegisterFunction(ptr %0, ptr %addr, ptr %name, ptr %name, i32 -1, ptr null, ptr null, ptr null, ptr null, ptr null)
+// CUDA-NEXT:   %16 = call i32 @__cudaRegisterFunction(ptr %0, ptr %addr, ptr %name, ptr %name, i32 -1, ptr null, ptr null, ptr null, ptr null, ptr null)
 // CUDA-NEXT:   br label %if.end
 //
 //      CUDA: if.else:
@@ -151,9 +152,9 @@
 // CUDA-NEXT:   br label %if.end
 //
 //      CUDA: if.end:
-// CUDA-NEXT:   %16 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i64 1
-// CUDA-NEXT:   %17 = icmp eq ptr %16, @__stop_llvm_offload_entries
-// CUDA-NEXT:   br i1 %17, label %while.end, label %while.entry
+// CUDA-NEXT:   %17 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i64 1
+// CUDA-NEXT:   %18 = icmp eq ptr %17, @__stop_llvm_offload_entries
+// CUDA-NEXT:   br i1 %18, label %while.end, label %while.entry
 //
 //      CUDA: while.end:
 // CUDA-NEXT:   ret void
@@ -236,7 +237,7 @@
 // HIP-NEXT:   br i1 %1, label %while.entry, label %while.end
 //
 //      HIP: while.entry:
-// HIP-NEXT:   %entry1 = phi ptr [ @{{.*offload_entries.*}}, %entry ], [ %16, %if.end ]
+// HIP-NEXT:   %entry1 = phi ptr [ @{{.*offload_entries.*}}, %entry ], [ %17, %if.end ]
 // HIP-NEXT:   %2 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i32 0, i32 4
 // HIP-NEXT:   %addr = load ptr, ptr %2, align 8
 // HIP-NEXT:   %3 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i32 0, i32 8
@@ -259,15 +260,16 @@
 // HIP-NEXT:   %constant = lshr i32 %11, 4
 // HIP-NEXT:   %12 = and i32 %flags, 32
 // HIP-NEXT:   %normalized = lshr i32 %12, 5
-// HIP-NEXT:   %13 = icmp eq i16 %kind, 4
-// HIP-NEXT:   br i1 %13, label %if.kind, label %if.end
+// HIP-NEXT:   %13 = and i16 %kind, 4
+// HIP-NEXT:   %14 = icmp ne i16 %13, 0
+// HIP-NEXT:   br i1 %14, label %if.kind, label %if.end
 //
 //      HIP: if.kind:
-// HIP-NEXT:   %14 = icmp eq i64 %size, 0
-// HIP-NEXT:   br i1 %14, label %if.then, label %if.else
+// HIP-NEXT:   %15 = icmp eq i64 %size, 0
+// HIP-NEXT:   br i1 %15, label %if.then, label %if.else
 //
 //      HIP: if.then:
-// HIP-NEXT:   %15 = call i32 @__hipRegisterFunction(ptr %0, ptr %addr, ptr %name, ptr %name, i32 -1, ptr null, ptr null, ptr null, ptr null, ptr null)
+// HIP-NEXT:   %16 = call i32 @__hipRegisterFunction(ptr %0, ptr %addr, ptr %name, ptr %name, i32 -1, ptr null, ptr null, ptr null, ptr null, ptr null)
 // HIP-NEXT:   br label %if.end
 //
 //      HIP: if.else:
@@ -295,9 +297,9 @@
 // HIP-NEXT:   br label %if.end
 //
 //      HIP: if.end:
-// HIP-NEXT:   %16 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i64 1
-// HIP-NEXT:   %17 = icmp eq ptr %16, @{{.*offload_entries.*}}
-// HIP-NEXT:   br i1 %17, label %while.end, label %while.entry
+// HIP-NEXT:   %17 = getelementptr inbounds %struct.__tgt_offload_entry, ptr %entry1, i64 1
+// HIP-NEXT:   %18 = icmp eq ptr %17, @{{.*offload_entries.*}}
+// HIP-NEXT:   br i1 %18, label %while.end, label %while.entry
 //
 //      HIP: while.end:
 // HIP-NEXT:   ret void
