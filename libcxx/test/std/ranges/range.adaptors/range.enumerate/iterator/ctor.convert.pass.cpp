@@ -27,7 +27,16 @@
 
 #include "test_iterators.h"
 
+#include "../../range_adaptor_types.h"
 #include "../types.h"
+
+using ConstIterIncompatibleView =
+    BasicView<forward_iterator<int*>,
+              forward_iterator<int*>,
+              random_access_iterator<const int*>,
+              random_access_iterator<const int*>>;
+static_assert(!std::convertible_to<std::ranges::iterator_t<ConstIterIncompatibleView>,
+                                   std::ranges::iterator_t<const ConstIterIncompatibleView>>);
 
 template <class Iterator, class Sentinel = sentinel_wrapper<Iterator>>
 constexpr void test() {
@@ -42,7 +51,7 @@ constexpr void test() {
     return EnumerateView(std::move(view));
   };
 
-  static_assert(std::is_convertible_v<EnumerateIterator, EnumerateConstIterator>);
+  static_assert(std::convertible_to<EnumerateIterator, EnumerateConstIterator>);
 
   std::array array{0, 84, 2, 3, 4};
   auto view = make_enumerate_view(array.begin(), array.end());
@@ -63,6 +72,17 @@ constexpr void test() {
     auto [index, value] = *(++it);
     assert(index == 1);
     assert(value == 84);
+  }
+  {
+    // underlying non-const to const not convertible
+    int buffer[3] = {1, 2, 3};
+    std::ranges::enumerate_view v(ConstIterIncompatibleView{buffer});
+    auto iter1 = v.begin();
+    auto iter2 = std::as_const(v).begin();
+
+    static_assert(!std::is_same_v<decltype(iter1), decltype(iter2)>);
+    static_assert(!std::constructible_from<decltype(iter1), decltype(iter2)>);
+    static_assert(!std::constructible_from<decltype(iter2), decltype(iter1)>);
   }
 }
 
