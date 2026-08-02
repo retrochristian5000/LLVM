@@ -21904,6 +21904,13 @@ SDValue DAGCombiner::ForwardLoadValueToDirectLoad(LoadSDNode *LD) {
         Wide->getAddressSpace() != LD->getAddressSpace())
       continue;
 
+    // The wide load must already be needed for something else. Forwarding from
+    // a wide load with no other users would trade one load for another, and it
+    // also fights ReduceLoadWidth, which turns a truncated load back into a
+    // narrow load: the two combines would undo each other forever.
+    if (SDValue(Wide, 0).use_empty())
+      continue;
+
     EVT WideVT = Wide->getValueType(0);
     if (WideVT != Wide->getMemoryVT() || !WideVT.isInteger() ||
         WideVT.isVector() || WideVT.isScalableVT() ||
@@ -21923,6 +21930,13 @@ SDValue DAGCombiner::ForwardLoadValueToDirectLoad(LoadSDNode *LD) {
     int64_t ByteOff = -Off;
     // LD must be fully contained, not just start inside Wide.
     if (ByteOff * 8 + LDVT.getFixedSizeInBits() > WideVT.getFixedSizeInBits())
+      continue;
+
+    // Only forward when narrowing Wide to LD's type is free on the target.
+    // Otherwise the truncate (plus a shift for a high field) can cost more than
+    // simply re-reading memory, which would pessimize targets where a sub-width
+    // truncate is not free (e.g. RISC-V, where only i64->i32 is free).
+    if (!TLI.isTruncateFree(WideVT, LDVT))
       continue;
 
     // LD is bits [ByteOff*8, ByteOff*8 + LDbits) of Wide: shift them down
