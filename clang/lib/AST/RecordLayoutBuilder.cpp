@@ -559,6 +559,41 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(
 
 typedef llvm::SmallPtrSet<const CXXRecordDecl*, 4> ClassSetTy;
 
+/// Check if we should prevent MaxFieldAlignment from reducing this field's
+/// alignment. Returns true if the field has ABI-required alignment
+/// (e.g., x86_fp80, SIMD vectors on Windows), unless the struct has explicit
+/// __attribute__((packed)).
+static bool ShouldPreserveFieldAlignment(const ASTContext &Context,
+                                         const FieldDecl *FD,
+                                         AlignRequirementKind AlignReq,
+                                         bool StructHasPackedAttr) {
+  if (AlignReq == AlignRequirementKind::RequiredByABI ||
+      AlignReq == AlignRequirementKind::RequiredByRecord)
+    return true;
+
+  // Check if type requires alignment preservation under #pragma pack
+  // (but respect explicit __attribute__((packed))).
+  if (!StructHasPackedAttr &&
+      Context.typeRequiresPreserveAlignUnderPragmaPack(FD->getType()))
+    return true;
+  return false;
+}
+
+/// Check if a record contains any fields requiring alignment preservation.
+/// Returns false if the record has explicit __attribute__((packed)).
+static bool RecordContainsAlignPreservingFields(const ASTContext &Context,
+                                                const RecordDecl *RD) {
+  if (RD->hasAttr<PackedAttr>())
+    return false;
+  for (const auto *Field : RD->fields()) {
+    TypeInfo TI = Context.getTypeInfo(Field->getType());
+    if (TI.isAlignRequired() ||
+        Context.typeRequiresPreserveAlignUnderPragmaPack(Field->getType()))
+      return true;
+  }
+  return false;
+}
+
 class ItaniumRecordLayoutBuilder {
 protected:
   // FIXME: Remove this and make the appropriate fields public.
@@ -2029,12 +2064,19 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
   UnpackedFieldAlign = std::max(UnpackedFieldAlign, MaxAlignmentInChars);
 
   // The maximum field alignment overrides the aligned attribute.
-  if (!MaxFieldAlignment.isZero()) {
+  // However, do not reduce alignment for ABI-required alignments (e.g.,
+  // x86_fp80, vector types) which must be preserved for correctness.
+  // On Windows, check if the field type is a vector with standard SIMD
+  // alignment (16 or 32 bytes with size == alignment) - these need their
+  // alignment preserved under #pragma pack. However, honor explicit
+  // __attribute__((packed)) on the struct (Packed=true means the struct
+  // has the packed attribute, not the field).
+  if (!MaxFieldAlignment.isZero() &&
+      !ShouldPreserveFieldAlignment(Context, D, AlignRequirement, Packed)) {
     PackedFieldAlign = std::min(PackedFieldAlign, MaxFieldAlignment);
     PreferredAlign = std::min(PreferredAlign, MaxFieldAlignment);
     UnpackedFieldAlign = std::min(UnpackedFieldAlign, MaxFieldAlignment);
   }
-
 
   if (!FieldPacked)
     FieldAlign = UnpackedFieldAlign;
@@ -2748,8 +2790,15 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
         std::max(RequiredAlignment,
                  std::max(DirectFieldAlignment, FieldTypeRequiredAlignment));
   }
-  // Respect pragma pack, attribute pack and declspec align
-  if (!MaxFieldAlignment.isZero())
+
+  // Respect pragma pack, attribute pack and declspec align.
+  // However, do not reduce alignment for ABI-required alignments (e.g.,
+  // x86_fp80, vector types) which must be preserved for correctness.
+  bool StructHasPackedAttr =
+      FD->getParent() && FD->getParent()->hasAttr<PackedAttr>();
+  if (!MaxFieldAlignment.isZero() &&
+      !ShouldPreserveFieldAlignment(Context, FD, TInfo.AlignRequirement,
+                                    StructHasPackedAttr))
     Info.Alignment = std::min(Info.Alignment, MaxFieldAlignment);
   if (FD->hasAttr<PackedAttr>())
     Info.Alignment = CharUnits::One();
@@ -3287,7 +3336,13 @@ void MicrosoftRecordLayoutBuilder::finalizeLayout(const RecordDecl *RD) {
   if (!RequiredAlignment.isZero()) {
     Alignment = std::max(Alignment, RequiredAlignment);
     auto RoundingAlignment = Alignment;
-    if (!MaxFieldAlignment.isZero())
+
+    // Check if this struct contains fields requiring alignment preservation
+    // (x86_fp80, vectors) before allowing MaxFieldAlignment (from #pragma pack)
+    // to reduce the overall struct alignment. However, if the struct has
+    // __attribute__((packed)), honor that explicit request.
+    if (!MaxFieldAlignment.isZero() &&
+        !RecordContainsAlignPreservingFields(Context, RD))
       RoundingAlignment = std::min(RoundingAlignment, MaxFieldAlignment);
     RoundingAlignment = std::max(RoundingAlignment, RequiredAlignment);
     Size = Size.alignTo(RoundingAlignment);

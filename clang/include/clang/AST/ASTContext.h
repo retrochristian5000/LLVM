@@ -183,6 +183,9 @@ enum class AlignRequirementKind {
 
   /// The alignment comes from an alignment attribute on a enum type.
   RequiredByEnum,
+
+  /// The alignment is required by the ABI for correctness.
+  RequiredByABI,
 };
 
 struct TypeInfo {
@@ -2757,6 +2760,11 @@ public:
   /// Get the size and alignment of the specified complete type in bits.
   TypeInfo getTypeInfo(const Type *T) const;
   TypeInfo getTypeInfo(QualType T) const { return getTypeInfo(T.getTypePtr()); }
+
+  /// Check if a type requires natural alignment preservation under #pragma pack
+  /// (but not explicit __attribute__((packed))). This includes x86_fp80 on
+  /// Windows MSVC and standard SIMD vectors (__m128, __m256).
+  bool typeRequiresPreserveAlignUnderPragmaPack(QualType T) const;
 
   /// Get default simd alignment of the specified complete type in bits.
   unsigned getOpenMPDefaultSimdAlign(QualType T) const;

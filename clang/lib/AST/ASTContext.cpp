@@ -2100,6 +2100,32 @@ TypeInfo ASTContext::getTypeInfo(const Type *T) const {
   return TI;
 }
 
+bool ASTContext::typeRequiresPreserveAlignUnderPragmaPack(QualType T) const {
+  T = T.getCanonicalType();
+  const llvm::Triple &Triple = Target->getTriple();
+  if (Triple.isOSWindows() && Triple.isWindowsMSVCEnvironment()) {
+    if (const auto *BT = T->getAs<BuiltinType>()) {
+      if (BT->getKind() == BuiltinType::LongDouble &&
+          &Target->getLongDoubleFormat() == &llvm::APFloat::x87DoubleExtended())
+        return true;
+    }
+    if (const auto *VT = T->getAs<VectorType>()) {
+      uint64_t VecWidth = getTypeSize(VT);
+      return VT->getVectorKind() == VectorKind::Generic &&
+             (VecWidth == 128 || VecWidth == 256) &&
+             VecWidth == getTypeAlign(VT);
+    }
+  }
+  if (const auto *AT = T->getAsArrayTypeUnsafe())
+    return typeRequiresPreserveAlignUnderPragmaPack(AT->getElementType());
+  if (const auto *RT = T->getAs<RecordType>()) {
+    for (const auto *Field : RT->getDecl()->fields())
+      if (typeRequiresPreserveAlignUnderPragmaPack(Field->getType()))
+        return true;
+  }
+  return false;
+}
+
 /// getTypeInfoImpl - Return the size of the specified type, in bits.  This
 /// method does not work on incomplete types.
 ///
@@ -2539,9 +2565,23 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
     const ASTRecordLayout &Layout = getASTRecordLayout(RD);
     Width = toBits(Layout.getSize());
     Align = toBits(Layout.getAlignment());
-    AlignRequirement = RD->hasAttr<AlignedAttr>()
-                           ? AlignRequirementKind::RequiredByRecord
-                           : AlignRequirementKind::None;
+    // Check if the record has an aligned attribute, or if it contains
+    // fields with ABI-required alignment (e.g., vectors on MSVC).
+    if (RD->hasAttr<AlignedAttr>()) {
+      AlignRequirement = AlignRequirementKind::RequiredByRecord;
+    } else {
+      // Check if any field has RequiredByABI alignment requirement.
+      // If so, propagate it to the record.
+      AlignRequirement = AlignRequirementKind::None;
+      for (const auto *Field : RD->fields()) {
+        TypeInfo FI = getTypeInfo(Field->getType().getTypePtr());
+        if (FI.AlignRequirement == AlignRequirementKind::RequiredByABI ||
+            FI.AlignRequirement == AlignRequirementKind::RequiredByRecord) {
+          AlignRequirement = AlignRequirementKind::RequiredByABI;
+          break;
+        }
+      }
+    }
     break;
   }
 
