@@ -351,6 +351,8 @@ features cannot lower the translation-unit ABI level;
 - Clang now attempts to print enumerator names rather than C-style cast expressions
   in more diagnostics.
 
+- Fixed a missing `-Wconstant-conversion` diagnostic for `signed char` array
+  initialization. (#GH181730)
 
 ### Improvements to Clang's time-trace
 
