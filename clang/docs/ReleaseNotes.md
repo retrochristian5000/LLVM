@@ -384,6 +384,7 @@ features cannot lower the translation-unit ABI level;
 - Propagate attributes on redeclarations across modules.
 
 #### Bug Fixes to C++ Support
+- Instantiate constexpr functions as needed before they are evaluated. (#GH73232) (#GH35052) (#GH100897)
 
 - Fixed an issue where `__typeof__` incorrectly rejected cv-qualified function types.
 
