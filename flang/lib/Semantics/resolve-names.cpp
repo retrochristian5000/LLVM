@@ -5771,6 +5771,24 @@ const Symbol *SubprogramVisitor::CheckExtantProc(
 Symbol *SubprogramVisitor::PushSubprogramScope(const parser::Name &name,
     Symbol::Flag subpFlag, const parser::LanguageBindingSpec *bindingSpec,
     bool hasModulePrefix) {
+  if (!inInterfaceBlock() && currScope().IsSubmodule() && !hasModulePrefix) {
+    const Scope &parent{currScope().parent()};
+    if (parent.IsModule() || parent.IsSubmodule()) {
+      if (const Symbol *host{parent.FindSymbol(name.source)}) {
+        const Symbol &hostUlt{host->GetUltimate()};
+        const auto *hostSubp{hostUlt.detailsIf<SubprogramDetails>()};
+        if (hostSubp && hostSubp->isInterface() &&
+            hostUlt.attrs().test(Attr::MODULE)) {
+          context().Warn(common::UsageWarning::Portability, name.source,
+              "Subprogram '%s' in this submodule is missing the MODULE prefix "
+              "to implement the module procedure interface from its parent; "
+              "did you mean 'MODULE %s'?"_port_en_US,
+              name.source,
+              subpFlag == Symbol::Flag::Subroutine ? "SUBROUTINE" : "FUNCTION");
+        }
+      }
+    }
+  }
   Symbol *symbol{GetSpecificFromGeneric(name)};
   const DeclTypeSpec *previousImplicitType{nullptr};
   SourceName previousName;
