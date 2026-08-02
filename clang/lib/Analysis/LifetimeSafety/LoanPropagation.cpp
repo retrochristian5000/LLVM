@@ -18,6 +18,7 @@
 #include "clang/Analysis/CFG.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -225,12 +226,14 @@ public:
     using SearchState = std::pair<const CFGBlock *, OriginID>;
     struct DFSNode {
       SearchState CurrState;
-      llvm::SmallVector<OriginID> OriginFlowChain;
+      llvm::ImmutableList<OriginID> OriginFlowChain;
     };
 
     llvm::SmallVector<DFSNode> PendingStates;
     llvm::SmallSet<SearchState, 16> VistedStates;
-    PendingStates.push_back({{EndBlock, StartOID}, {}});
+    llvm::ImmutableList<OriginID>::Factory OriginFlowChainFactory;
+    PendingStates.push_back(
+        {{EndBlock, StartOID}, OriginFlowChainFactory.getEmptyList()});
 
     // DFS loop to trace loan backwards through CFG
     while (!PendingStates.empty()) {
@@ -241,13 +244,18 @@ public:
       const auto [BuildResult, Complete] =
           buildOriginFlowChain(CurrBlock, CurrOID, TargetLoan);
       if (!BuildResult.empty()) {
-        CurrNode.OriginFlowChain.append(BuildResult);
+        for (OriginID OID : BuildResult)
+          CurrNode.OriginFlowChain =
+              OriginFlowChainFactory.add(OID, CurrNode.OriginFlowChain);
         CurrOID = BuildResult.back();
       }
 
       // If we found the IssueFact, we're done
-      if (Complete)
-        return CurrNode.OriginFlowChain;
+      if (Complete) {
+        auto ReversedChain = llvm::reverse(CurrNode.OriginFlowChain);
+        return llvm::SmallVector<OriginID>(ReversedChain.begin(),
+                                           ReversedChain.end());
+      }
 
       // Only explore predecessor blocks where the target loan is present in the
       // current origin.
@@ -259,8 +267,8 @@ public:
       }
     }
 
-    llvm_unreachable(
-        "buildOriginFlowChain did not reach IssueFact for TargetLoan");
+    llvm_unreachable("Could not reconstruct origin flow. Search finished "
+                     "without reaching IssueFact");
   }
 
   llvm::SmallVector<OriginID> buildOriginFlowChain(const UseFact *UF,
