@@ -163,7 +163,6 @@ module_c_headers = [h for h in all_headers if h.has_cxx20_module() and h.is_cstd
 # implemented yet. They are used in the generated module input. The C++23 standard
 # modules will fail to build if a header is added but this list is not updated.
 headers_not_available = list(map(Header, [
-    "debugging",
     "generator",
     "hazard_pointer",
     "inplace_vector",
@@ -173,6 +172,37 @@ headers_not_available = list(map(Header, [
     "stacktrace",
     "stdfloat",
 ]))
+
+header_restrictions = {
+    # headers with #error directives
+    "atomic": "_LIBCPP_HAS_ATOMIC_HEADER",
+    "stdatomic.h": "_LIBCPP_HAS_ATOMIC_HEADER",
+}
+
+lit_header_restrictions = {
+    "barrier": "// UNSUPPORTED: no-threads, c++03, c++11, c++14, c++17",
+    "coroutine": "// UNSUPPORTED: c++03, c++11, c++14, c++17",
+    "cwchar": "// UNSUPPORTED: no-wide-characters",
+    "cwctype": "// UNSUPPORTED: no-wide-characters",
+    "debugging": "// REQUIRES: std-at-least-c++26",
+    "experimental/iterator": "// UNSUPPORTED: c++03",
+    "experimental/propagate_const": "// UNSUPPORTED: c++03",
+    "experimental/simd": "// UNSUPPORTED: c++03",
+    "experimental/type_traits": "// UNSUPPORTED: c++03",
+    "experimental/utility": "// UNSUPPORTED: c++03",
+    "filesystem": "// UNSUPPORTED: no-filesystem, c++03, c++11, c++14",
+    "future": "// UNSUPPORTED: no-threads, c++03",
+    "latch": "// UNSUPPORTED: no-threads, c++03, c++11, c++14, c++17",
+    "mutex": "// UNSUPPORTED: no-threads, c++03",
+    "print": "// UNSUPPORTED: no-filesystem, c++03, c++11, c++14, c++17, c++20, availability-fp_to_chars-missing",  # TODO PRINT investigate
+    "semaphore": "// UNSUPPORTED: no-threads, c++03, c++11, c++14, c++17",
+    "shared_mutex": "// UNSUPPORTED: no-threads, c++03, c++11",
+    "stdatomic.h": "// UNSUPPORTED: no-threads, c++03, c++11, c++14, c++17, c++20",
+    "stop_token": "// UNSUPPORTED: no-threads, c++03, c++11, c++14, c++17",
+    "thread": "// UNSUPPORTED: no-threads, c++03",
+    "wchar.h": "// UNSUPPORTED: no-wide-characters",
+    "wctype.h": "// UNSUPPORTED: no-wide-characters",
+}
 
 # Undeprecate headers that are deprecated in C++17 and removed in C++20.
 lit_header_undeprecations = {
