@@ -3386,10 +3386,12 @@ static bool CheckAllArgTypesAreCorrect(
 static bool CheckFloatRepresentation(Sema *S, SourceLocation Loc,
                                      int ArgOrdinal,
                                      clang::QualType PassedType) {
-  clang::QualType BaseType =
-      PassedType->isVectorType()
-          ? PassedType->castAs<clang::VectorType>()->getElementType()
-          : PassedType;
+  clang::QualType BaseType = PassedType;
+  if (const auto *VT = PassedType->getAs<clang::VectorType>())
+    BaseType = VT->getElementType();
+  else if (const auto *MT = PassedType->getAs<clang::MatrixType>())
+    BaseType = MT->getElementType();
+
   if (!BaseType->isFloat32Type())
     return S->Diag(Loc, diag::err_builtin_invalid_arg_type)
            << ArgOrdinal << /* scalar or vector of */ 5 << /* no int */ 0
@@ -3523,10 +3525,13 @@ static bool CheckExpectedBitWidth(Sema *S, CallExpr *TheCall,
 
 static void SetElementTypeAsReturnType(Sema *S, CallExpr *TheCall,
                                        QualType ReturnType) {
-  auto *VecTyA = TheCall->getArg(0)->getType()->getAs<VectorType>();
-  if (VecTyA)
+  if (auto *VecTyA = TheCall->getArg(0)->getType()->getAs<VectorType>())
     ReturnType =
         S->Context.getExtVectorType(ReturnType, VecTyA->getNumElements());
+  else if (auto *MatTyA =
+               TheCall->getArg(0)->getType()->getAs<ConstantMatrixType>())
+    ReturnType = S->Context.getConstantMatrixType(
+        ReturnType, MatTyA->getNumRows(), MatTyA->getNumColumns());
 
   TheCall->setType(ReturnType);
 }
@@ -4463,7 +4468,8 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     if (CheckAllArgTypesAreCorrect(&SemaRef, TheCall,
                                    CheckFloatOrHalfRepresentation))
       return true;
-    if (SemaRef.PrepareBuiltinElementwiseMathOneArgCall(TheCall))
+    if (SemaRef.PrepareBuiltinElementwiseMathOneArgCall(
+            TheCall, Sema::EltwiseBuiltinArgTyRestriction::FloatTy))
       return true;
     SetElementTypeAsReturnType(&SemaRef, TheCall, getASTContext().BoolTy);
     break;
