@@ -8018,6 +8018,9 @@ struct LoopIterationSpace final {
   /// check that the number of iterations for this particular counter must be
   /// finished.
   Expr *FinalCondition = nullptr;
+  /// True if this is a reinterpreted intra-tile loop whose lower bound is a
+  /// live floor dependence.
+  bool ReinterpretTileLB = false;
 };
 
 /// Scan an AST subtree, checking that no decls in the CollapsedLoopVarDecls
@@ -9577,6 +9580,23 @@ static bool checkOpenMPIterationSpace(
     const llvm::SmallPtrSetImpl<const Decl *> &CollapsedLoopVarDecls,
     llvm::SmallPtrSetImpl<const Decl *> &CollapsedLoopInductionVars) {
   bool SupportsNonRectangular = !isOpenMPLoopTransformationDirective(DKind);
+  // See the tile reinterpretation design note in ActOnOpenMPTileDirective.
+  // If the loop carries the hint, analyze its rectangular form instead.
+  Expr *TileRectCond = nullptr;
+  Expr *TileBodyPredicate = nullptr;
+  Expr *TileTripCount = nullptr;
+  if (auto *AS = dyn_cast_or_null<AttributedStmt>(S)) {
+    for (const Attr *A : AS->getAttrs()) {
+      if (const auto *H = dyn_cast<OMPInvariantPredicateBoundAttr>(A)) {
+        TileRectCond = H->getRectCond();
+        TileBodyPredicate = H->getPredicate();
+        TileTripCount = H->getTileSize();
+        break;
+      }
+    }
+    if (TileRectCond)
+      S = AS->getSubStmt();
+  }
   // OpenMP [2.9.1, Canonical Loop Form]
   //   for (init-expr; test-expr; incr-expr) structured-block
   //   for (range-decl: range-expr) structured-block
@@ -9626,6 +9646,11 @@ static bool checkOpenMPIterationSpace(
 
   bool HasErrors = false;
 
+  // Condition used for iteration-space analysis: the rectangular hint when
+  // reinterpreting an intra-tile loop, otherwise the loop's own condition.
+  Expr *EffectiveCond =
+      TileRectCond ? TileRectCond : (For ? For->getCond() : CXXFor->getCond());
+
   // Check loop variable's type.
   if (ValueDecl *LCDecl = ISC.getLoopDecl()) {
     // OpenMP [2.6, Canonical Loop Form]
@@ -9658,7 +9683,7 @@ static bool checkOpenMPIterationSpace(
            "DSA for non-loop vars");
 
     // Check test-expr.
-    HasErrors |= ISC.checkAndSetCond(For ? For->getCond() : CXXFor->getCond());
+    HasErrors |= ISC.checkAndSetCond(EffectiveCond);
 
     // Check incr-expr.
     HasErrors |= ISC.checkAndSetInc(For ? For->getInc() : CXXFor->getInc());
@@ -9668,8 +9693,18 @@ static bool checkOpenMPIterationSpace(
     return HasErrors;
 
   // Build the loop's iteration space representation.
-  ResultIterSpaces[CurrentNestedLoopCount].PreCond = ISC.buildPreCond(
-      DSA.getCurScope(), For ? For->getCond() : CXXFor->getCond(), Captures);
+  ResultIterSpaces[CurrentNestedLoopCount].PreCond =
+      ISC.buildPreCond(DSA.getCurScope(), EffectiveCond, Captures);
+  // Reinterpreted intra-tile: precondition is trivially true (.floor.iv
+  // unreadable here); overshoot handled by Predicate.
+  if (TileRectCond)
+    ResultIterSpaces[CurrentNestedLoopCount].PreCond =
+        SemaRef
+            .PerformImplicitConversion(
+                SemaRef.ActOnIntegerConstant(SourceLocation(), 1).get(),
+                SemaRef.Context.BoolTy, AssignmentAction::Casting,
+                /*AllowExplicit=*/true)
+            .get();
   ResultIterSpaces[CurrentNestedLoopCount].NumIterations =
       ISC.buildNumIterations(DSA.getCurScope(), ResultIterSpaces,
                              (isOpenMPWorksharingDirective(DKind) ||
@@ -9678,6 +9713,9 @@ static bool checkOpenMPIterationSpace(
                               isOpenMPDistributeDirective(DKind) ||
                               isOpenMPLoopTransformationDirective(DKind)),
                              Captures);
+  // Reinterpreted intra-tile: trip count is the constant TileSize.
+  if (TileTripCount)
+    ResultIterSpaces[CurrentNestedLoopCount].NumIterations = TileTripCount;
   ResultIterSpaces[CurrentNestedLoopCount].CounterVar =
       ISC.buildCounterVar(Captures, DSA);
   ResultIterSpaces[CurrentNestedLoopCount].PrivateCounterVar =
@@ -9697,6 +9735,13 @@ static bool checkOpenMPIterationSpace(
       ISC.buildMinMaxValues(DSA.getCurScope(), Captures);
   ResultIterSpaces[CurrentNestedLoopCount].FinalCondition =
       ISC.buildFinalCondition(DSA.getCurScope());
+  // Reinterpreted intra-tile: body guard is the overshoot Predicate.
+  if (TileBodyPredicate)
+    ResultIterSpaces[CurrentNestedLoopCount].FinalCondition = TileBodyPredicate;
+  // Lower bound is the live .floor.iv; wire as a floor dependence for collapse
+  // (see design note in ActOnOpenMPTileDirective).
+  if (TileRectCond)
+    ResultIterSpaces[CurrentNestedLoopCount].ReinterpretTileLB = true;
   ResultIterSpaces[CurrentNestedLoopCount].IsNonRectangularLB =
       ISC.doesInitDependOnLC();
   ResultIterSpaces[CurrentNestedLoopCount].IsNonRectangularUB =
@@ -10621,6 +10666,23 @@ checkOpenMPLoop(OpenMPDirectiveKind DKind, Expr *CollapseLoopCountExpr,
       SourceLocation UpdLoc = IS.IncSrcRange.getBegin();
       ExprResult Iter;
 
+      // Wire the reinterpreted lower bound to its floor dependence (see design
+      // note in ActOnOpenMPTileDirective).
+      if (IS.ReinterpretTileLB && IS.CounterInit) {
+        if (const auto *LBRef =
+                dyn_cast<DeclRefExpr>(IS.CounterInit->IgnoreParenImpCasts())) {
+          const Decl *FloorDecl = LBRef->getDecl()->getCanonicalDecl();
+          for (unsigned K = 0; K < Cnt; ++K) {
+            const auto *CV = dyn_cast_or_null<DeclRefExpr>(Built.Counters[K]);
+            if (CV && CV->getDecl()->getCanonicalDecl() == FloorDecl) {
+              IS.IsNonRectangularLB = true;
+              IS.LoopDependentIdx = K + 1;
+              break;
+            }
+          }
+        }
+      }
+
       // Compute prod
       ExprResult Prod = SemaRef.ActOnIntegerConstant(SourceLocation(), 1).get();
       for (unsigned int K = Cnt + 1; K < NestedLoopCount; ++K)
@@ -10693,11 +10755,13 @@ checkOpenMPLoop(OpenMPDirectiveKind DKind, Expr *CollapseLoopCountExpr,
       Built.Finals[Cnt] = Final.get();
       Built.DependentCounters[Cnt] = nullptr;
       Built.DependentInits[Cnt] = nullptr;
-      Built.FinalsConditions[Cnt] = nullptr;
+      // Transfer the body-guard condition: the loop condition for
+      // non-rectangular loops, the overshoot predicate for reinterpreted tiles,
+      // null otherwise.
+      Built.FinalsConditions[Cnt] = IS.FinalCondition;
       if (IS.IsNonRectangularLB || IS.IsNonRectangularUB) {
         Built.DependentCounters[Cnt] = Built.Counters[IS.LoopDependentIdx - 1];
         Built.DependentInits[Cnt] = Built.Inits[IS.LoopDependentIdx - 1];
-        Built.FinalsConditions[Cnt] = IS.FinalCondition;
       }
     }
   }
@@ -15166,6 +15230,26 @@ StmtResult SemaOpenMP::ActOnOpenMPTileDirective(ArrayRef<OMPClause *> Clauses,
   };
 
   // Create tile loops from the inside to the outside.
+  //
+  // Each intra-tile loop is emitted in its natural min-bounded form, which has
+  // no per-iteration body predicate and vectorizes well when run directly:
+  //   for (.tile.iv = .floor.iv; .tile.iv < min(.floor.iv + T, N); ++.tile.iv)
+  //
+  // A loop-associated directive that *consumes* this loop (e.g. `collapse`)
+  // instead needs a constant, floor-independent trip count to linearize the
+  // nest, which the min() bound cannot give it. Rather than change the
+  // emitted loop, we attach a droppable OMPInvariantPredicateBoundAttr hint
+  // below carrying an equivalent rectangular reinterpretation:
+  //   RectCond  : .tile.iv < .floor.iv + T   -- rectangular bound, analyzed by
+  //               checkOpenMPIterationSpace in place of the stored condition
+  //   Predicate : .tile.iv < N               -- remainder-tile overshoot,
+  //               applied as a body guard instead of shortening the trip count
+  //   TileSize  : T                          -- constant per-tile trip count
+  // Because the reinterpreted lower bound is still `.floor.iv`, checkOpenMPLoop
+  // wires it as a live dependence on the matching floor counter, so a
+  // collapsed `.tile.iv` re-reads the floor's current value instead of a
+  // stale preheader snapshot. Collapsing through stacked tiles (tile-of-tile)
+  // is not supported: the inner floor is not itself a collapsed counter.
   for (int I = NumLoops - 1; I >= 0; --I) {
     OMPLoopBasedDirective::HelperExprs &LoopHelper = LoopHelpers[I];
     Expr *NumIterations = LoopHelper.NumIterations;
@@ -15230,6 +15314,32 @@ StmtResult SemaOpenMP::ActOnOpenMPTileDirective(ArrayRef<OMPClause *> Clauses,
     if (!IncrStmt.isUsable())
       return StmtError();
 
+    // Build OMPInvariantPredicateBoundAttr hint (RectCond, Predicate,
+    // TileSize).
+    Expr *RectDimTileSize = MakeDimTileSize(I);
+    if (!RectDimTileSize)
+      return StmtError();
+    ExprResult RectEndOfTile = SemaRef.BuildBinOp(
+        CurScope, LoopHelper.Cond->getExprLoc(), BO_Add,
+        makeFloorIVRef(SemaRef, FloorIndVars, I, IVTy, OrigCntVar),
+        RectDimTileSize);
+    if (!RectEndOfTile.isUsable())
+      return StmtError();
+    ExprResult RectCond =
+        SemaRef.BuildBinOp(CurScope, LoopHelper.Cond->getExprLoc(), BO_LT,
+                           MakeTileIVRef(), RectEndOfTile.get());
+    ExprResult Predicate =
+        SemaRef.BuildBinOp(CurScope, LoopHelper.Cond->getExprLoc(), BO_LT,
+                           MakeTileIVRef(), NumIterations);
+    Expr *TileSizeExpr = MakeDimTileSize(I);
+    if (!TileSizeExpr)
+      return StmtError();
+    ExprResult TileSize = SemaRef.PerformImplicitConversion(
+        TileSizeExpr, IVTy, AssignmentAction::Converting,
+        /*AllowExplicit=*/true);
+    if (!RectCond.isUsable() || !Predicate.isUsable() || !TileSize.isUsable())
+      return StmtError();
+
     // Statements to set the original iteration variable's value from the
     // logical iteration number.
     // Generated for loop is:
@@ -15257,6 +15367,13 @@ StmtResult SemaOpenMP::ActOnOpenMPTileDirective(ArrayRef<OMPClause *> Clauses,
         ForStmt(Context, InitStmt.get(), CondExpr.get(), nullptr,
                 IncrStmt.get(), Inner, LoopHelper.Init->getBeginLoc(),
                 LoopHelper.Init->getBeginLoc(), LoopHelper.Inc->getEndLoc());
+
+    // Attach the droppable reinterpretation attribute to the intra-tile loop.
+    auto *Hint = OMPInvariantPredicateBoundAttr::CreateImplicit(
+        Context, RectCond.get(), Predicate.get(), TileSize.get(),
+        Inner->getSourceRange());
+    Inner =
+        AttributedStmt::Create(Context, Inner->getBeginLoc(), {Hint}, Inner);
   }
 
   // Create floor loops from the inside to the outside.
