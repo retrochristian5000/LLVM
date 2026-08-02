@@ -2273,24 +2273,38 @@ Value *llvm::addDiffRuntimeChecks(
   // Map to keep track of created compares, The key is the pair of operands for
   // the compare, to allow detecting and re-using redundant compares.
   DenseMap<std::pair<Value *, Value *>, Value *> SeenCompares;
-  // Cache of (VF * IC * AccessSize) - 1, shared across checks with matching
-  // type and IC*AccessSize to avoid emitting duplicate runtime computations.
-  DenseMap<std::pair<Type *, unsigned>, Value *> ThresholdCache;
-  for (const auto &[SrcStart, SinkStart, AccessSize, NeedsFreeze] : Checks) {
+  // Cache of (VF*IC*Stride-(Stride-AccessSize)) - 1, shared across checks with
+  // matching type/IC/Stride to avoid emitting duplicate runtime computations.
+  DenseMap<
+      std::tuple<Type *, unsigned /*IC*/, unsigned /*AbsCommonStrideInBytes*/>,
+      Value *>
+      ThresholdCache;
+  for (const auto &[SrcStart, SinkStart, AccessSize, AbsCommonStrideInBytes,
+                    NeedsFreeze] : Checks) {
     assert(IC * AccessSize > 0 &&
            "Threshold must be non-zero to use diff-check");
     Type *Ty = SinkStart->getType();
-    unsigned ICTimesAccessSize = IC * AccessSize;
-    Value *One = ConstantInt::get(Ty, 1);
-    Value *&ThresholdMinusOne = ThresholdCache[{Ty, ICTimesAccessSize}];
-    if (!ThresholdMinusOne) {
-      Value *VFTimesICTimesSize =
-          ChkBuilder.CreateMul(GetVF(ChkBuilder, Ty->getScalarSizeInBits()),
-                               ConstantInt::get(Ty, ICTimesAccessSize));
-      ThresholdMinusOne = ChkBuilder.CreateSub(VFTimesICTimesSize, One);
+    // Compute the distance between first/last bytes of the accessed memory
+    // during one vector loop iteration. This is equal to
+    // VF*IC*Stride-(Stride-AccessSize).
+    uint64_t ICTimesStride = IC * AbsCommonStrideInBytes;
+    if (!isUIntN(Ty->getScalarSizeInBits(), ICTimesStride)) {
+      // This is probably UB in the original IR, but let's be conservative:
+      Ty = Ty->getWithNewBitWidth(Ty->getScalarSizeInBits() * 2);
+      assert(isUIntN(Ty->getScalarSizeInBits(), ICTimesStride));
     }
-    Value *Diff =
-        Expander.expandCodeFor(SE.getMinusSCEV(SinkStart, SrcStart), Ty, Loc);
+
+    Value *&ThresholdMinusOne =
+        ThresholdCache[{Ty, IC, AbsCommonStrideInBytes}];
+    if (!ThresholdMinusOne)
+      ThresholdMinusOne = ChkBuilder.CreateSub(
+          ChkBuilder.CreateMul(GetVF(ChkBuilder, Ty->getScalarSizeInBits()),
+                               ConstantInt::get(Ty, ICTimesStride)),
+          ConstantInt::get(Ty, AbsCommonStrideInBytes - AccessSize + 1));
+
+    Value *Diff = Expander.expandCodeFor(
+        SE.getNoopOrSignExtend(SE.getMinusSCEV(SinkStart, SrcStart), Ty), Ty,
+        Loc);
 
     // Check if the same compare has already been created earlier. In that case,
     // there is no need to check it again.
@@ -2298,8 +2312,10 @@ Value *llvm::addDiffRuntimeChecks(
     if (IsConflict)
       continue;
 
-    // Use (Diff - 1) <u (Threshold - 1), equivalent to 0 < Diff <u Threshold,
-    // to exclude Diff == 0 (equal pointers are safe).
+    // Use (Diff - 1) <u (VectorIterAccessSpanMinusOne - 1), equivalent to
+    // 0 < Diff <u VectorIterAccessSpanMinusOne, to exclude Diff == 0 (equal
+    // pointers are safe).
+    Value *One = ConstantInt::get(Ty, 1);
     IsConflict = ChkBuilder.CreateICmpULT(ChkBuilder.CreateSub(Diff, One),
                                           ThresholdMinusOne, "diff.check");
     SeenCompares.insert({{Diff, ThresholdMinusOne}, IsConflict});
