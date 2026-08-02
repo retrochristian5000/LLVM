@@ -22,7 +22,6 @@
 #include "mlir/Dialect/MemRef/Utils/MemRefUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/IntegerSet.h"
-#include "mlir/Interfaces/CallInterfaces.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/Debug.h"
@@ -56,27 +55,17 @@ static bool isSameMemref(Value lhs, Value rhs) {
 /// Returns the values that `op` may have a memref effect of type `EffectTys`
 /// on, not considering recursive effects. View-like values are canonicalized
 /// to their storage source so the MDG uses one key for a view chain while raw
-/// views remain available for affine-coordinate analysis. Unknown calls cannot
-/// be represented by the memref-keyed graph because their effects are not
-/// limited to explicit memref operands. Other unknown operations retain the
-/// existing operand-based fallback.
-/// Returns false if a selected effect cannot be represented by a memref value.
-/// The MDG has no resource-level or all-memory edges, so dropping such an
-/// effect would make fusion unsound.
+/// views remain available for affine-coordinate analysis. Unknown effects
+/// cannot be represented by the memref-keyed graph.
+/// Returns false if a selected effect cannot be represented by a memref value
+/// or if the operation's effects are unknown. The MDG has no resource-level or
+/// all-memory edges, so dropping such an effect would make fusion unsound.
 template <typename... EffectTys>
 static bool getMayAffectedValues(Operation *op,
                                  SmallVectorImpl<Value> &values) {
   auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
-  if (!memOp) {
-    if (!hasUnknownEffects(op))
-      return true;
-    if (isa<CallOpInterface>(op))
-      return false;
-    for (Value operand : op->getOperands())
-      if (isa<BaseMemRefType>(operand.getType()))
-        values.push_back(canonicalizeMemref(operand));
-    return true;
-  }
+  if (!memOp)
+    return !hasUnknownEffects(op);
   SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
   memOp.getEffects(effects);
   for (auto &effect : effects) {
@@ -120,8 +109,7 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
         if (getMayAffectedValues<MemoryEffects::Read>(op, affectedValues) &&
             affectedValues.empty())
           return;
-        // Unknown calls may access memory not represented by explicit
-        // operands; other unknown operations reach here with memref operands.
+        // Unknown effects cannot be represented by the memref-keyed graph.
         memrefLoads.push_back(op);
         memrefStores.push_back(op);
       } else {

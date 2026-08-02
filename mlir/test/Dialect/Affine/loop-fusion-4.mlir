@@ -1188,6 +1188,51 @@ func.func @unknown_call_global_effect(
 memref.global "private" @fusion_global : memref<32xf64>
 func.func private @touch_global()
 
+// An unknown non-call operation can access memory not represented by its
+// operands and must not become an isolated node that fusion can cross.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @unknown_non_call_without_operands_prevents_fusion
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      }
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: "unknown.touch_global"() : () -> ()
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+func.func @unknown_non_call_without_operands_prevents_fusion(
+    %in: memref<32xf64>, %out: memref<32xf64>) {
+  %global = memref.get_global @fusion_global : memref<32xf64>
+  affine.for %i = 0 to 16 {
+    %v = affine.load %in[%i] : memref<32xf64>
+    affine.store %v, %global[%i] : memref<32xf64>
+  }
+  "unknown.touch_global"() : () -> ()
+  affine.for %j = 0 to 16 {
+    %v = affine.load %global[%j] : memref<32xf64>
+    affine.store %v, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
+// Explicit operands do not make the effects of an unknown operation complete.
+
+// PRODUCER-CONSUMER-MAXIMAL-LABEL: func @unknown_non_call_with_memref_operand_may_have_implicit_effects
+// PRODUCER-CONSUMER-MAXIMAL:      affine.for
+// PRODUCER-CONSUMER-MAXIMAL:      }
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: "unknown.touch_global"(%{{.*}}) : (memref<32xf64>) -> ()
+// PRODUCER-CONSUMER-MAXIMAL-NEXT: affine.for
+func.func @unknown_non_call_with_memref_operand_may_have_implicit_effects(
+    %in: memref<32xf64>, %unrelated: memref<32xf64>, %out: memref<32xf64>) {
+  %global = memref.get_global @fusion_global : memref<32xf64>
+  affine.for %i = 0 to 16 {
+    %v = affine.load %in[%i] : memref<32xf64>
+    affine.store %v, %global[%i] : memref<32xf64>
+  }
+  "unknown.touch_global"(%unrelated) : (memref<32xf64>) -> ()
+  affine.for %j = 0 to 16 {
+    %v = affine.load %global[%j] : memref<32xf64>
+    affine.store %v, %out[%j] : memref<32xf64>
+  }
+  return
+}
+
 // -----
 
 // An addressable effect without an SSA memory value cannot be represented by
