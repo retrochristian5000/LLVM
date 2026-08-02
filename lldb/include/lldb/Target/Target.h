@@ -576,6 +576,28 @@ private:
   SymbolContextList m_preferred_lookup_contexts;
 };
 
+/// A movable, sharable handle to a Target's API mutex, safe to lock from any
+/// thread and to hold past the point where the constructing thread's policy
+/// still applies. Every call re-resolves Target::GetAPIMutex() fresh, rather
+/// than binding to whichever mutex was current at construction time, so it
+/// always reflects the calling thread's own, current bypass status.
+///
+/// A handle constructed without a target owns an independent mutex instead,
+/// for callers that just want a general-purpose lockable object.
+class APIMutexHandle {
+public:
+  APIMutexHandle();
+  explicit APIMutexHandle(lldb::TargetSP target_sp);
+
+  void lock();
+  void unlock();
+  bool try_lock();
+
+private:
+  lldb::TargetSP m_target_sp;
+  std::recursive_mutex m_standalone_mutex;
+};
+
 // Target
 class Target : public std::enable_shared_from_this<Target>,
                public TargetProperties,
@@ -765,6 +787,11 @@ public:
 
   static TargetProperties &GetGlobalProperties();
 
+  /// Returns the mutex a caller should serialize on before touching the
+  /// target through the SB API. When the current thread's policy says it
+  /// can bypass it, this returns a mutex private to that thread instead, so
+  /// callers can lock it unconditionally without ever contending with
+  /// whichever thread holds the real one.
   std::recursive_mutex &GetAPIMutex();
 
   void DeleteCurrentProcess();
