@@ -145,6 +145,20 @@ public:
   // TODO: convert this comment to account for MLIR's equivalence
   mlir::Type convertTypeForMem(clang::QualType, bool forBitField = false);
 
+  /// Given that T is a scalar type, return the IR type that should
+  /// be used for load and store operations.  For example, this might
+  /// be i8 for _Bool or i96 for _BitInt(65).  The store size of the
+  /// load/store type (as reported by LLVM's data layout) is always
+  /// the same as the alloc size of the memory representation type
+  /// returned by ConvertTypeForMem.
+  ///
+  /// As an optimization, if you already know the scalar value type
+  /// for T (as would be returned by ConvertType), you can pass
+  /// it as the second argument so that it does not need to be
+  /// recomputed in common cases where the value type and
+  /// load/store type are the same.
+  mlir::Type convertTypeForLoadStore(QualType t);
+
   /// Get the CIR function type for \arg Info.
   cir::FuncType getFunctionType(const CIRGenFunctionInfo &info);
 

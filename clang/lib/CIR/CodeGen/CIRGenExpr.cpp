@@ -469,20 +469,18 @@ void CIRGenFunction::emitStoreOfScalar(mlir::Value value, Address addr,
                                        bool isNontemporal) {
 
   if (const auto *clangVecTy = ty->getAs<clang::VectorType>()) {
-    // Boolean vectors use `iN` as storage type.
-    if (clangVecTy->isExtVectorBoolType())
-      cgm.errorNYI(addr.getPointer().getLoc(),
-                   "emitStoreOfScalar ExtVectorBoolType");
+    mlir::Type srcTy = value.getType();
+    if (auto vecTy = dyn_cast<cir::VectorType>(srcTy)) {
+      // TODO(CIR): Use `ABIInfo::getOptimalVectorMemoryType` once it upstreamed
+      assert(!cir::MissingFeatures::cirgenABIInfo());
+      if (!clangVecTy->isPackedVectorBoolType(getContext()) &&
+          vecTy.getSize() == 3 && !getLangOpts().PreserveVec3Type)
+        cgm.errorNYI(addr.getPointer().getLoc(),
+                     "emitStoreOfScalar Vec3 & PreserveVec3Type disabled");
 
-    // Handle vectors of size 3 like size 4 for better performance.
-    const mlir::Type elementType = addr.getElementType();
-    const auto vecTy = cast<cir::VectorType>(elementType);
-
-    // TODO(CIR): Use `ABIInfo::getOptimalVectorMemoryType` once it upstreamed
-    assert(!cir::MissingFeatures::cirgenABIInfo());
-    if (vecTy.getSize() == 3 && !getLangOpts().PreserveVec3Type)
-      cgm.errorNYI(addr.getPointer().getLoc(),
-                   "emitStoreOfScalar Vec3 & PreserveVec3Type disabled");
+      if (addr.getElementType() != srcTy)
+        addr = addr.withElementType(builder, srcTy);
+    }
   }
 
   value = emitToMemory(value, ty);
@@ -709,7 +707,24 @@ mlir::Value CIRGenFunction::emitToMemory(mlir::Value value, QualType ty) {
     ty = atomicTy->getValueType();
 
   if (ty->isExtVectorBoolType()) {
-    cgm.errorNYI("emitToMemory: extVectorBoolType");
+    mlir::Type storeTy = convertTypeForLoadStore(ty);
+    if (value.getType() == storeTy)
+      return value;
+
+    const cir::CIRDataLayout dataLayout = cgm.getDataLayout();
+    if (isa<cir::VectorType>(storeTy) &&
+        dataLayout.getTypeSizeInBits(storeTy) >
+            dataLayout.getTypeSizeInBits(value.getType())) {
+      cgm.errorNYI("emitToMemory ExtVectorBoolType store.size > value.size");
+      return {};
+    }
+
+    // Expand to the memory bit width.
+    unsigned memNumElems = cgm.getDataLayout().getTypeSizeInBits(storeTy);
+    // <N x i1> --> <P x i1>.
+    value = emitBoolVecConversion(value, memNumElems);
+    // <P x i1> --> iP.
+    value = builder.createBitcast(value, storeTy);
   }
 
   // Unlike in classic codegen CIR, bools are kept as `cir.bool` and BitInts are
@@ -723,7 +738,14 @@ mlir::Value CIRGenFunction::emitFromMemory(mlir::Value value, QualType ty) {
     ty = atomicTy->getValueType();
 
   if (ty->isPackedVectorBoolType(getContext())) {
-    cgm.errorNYI("emitFromMemory: PackedVectorBoolType");
+    mlir::Type rawIntTy = value.getType();
+    unsigned widh = cgm.getDataLayout().getTypeSizeInBits(rawIntTy);
+    auto paddingVecTy = cir::VectorType::get(builder.getBoolTy(), widh);
+    auto v = builder.createBitcast(value, paddingVecTy);
+
+    mlir::Type valTy = convertType(ty);
+    unsigned valNumElems = cast<cir::VectorType>(valTy).getSize();
+    return emitBoolVecConversion(v, valNumElems);
   }
 
   return value;
@@ -750,9 +772,23 @@ mlir::Value CIRGenFunction::emitLoadOfScalar(Address addr, bool isVolatile,
   mlir::Type eltTy = addr.getElementType();
 
   if (const auto *clangVecTy = ty->getAs<clang::VectorType>()) {
-    if (clangVecTy->isExtVectorBoolType()) {
-      cgm.errorNYI(loc, "emitLoadOfScalar: ExtVectorBoolType");
-      return nullptr;
+    // Boolean vectors use `iN` as storage type.
+    if (clangVecTy->isPackedVectorBoolType(getContext())) {
+      mlir::Type valTy = convertType(ty);
+      unsigned valNumElements = cast<cir::VectorType>(valTy).getSize();
+      // Load the `iP` storage object (P is the padded vector size).
+      mlir::Value rawIntV = builder.createLoad(getLoc(loc), addr, isVolatile);
+      mlir::Type rawIntTy = rawIntV.getType();
+      assert(isa<cir::IntTypeInterface>(rawIntTy) &&
+             "compressed 1N storage for bitvectors");
+      // Bitcast iP --> <P x i1>.
+      auto paddingVecTy = cir::VectorType::get(
+          builder.getBoolTy(),
+          cast<cir::IntTypeInterface>(rawIntTy).getWidth());
+      auto v = builder.createBitcast(getLoc(loc), rawIntV, paddingVecTy);
+      // Shuffle <P x i1> --> <N x i1> (N is the actual bit size).
+      v = emitBoolVecConversion(v, valNumElements);
+      return emitFromMemory(v, ty);
     }
 
     const auto vecTy = cast<cir::VectorType>(eltTy);
