@@ -1,9 +1,8 @@
-; RUN: llc --force-dwarf-frame-section --exception-model=arm %s -o - --target-abi=aapcs16 | FileCheck %s
-; RUN: llc --filetype=obj %s --exception-model=arm -o - --target-abi=aapcs16 | llvm-readelf -s --unwind - | FileCheck %s --check-prefix=UNWIND
+; aapcs16 is used so we get 16-byte stack alignment and better test coverage.
+; RUN: llc --force-dwarf-frame-section --exception-model=arm %s -o - --target-abi=aapcs16 -mcpu=cortex-m85 | FileCheck %s
+; RUN: llc --filetype=obj %s --exception-model=arm -o - --target-abi=aapcs16 -mcpu=cortex-m85 | llvm-readelf -s --unwind - | FileCheck %s --check-prefix=UNWIND
 target datalayout = "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64"
-
-; Triple tweaked so we get 16-byte stack alignment and better test coverage.
-target triple = "armv7m-none-linux-android"
+target triple = "thumbv8.1m.main-arm-none-eabihf"
 
 ; -Oz
 ; volatile int a, b, c, d, e, f, g, h, i;
