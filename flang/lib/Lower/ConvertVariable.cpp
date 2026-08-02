@@ -31,6 +31,7 @@
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/HLFIRTools.h"
 #include "flang/Optimizer/Builder/IntrinsicCall.h"
+#include "flang/Optimizer/Builder/Runtime/Assign.h"
 #include "flang/Optimizer/Builder/Runtime/Derived.h"
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/CUF/CUFOps.h"
@@ -1238,6 +1239,69 @@ getSafeRepackAttrs(Fortran::lower::AbstractConverter &converter) {
   return attrs.empty() ? mlir::ArrayAttr{} : builder.getArrayAttr(attrs);
 }
 
+// Helper function to related to emission of implicit
+// assignments. `Implicit` here implies the assignment does not
+// exist in the Fortran source, but is implicit through definition
+// of one or more flagsets (like -finit-* family of flags).
+// General purpose usage of this function outside the
+// scope detailed here is discouraged, and is probably wrong.
+static void emitImplicitAssignment(Fortran::lower::AbstractConverter &converter,
+                                   mlir::Location loc,
+                                   const Fortran::semantics::Symbol &sym,
+                                   Fortran::lower::SymMap &symMap) {
+  if (converter.getLoweringOptions().getInitLocalZeroDef()) {
+    mlir::Type eleTy = hlfir::getFortranElementType(converter.genType(sym));
+    auto *builder = &converter.getFirOpBuilder();
+
+    if (mlir::isa<fir::CharacterType>(eleTy)) {
+      fir::ExtendedValue ext = converter.getSymbolExtendedValue(sym);
+      const auto *charBox = ext.getCharBox();
+      mlir::Value buffer = charBox->getBuffer();
+      assert(buffer && "CharBox buffer is null");
+      auto eleTy = fir::unwrapRefType(buffer.getType());
+      auto charTy =
+          mlir::cast<fir::CharacterType>(fir::unwrapSequenceType(eleTy));
+      unsigned kindBytes =
+          builder->getKindMap().getCharacterBitsize(charTy.getFKind()) / 8;
+      auto lenVal = charBox->getLen();
+      mlir::Value byteLen;
+      if (lenVal) {
+
+        mlir::Value lenI64 =
+            builder->createConvert(loc, builder->getI64Type(), lenVal);
+        mlir::Value kind = builder->createIntegerConstant(
+            loc, builder->getI64Type(), kindBytes);
+        byteLen = mlir::arith::MulIOp::create(*builder, loc, lenI64, kind);
+        byteLen = builder->createConvert(loc, builder->getI64Type(), byteLen);
+      } else {
+
+        assert(charTy.hasConstantLen() && "expected constant character length");
+        byteLen = builder->createIntegerConstant(loc, builder->getI64Type(),
+                                                 charTy.getLen() * kindBytes);
+      }
+
+      auto ptrTy = mlir::LLVM::LLVMPointerType::get(builder->getContext());
+      mlir::Value ptr = builder->createConvert(loc, ptrTy, buffer);
+      mlir::Value zero =
+          builder->createIntegerConstant(loc, builder->getI8Type(), 0);
+      mlir::ModuleOp mod = builder->getModule();
+      mlir::OpBuilder modBuilder(mod.getBodyRegion());
+      modBuilder.setInsertionPointToEnd(zero.getParentBlock());
+      mlir::LLVM::MemsetOp::create(
+          modBuilder, loc, ptr, zero, byteLen,
+          fir::isa_volatile_type(converter.genType(sym)));
+    }
+
+    else if (fir::isa_integer(eleTy) || fir::isa_real(eleTy) ||
+             fir::isa_complex(eleTy) || mlir::isa<fir::LogicalType>(eleTy)) {
+      mlir::Value zero = fir::factory::createZeroValue(*builder, loc, eleTy);
+      hlfir::Entity lhs{symMap.lookupSymbol(sym).getAddr()};
+      lhs = hlfir::derefPointersAndAllocatables(loc, *builder, lhs);
+      builder->create<hlfir::AssignOp>(loc, zero, lhs);
+    }
+  }
+}
+
 /// Instantiate a local variable. Precondition: Each variable will be visited
 /// such that if its properties depend on other variables, the variables upon
 /// which its properties depend will already have been visited.
@@ -1329,6 +1393,50 @@ static void instantiateLocal(Fortran::lower::AbstractConverter &converter,
     converter.getFctCtx().attachCleanup([converterPtr, loc, varDef, sym]() {
       Fortran::lower::genUnpackArray(*converterPtr, loc, *varDef, *sym);
     });
+  }
+
+  /// These options do not initialize:
+  ///   1) Any variable already initialized
+  ///   2) objects with the POINTER attribute
+  ///   3) allocatable arrays
+  ///   4) variables that appear in an EQUIVALENCE statement
+
+  auto isEligibleForImplicitAssignment = [&var, &converter]() -> bool {
+    if (!var.hasSymbol())
+      return false;
+
+    const Fortran::semantics::Symbol &sym = var.getSymbol();
+    if (!sym.GetType())
+      return false;
+    if (const auto *details =
+            sym.detailsIf<Fortran::semantics::ObjectEntityDetails>()) {
+      if (details->init())
+        return false;
+    }
+
+    if (sym.attrs().test(Fortran::semantics::Attr::POINTER))
+      return false;
+
+    if (sym.Rank() > 0 &&
+        sym.attrs().test(Fortran::semantics::Attr::ALLOCATABLE))
+      return false;
+
+    if (Fortran::lower::pft::getDependentVariableList(sym).size() > 1)
+      return false;
+
+    if (auto ty = converter.genType(sym)) {
+      auto charTy =
+          mlir::dyn_cast<fir::CharacterType>(hlfir::getFortranElementType(ty));
+      if (charTy && !charTy.hasConstantLen())
+        return false;
+    }
+
+    return true;
+  };
+
+  if (isEligibleForImplicitAssignment()) {
+    emitImplicitAssignment(converter, converter.getCurrentLocation(),
+                           var.getSymbol(), symMap);
   }
 }
 
