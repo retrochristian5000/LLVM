@@ -2148,6 +2148,79 @@ define i16 @blsi16_trunc(i32 %x) {
   ret i16 %and
 }
 
+define i8 @andn8(i8 %x, i8 %y) {
+; X86-LABEL: andn8:
+; X86:       # %bb.0:
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    andnl {{[0-9]+}}(%esp), %eax, %eax
+; X86-NEXT:    # kill: def $al killed $al killed $eax
+; X86-NEXT:    retl
+;
+; X64-LABEL: andn8:
+; X64:       # %bb.0:
+; X64-NEXT:    andnl %esi, %edi, %eax
+; X64-NEXT:    # kill: def $al killed $al killed $eax
+; X64-NEXT:    retq
+;
+; EGPR-LABEL: andn8:
+; EGPR:       # %bb.0:
+; EGPR-NEXT:    andnl %esi, %edi, %eax # EVEX TO VEX Compression encoding: [0xc4,0xe2,0x40,0xf2,0xc6]
+; EGPR-NEXT:    # kill: def $al killed $al killed $eax
+; EGPR-NEXT:    retq # encoding: [0xc3]
+  %not = xor i8 %x, 255
+  %and = and i8 %not, %y
+  ret i8 %and
+}
+
+define i8 @andn8_commuted(i8 %x, i8 %y) {
+; X86-LABEL: andn8_commuted:
+; X86:       # %bb.0:
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    andnl {{[0-9]+}}(%esp), %eax, %eax
+; X86-NEXT:    # kill: def $al killed $al killed $eax
+; X86-NEXT:    retl
+;
+; X64-LABEL: andn8_commuted:
+; X64:       # %bb.0:
+; X64-NEXT:    andnl %edi, %esi, %eax
+; X64-NEXT:    # kill: def $al killed $al killed $eax
+; X64-NEXT:    retq
+;
+; EGPR-LABEL: andn8_commuted:
+; EGPR:       # %bb.0:
+; EGPR-NEXT:    andnl %edi, %esi, %eax # EVEX TO VEX Compression encoding: [0xc4,0xe2,0x48,0xf2,0xc7]
+; EGPR-NEXT:    # kill: def $al killed $al killed $eax
+; EGPR-NEXT:    retq # encoding: [0xc3]
+  %not = xor i8 %y, 255
+  %and = and i8 %x, %not
+  ret i8 %and
+}
+
+; Make sure a regular i8 AND is not promoted by the ANDN combine.
+define i8 @and8(i8 %x, i8 %y) {
+; X86-LABEL: and8:
+; X86:       # %bb.0:
+; X86-NEXT:    movzbl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    andb {{[0-9]+}}(%esp), %al
+; X86-NEXT:    retl
+;
+; X64-LABEL: and8:
+; X64:       # %bb.0:
+; X64-NEXT:    movl %edi, %eax
+; X64-NEXT:    andl %esi, %eax
+; X64-NEXT:    # kill: def $al killed $al killed $eax
+; X64-NEXT:    retq
+;
+; EGPR-LABEL: and8:
+; EGPR:       # %bb.0:
+; EGPR-NEXT:    movl %edi, %eax # encoding: [0x89,0xf8]
+; EGPR-NEXT:    andl %esi, %eax # encoding: [0x21,0xf0]
+; EGPR-NEXT:    # kill: def $al killed $al killed $eax
+; EGPR-NEXT:    retq # encoding: [0xc3]
+  %and = and i8 %x, %y
+  ret i8 %and
+}
+
 define i8 @blsmsk8(i8 %x) nounwind {
 ; X86-LABEL: blsmsk8:
 ; X86:       # %bb.0:
