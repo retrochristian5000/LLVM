@@ -23642,8 +23642,84 @@ static SDValue trySQDMULHCombine(SDNode *N, SelectionDAG &DAG) {
   return DAG.getNode(ISD::SIGN_EXTEND, DL, DestVT, SQDMULH);
 }
 
+// Fold a shift by half the source element width followed by a truncation into
+// extraction of the upper half of each source element.
+static SDValue tryShiftTruncateCombine(SDNode *N, SelectionDAG &DAG,
+                                       TargetLowering::DAGCombinerInfo &DCI) {
+  if (!DCI.isBeforeLegalize())
+    return SDValue();
+
+  EVT DstVT = N->getValueType(0);
+  SDValue Shift = N->getOperand(0);
+
+  if (!DstVT.isScalableVector() || !DstVT.getVectorElementType().isInteger() ||
+      !DAG.getTargetLoweringInfo().isTypeLegal(DstVT))
+    return SDValue();
+
+  if ((Shift.getOpcode() != ISD::SRL && Shift.getOpcode() != ISD::SRA) ||
+      !Shift.hasOneUse())
+    return SDValue();
+
+  EVT SrcVT = Shift.getValueType();
+  if (!SrcVT.isScalableVector() || !SrcVT.getVectorElementType().isInteger() ||
+      SrcVT.getVectorElementCount() != DstVT.getVectorElementCount() ||
+      SrcVT.getScalarSizeInBits() != 2 * DstVT.getScalarSizeInBits() ||
+      SrcVT.getScalarSizeInBits() > 64)
+    return SDValue();
+
+  ConstantSDNode *ShiftAmount = isConstOrConstSplat(Shift.getOperand(1));
+  if (!ShiftAmount ||
+      ShiftAmount->getAsZExtVal() != DstVT.getScalarSizeInBits())
+    return SDValue();
+
+  // Preserve widening multiply patterns so they can select to SMULH or UMULH.
+  SDValue ShiftedValue = Shift.getOperand(0);
+  if (ShiftedValue.getOpcode() == ISD::MUL) {
+    SDValue LHS = ShiftedValue.getOperand(0);
+    SDValue RHS = ShiftedValue.getOperand(1);
+    unsigned ExtOpc = LHS.getOpcode();
+
+    if ((ExtOpc == ISD::SIGN_EXTEND || ExtOpc == ISD::ZERO_EXTEND) &&
+        RHS.getOpcode() == ExtOpc &&
+        LHS.getOperand(0).getValueType() == DstVT &&
+        RHS.getOperand(0).getValueType() == DstVT)
+      return SDValue();
+  }
+
+  // Preserve SVE2 rounding-shift patterns so they can select to RSHRNB.
+  const auto &Subtarget = DAG.getSubtarget<AArch64Subtarget>();
+  if (Subtarget.hasSVE2()) {
+    unsigned RoundingShiftAmount;
+    SDValue RoundingOperand;
+    if (canLowerSRLToRoundingShiftForVT(Shift, DstVT, DAG, RoundingShiftAmount,
+                                        RoundingOperand))
+      return SDValue();
+  }
+
+  SDLoc DL(N);
+
+  EVT BitcastVT = DstVT.getDoubleNumVectorElementsVT(*DAG.getContext());
+  SDValue Bitcast = DAG.getBitcast(BitcastVT, Shift.getOperand(0));
+
+  SDValue Lo = DAG.getExtractSubvector(DL, DstVT, Bitcast, 0);
+  SDValue Hi = DAG.getExtractSubvector(DL, DstVT, Bitcast,
+                                       DstVT.getVectorMinNumElements());
+
+  SDValue Deinterleave = DAG.getNode(ISD::VECTOR_DEINTERLEAVE, DL,
+                                     DAG.getVTList(DstVT, DstVT), {Lo, Hi});
+
+  // After bitcasting, the byte containing the shifted result is in the odd
+  // deinterleave result on little-endian targets, and the in the even result
+  // on big-endian targets.
+  unsigned Res = DAG.getDataLayout().isLittleEndian() ? 1 : 0;
+  return Deinterleave.getValue(Res);
+}
+
 static SDValue performTruncateCombine(SDNode *N, SelectionDAG &DAG,
                                       TargetLowering::DAGCombinerInfo &DCI) {
+  if (SDValue V = tryShiftTruncateCombine(N, DAG, DCI))
+    return V;
+
   SDLoc DL(N);
   EVT VT = N->getValueType(0);
   SDValue N0 = N->getOperand(0);
