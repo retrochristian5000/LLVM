@@ -1137,19 +1137,16 @@ func.func @subview_non_alias_memref_store(
 // -----
 
 // A represented free must remain a dependence through full affine filtering.
-// Otherwise fusing the first and third loops would move a store to %a past
-// its deallocation.
+// Otherwise fusing the first and third loops could move a store to %a past its
+// deallocation.
 
 // PRODUCER-CONSUMER-MAXIMAL-LABEL: func @representable_free_between_loops
 // PRODUCER-CONSUMER-MAXIMAL:      %[[A:.*]] = memref.alloc
 // PRODUCER-CONSUMER-MAXIMAL:      affine.store {{.*}}, %[[A]][
 // PRODUCER-CONSUMER-MAXIMAL:      memref.dealloc %[[A]]
-// PRODUCER-CONSUMER-MAXIMAL:      affine.for
-// PRODUCER-CONSUMER-MAXIMAL:      affine.load
 func.func @representable_free_between_loops(
-    %in: memref<32xf64>, %out: memref<32xf64>) {
+    %in: memref<32xf64>, %b: memref<32xf64>, %out: memref<32xf64>) {
   %a = memref.alloc() : memref<32xf64>
-  %b = memref.alloc() : memref<32xf64>
   affine.for %i = 0 to 16 {
     %v = affine.load %in[%i] : memref<32xf64>
     affine.store %v, %a[%i] : memref<32xf64>

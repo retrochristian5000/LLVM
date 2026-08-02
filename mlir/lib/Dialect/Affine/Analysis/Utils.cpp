@@ -22,6 +22,7 @@
 #include "mlir/Dialect/MemRef/Utils/MemRefUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/IntegerSet.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/Debug.h"
@@ -55,8 +56,10 @@ static bool isSameMemref(Value lhs, Value rhs) {
 /// Returns the values that `op` may have a memref effect of type `EffectTys`
 /// on, not considering recursive effects. View-like values are canonicalized
 /// to their storage source so the MDG uses one key for a view chain while raw
-/// views remain available for affine-coordinate analysis. Unknown operations
-/// cannot be represented by the memref-keyed graph, so return false for them.
+/// views remain available for affine-coordinate analysis. Unknown calls cannot
+/// be represented by the memref-keyed graph because their effects are not
+/// limited to explicit memref operands. Other unknown operations retain the
+/// existing operand-based fallback.
 /// Returns false if a selected effect cannot be represented by a memref value.
 /// The MDG has no resource-level or all-memory edges, so dropping such an
 /// effect would make fusion unsound.
@@ -64,8 +67,16 @@ template <typename... EffectTys>
 static bool getMayAffectedValues(Operation *op,
                                  SmallVectorImpl<Value> &values) {
   auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
-  if (!memOp)
-    return !hasUnknownEffects(op);
+  if (!memOp) {
+    if (!hasUnknownEffects(op))
+      return true;
+    if (isa<CallOpInterface>(op))
+      return false;
+    for (Value operand : op->getOperands())
+      if (isa<BaseMemRefType>(operand.getType()))
+        values.push_back(canonicalizeMemref(operand));
+    return true;
+  }
   SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4> effects;
   memOp.getEffects(effects);
   for (auto &effect : effects) {
@@ -107,10 +118,17 @@ void LoopNestStateCollector::collect(Operation *opToWalk) {
       if (!memInterface) {
         if (!hasUnknownEffects(op))
           return;
-        // Unknown effects may reach memory through globals or other state not
-        // represented by SSA memref operands. Keep the graph fail-closed.
-        memrefLoads.push_back(op);
-        memrefStores.push_back(op);
+        if (isa<CallOpInterface>(op)) {
+          // Calls may access memory not represented by explicit operands.
+          memrefLoads.push_back(op);
+          memrefStores.push_back(op);
+        } else if (llvm::any_of(op->getOperands(), [](Value value) {
+                     return isa<BaseMemRefType>(value.getType());
+                   })) {
+          // Conservatively, assume all memref operands are read and written.
+          memrefLoads.push_back(op);
+          memrefStores.push_back(op);
+        }
       } else {
         // Non-affine loads, stores, and frees. Allocation effects are
         // intentionally omitted: they do not access existing memory, and
