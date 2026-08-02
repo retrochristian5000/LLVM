@@ -15,6 +15,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Analysis/InstSimplifyFolder.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ScalarEvolutionPatternMatch.h"
@@ -999,6 +1000,57 @@ VPValue *VPSCEVExpander::tryToExpand(const SCEV *S) {
       Result = Builder.createScalarIntrinsic(IntrinsicID, {Result, Op},
                                              ResultTy, DL);
     return Result;
+  }
+  case scAddRecExpr: {
+    // AddRecs never appear in the vector loop; the AR's loop would correspond
+    // to an outer loop outside the vector loop, and its header would be modeled
+    // as a VPIRBasicBlock.
+    auto *AR = cast<SCEVAddRecExpr>(S);
+    VPlan &Plan = Builder.getPlan();
+
+    // If a canonical IV to re-use is present, it would be in the Plan's entry.
+    // We cannot create a phi in the Plan's entry, which would be required in
+    // the absence of a canonical IV to re-use or if AR is non-affine, because
+    // its predecessors are not modeled: fall back to the IR expander.
+    if (!AR->isAffine())
+      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
+    auto FoundCanIV =
+        find_if(Plan.getEntry()->phis(), [&](const VPRecipeBase &R) {
+          if (!SE.isSCEVable(cast<VPIRPhi>(R).getIRPhi().getType()))
+            return false;
+          const SCEV *Candidate = SE.getSCEV(&cast<VPIRPhi>(R).getIRPhi());
+          return match(Candidate,
+                       m_scev_AffineAddRec(m_scev_Zero(), m_scev_One(),
+                                           m_SpecificLoop(AR->getLoop()))) &&
+                 Candidate->getType() == AR->getType();
+        });
+    if (FoundCanIV == Plan.getEntry()->phis().end())
+      return vputils::getOrCreateVPValueForSCEVExpr(Plan, AR);
+
+    VPValue *CanonicalIV =
+        Plan.getOrAddLiveIn(&cast<VPIRPhi>(FoundCanIV)->getIRPhi());
+    VPValue *Start;
+    Start = tryToExpand(AR->getStart());
+    if (!Start)
+      return nullptr;
+    VPValue *Step = tryToExpand(AR->getStepRecurrence(SE));
+    if (!Step)
+      return nullptr;
+
+    GEPNoWrapFlags GEPFlags;
+    VPIRFlags::WrapFlagsTy NWFlags;
+    if (AR->hasNoUnsignedWrap()) {
+      GEPFlags = GEPNoWrapFlags::noUnsignedSignedWrap();
+      NWFlags = {true, false};
+    }
+
+    // {X,+,F} --> X + {0,+,F}
+    // {0,+,F} --> {0,+,1} * F
+    VPValue *Offset = Builder.createOverflowingOp(Instruction::Mul,
+                                                  {CanonicalIV, Step}, NWFlags);
+    return AR->getType()->isPointerTy()
+               ? Builder.createNoWrapPtrAdd(Start, Offset, GEPFlags, DL)
+               : Builder.createAdd(Start, Offset, DL, "", NWFlags);
   }
   default:
     return nullptr;

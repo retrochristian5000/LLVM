@@ -19,7 +19,7 @@ define void @reuse_lcssa_phi_for_add_rec1(ptr %head) {
 ; CHECK-NEXT:    br i1 [[EC_1]], label %[[PH:.*]], label %[[LOOP_1]]
 ; CHECK:       [[PH]]:
 ; CHECK-NEXT:    [[IV_LCSSA:%.*]] = phi i64 [ [[IV]], %[[LOOP_1]] ]
-; CHECK-NEXT:    [[TMP0:%.*]] = phi i32 [ [[IV_2_NEXT]], %[[LOOP_1]] ]
+; CHECK-NEXT:    [[IV_2_NEXT_LCSSA:%.*]] = phi i32 [ [[IV_2_NEXT]], %[[LOOP_1]] ]
 ; CHECK-NEXT:    [[SRC_2:%.*]] = tail call noalias noundef dereferenceable_or_null(8) ptr @calloc(i64 1, i64 8)
 ; CHECK-NEXT:    [[SMIN:%.*]] = call i32 @llvm.smin.i32(i32 [[IV_2_NEXT]], i32 1)
 ; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 [[IV_2_NEXT]], [[SMIN]]
@@ -206,12 +206,10 @@ define void @expand_diff_scev_unknown(ptr %dst, i1 %invar.c, i32 %step) mustprog
 ; CHECK-NEXT:    br i1 [[INVAR_C]], label %[[LOOP_2_PREHEADER:.*]], label %[[LOOP_1]]
 ; CHECK:       [[LOOP_2_PREHEADER]]:
 ; CHECK-NEXT:    [[IV_1_LCSSA:%.*]] = phi i32 [ [[IV_1]], %[[LOOP_1]] ]
-; CHECK-NEXT:    [[TMP0:%.*]] = sub i32 2, [[STEP]]
-; CHECK-NEXT:    [[TMP12:%.*]] = add i32 [[IV_1_LCSSA]], [[TMP0]]
-; CHECK-NEXT:    [[SMAX1:%.*]] = call i32 @llvm.smax.i32(i32 [[TMP12]], i32 0)
 ; CHECK-NEXT:    [[TMP3:%.*]] = mul i32 [[INDVAR]], -1
 ; CHECK-NEXT:    [[TMP14:%.*]] = add i32 [[TMP3]], -1
-; CHECK-NEXT:    [[TMP15:%.*]] = add i32 [[SMAX1]], [[TMP14]]
+; CHECK-NEXT:    [[TMP16:%.*]] = sub i32 2, [[STEP]]
+; CHECK-NEXT:    [[TMP17:%.*]] = add i32 [[IV_1_LCSSA]], [[TMP16]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[IV_1_LCSSA]], [[STEP]]
 ; CHECK-NEXT:    [[SMAX:%.*]] = call i32 @llvm.smax.i32(i32 [[TMP1]], i32 0)
 ; CHECK-NEXT:    [[TMP2:%.*]] = mul i32 [[STEP]], -2
@@ -223,6 +221,8 @@ define void @expand_diff_scev_unknown(ptr %dst, i1 %invar.c, i32 %step) mustprog
 ; CHECK-NEXT:    [[UMAX:%.*]] = call i32 @llvm.umax.i32(i32 [[STEP]], i32 1)
 ; CHECK-NEXT:    [[TMP8:%.*]] = udiv i32 [[TMP7]], [[UMAX]]
 ; CHECK-NEXT:    [[TMP9:%.*]] = add i32 [[TMP6]], [[TMP8]]
+; CHECK-NEXT:    [[TMP12:%.*]] = call i32 @llvm.smax.i32(i32 [[TMP17]], i32 0)
+; CHECK-NEXT:    [[TMP15:%.*]] = add i32 [[TMP12]], [[TMP14]]
 ; CHECK-NEXT:    [[MIN_ITERS_CHECK:%.*]] = icmp ult i32 [[TMP15]], 2
 ; CHECK-NEXT:    br i1 [[MIN_ITERS_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_SCEVCHECK:.*]]
 ; CHECK:       [[VECTOR_SCEVCHECK]]:
