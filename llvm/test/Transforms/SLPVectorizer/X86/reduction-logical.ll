@@ -180,14 +180,10 @@ define i1 @mixed_logical_icmp(<4 x i32> %x) {
 
 define i1 @logical_and_icmp_subvec(<4 x i32> %x) {
 ; CHECK-LABEL: @logical_and_icmp_subvec(
-; CHECK-NEXT:    [[X2:%.*]] = extractelement <4 x i32> [[X:%.*]], i32 2
-; CHECK-NEXT:    [[TMP1:%.*]] = shufflevector <4 x i32> [[X]], <4 x i32> poison, <2 x i32> <i32 0, i32 1>
-; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt <2 x i32> [[TMP1]], zeroinitializer
-; CHECK-NEXT:    [[C2:%.*]] = icmp slt i32 [[X2]], 0
-; CHECK-NEXT:    [[TMP3:%.*]] = extractelement <2 x i1> [[TMP2]], i64 0
-; CHECK-NEXT:    [[TMP4:%.*]] = extractelement <2 x i1> [[TMP2]], i64 1
-; CHECK-NEXT:    [[S1:%.*]] = select i1 [[TMP3]], i1 [[TMP4]], i1 false
-; CHECK-NEXT:    [[S2:%.*]] = select i1 [[S1]], i1 [[C2]], i1 false
+; CHECK-NEXT:    [[TMP1:%.*]] = shufflevector <4 x i32> [[X:%.*]], <4 x i32> poison, <3 x i32> <i32 0, i32 1, i32 2>
+; CHECK-NEXT:    [[TMP2:%.*]] = icmp slt <3 x i32> [[TMP1]], zeroinitializer
+; CHECK-NEXT:    [[TMP3:%.*]] = freeze <3 x i1> [[TMP2]]
+; CHECK-NEXT:    [[S2:%.*]] = call i1 @llvm.vector.reduce.and.v3i1(<3 x i1> [[TMP3]])
 ; CHECK-NEXT:    ret i1 [[S2]]
 ;
   %x0 = extractelement <4 x i32> %x, i32 0
