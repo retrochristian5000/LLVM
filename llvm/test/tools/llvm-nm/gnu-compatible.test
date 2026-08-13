@@ -3,6 +3,8 @@
 # RUN: yaml2obj %s -o %t.o
 # RUN: llvm-ar rc %t.a %t.o
 # RUN: llvm-nm --gnu-compatible -s %t.a | FileCheck %s --check-prefix=ARMAP
+# RUN: echo "--gnu-compatible -s %t.a" > %t.rsp
+# RUN: llvm-nm @%t.rsp | FileCheck %s --check-prefix=ARMAP
 # RUN: llvm-nm --gnu-compatible -f b %t.o | FileCheck %s --check-prefix=BSD
 # RUN: llvm-nm --gnu-compatible -fBanana %t.o | FileCheck %s --check-prefix=BSD
 # RUN: llvm-nm --gnu-compatible --format=BSD %t.o | FileCheck %s --check-prefix=BSD

@@ -13,8 +13,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Allocator.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/LLVMDriver.h"
+#include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cctype>
 #include <string>
@@ -67,10 +71,19 @@ static void appendGNUFormat(std::vector<std::string> &Args,
 } // namespace
 
 int llvm_nm_main(int argc, char **argv, const llvm::ToolContext &ToolContext) {
+  // Match llvm-nm's normal OptTable parser by expanding response files before
+  // deciding whether GNU compatibility was requested. This keeps
+  // --gnu-compatible reliable when build systems place options in @FILE.
+  BumpPtrAllocator Alloc;
+  StringSaver Saver(Alloc);
+  SmallVector<const char *, 0> ExpandedArgv;
+  if (!cl::expandResponseFiles(argc, argv, nullptr, Saver, ExpandedArgv))
+    return 1;
+
   bool GNUCompatible = false;
   bool ParseOptions = true;
-  for (int I = 1; I < argc; ++I) {
-    StringRef Arg(argv[I]);
+  for (const char *RawArg : ExpandedArgv) {
+    StringRef Arg(RawArg);
     if (ParseOptions && Arg == "--") {
       ParseOptions = false;
       continue;
@@ -83,12 +96,12 @@ int llvm_nm_main(int argc, char **argv, const llvm::ToolContext &ToolContext) {
     return llvm_nm_main_impl(argc, argv, ToolContext);
 
   std::vector<std::string> Storage;
-  Storage.reserve(static_cast<size_t>(argc) + 2);
+  Storage.reserve(ExpandedArgv.size() + 1);
   Storage.emplace_back(argv[0]);
 
   ParseOptions = true;
-  for (int I = 1; I < argc; ++I) {
-    StringRef Arg(argv[I]);
+  for (size_t I = 0; I < ExpandedArgv.size(); ++I) {
+    StringRef Arg(ExpandedArgv[I]);
 
     if (!ParseOptions) {
       Storage.emplace_back(Arg.str());
@@ -113,11 +126,11 @@ int llvm_nm_main(int argc, char **argv, const llvm::ToolContext &ToolContext) {
     // significant, case-insensitively. Canonicalize the value before handing
     // it to llvm-nm's stricter parser.
     if (Arg == "-f" || Arg == "--format") {
-      if (I + 1 >= argc) {
+      if (I + 1 >= ExpandedArgv.size()) {
         Storage.emplace_back(Arg.str());
         continue;
       }
-      StringRef Value(argv[++I]);
+      StringRef Value(ExpandedArgv[++I]);
       std::string Canonical;
       if (!getGNUFormat(Value, Canonical))
         return reportBadGNUFormat(argv[0], Value);
