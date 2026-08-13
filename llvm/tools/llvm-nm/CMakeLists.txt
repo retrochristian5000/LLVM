@@ -17,8 +17,13 @@ set(LLVM_TARGET_DEFINITIONS Opts.td)
 tablegen(LLVM Opts.inc -gen-opt-parser-defs)
 add_public_tablegen_target(NmOptsTableGen)
 
+set_source_files_properties(llvm-nm.cpp PROPERTIES
+  COMPILE_DEFINITIONS "llvm_nm_main=llvm_nm_main_impl"
+  )
+
 add_llvm_tool(llvm-nm
   llvm-nm.cpp
+  llvm-nm-gnu-compat.cpp
 
   DEPENDS
   NmOptsTableGen

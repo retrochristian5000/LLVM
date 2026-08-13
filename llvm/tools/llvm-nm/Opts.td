@@ -21,6 +21,7 @@ def dynamic : FF<"dynamic", "Display dynamic symbols instead of normal symbols">
 def export_symbols : FF<"export-symbols", "Export symbol list for all inputs">;
 def extern_only : FF<"extern-only", "Show only external symbols">;
 defm format : Eq<"format", "Specify output format: bsd (default), posix, sysv, darwin, just-symbols">, MetaVarName<"<format>">;
+def gnu_compatible : FF<"gnu-compatible", "Use supported GNU nm command-line semantics for overlapping options">;
 def help : FF<"help", "Display this help">;
 def line_numbers : FF<"line-numbers", "Use debugging information to print symbols' filenames and line numbers">;
 def no_llvm_bc : FF<"no-llvm-bc", "Disable LLVM bitcode reader">;
