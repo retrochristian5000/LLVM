@@ -58,3 +58,9 @@ CHECK6: MinorOperatingSystemVersion: 9
 CHECK6: MajorSubsystemVersion: 8
 CHECK6: MinorSubsystemVersion: 9
 CHECK6: Subsystem: IMAGE_SUBSYSTEM_XBOX
+
+# RUN: lld-link /entry:main /out:%t.exe /subsystem:windowsce \
+# RUN:   %p/Inputs/ret42.obj
+# RUN: llvm-readobj --file-headers %t.exe | FileCheck -check-prefix=CHECK7 %s
+
+CHECK7: Subsystem: IMAGE_SUBSYSTEM_WINDOWS_CE_GUI
