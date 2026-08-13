@@ -1,0 +1,29 @@
+## Exercise GNU compatibility mode without changing native llvm-nm defaults.
+
+# RUN: yaml2obj %s -o %t.o
+# RUN: llvm-ar rc %t.a %t.o
+# RUN: llvm-nm --gnu-compatible -s %t.a | FileCheck %s --check-prefix=ARMAP
+# RUN: llvm-nm --gnu-compatible -f b %t.o | FileCheck %s --check-prefix=BSD
+# RUN: llvm-nm --gnu-compatible -fBanana %t.o | FileCheck %s --check-prefix=BSD
+# RUN: llvm-nm --gnu-compatible --format=BSD %t.o | FileCheck %s --check-prefix=BSD
+# RUN: llvm-nm --help | FileCheck %s --check-prefix=HELP
+
+# ARMAP: Archive map
+# ARMAP: gnu_compat_symbol in {{.*}}
+# BSD: 00000000 T gnu_compat_symbol
+# HELP: --gnu-compatible
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: EM_386
+Sections:
+  - Name:  .text
+    Type:  SHT_PROGBITS
+    Flags: [SHF_ALLOC, SHF_EXECINSTR]
+Symbols:
+  - Name:    gnu_compat_symbol
+    Binding: STB_GLOBAL
+    Section: .text
