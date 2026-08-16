@@ -43,10 +43,11 @@ static bool isRISCVBareMetal(const llvm::Triple &Triple) {
   return Triple.getEnvironmentName() == "elf";
 }
 
-/// Is the triple powerpc[64][le]-*-none-eabi?
+/// Is the triple powerpc[64][le]-*-none-{eabi,elf}?
 static bool isPPCBareMetal(const llvm::Triple &Triple) {
   return Triple.isPPC() && Triple.getOS() == llvm::Triple::UnknownOS &&
-         Triple.getEnvironment() == llvm::Triple::EABI;
+         (Triple.getEnvironment() == llvm::Triple::EABI ||
+          Triple.getEnvironmentName() == "elf");
 }
 
 /// Is the triple {ix86,x86_64}-*-none-elf?
