@@ -3,6 +3,7 @@
 # RUN: not cmake -DLLD_BACKEND_MODULE=%llvm_src_root/../lld/cmake/modules/LLDBackendSelection.cmake -P %t/invalid.cmake 2>&1 | FileCheck %s --check-prefix=INVALID
 
 #--- check.cmake
+cmake_minimum_required(VERSION 3.20)
 include("${LLD_BACKEND_MODULE}")
 
 lld_resolve_backends("ELF" actual)
@@ -21,6 +22,7 @@ if(NOT "${actual}" STREQUAL "COFF;ELF;MachO;MinGW;wasm")
 endif()
 
 #--- invalid.cmake
+cmake_minimum_required(VERSION 3.20)
 include("${LLD_BACKEND_MODULE}")
 lld_resolve_backends("Bogus" actual)
 
