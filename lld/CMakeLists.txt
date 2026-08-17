@@ -188,9 +188,6 @@ if (LLD_DEFAULT_LD_LLD_IS_MINGW)
       "LLD_DEFAULT_LD_LLD_IS_MINGW requires the MinGW backend")
   endif()
   add_definitions("-DLLD_DEFAULT_LD_LLD_IS_MINGW=1")
-elseif(NOT "ELF" IN_LIST LLD_ENABLED_BACKENDS)
-  message(FATAL_ERROR
-    "The default ld.lld flavor requires the ELF backend; enable ELF or set LLD_DEFAULT_LD_LLD_IS_MINGW=ON")
 endif()
 
 if (MSVC)
