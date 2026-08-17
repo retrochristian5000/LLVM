@@ -1,0 +1,39 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: cmake -S %t -B %t/build -DLLVM_CONFIG_MODULE=%S/../../cmake/modules/LLVM-Config.cmake
+
+#--- CMakeLists.txt
+cmake_minimum_required(VERSION 3.20)
+project(LLVMConfigDependencyOrder NONE)
+
+include("${LLVM_CONFIG_MODULE}")
+
+add_library(LLVMA INTERFACE)
+add_library(LLVMB INTERFACE)
+add_library(LLVMC INTERFACE)
+add_library(LLVMD INTERFACE)
+add_library(LLVME INTERFACE)
+
+set_property(TARGET LLVMA PROPERTY LLVM_LINK_COMPONENTS "B;C")
+set_property(TARGET LLVMB PROPERTY LLVM_LINK_COMPONENTS "D")
+set_property(TARGET LLVMC PROPERTY LLVM_LINK_COMPONENTS "D")
+set_property(TARGET LLVMD PROPERTY LLVM_LINK_COMPONENTS "")
+set_property(TARGET LLVME PROPERTY LLVM_LINK_COMPONENTS "A;C")
+
+function(check_order expected)
+  llvm_expand_dependencies(actual ${ARGN})
+  if(NOT "${actual}" STREQUAL "${expected}")
+    message(FATAL_ERROR
+      "dependency order mismatch: expected '${expected}', got '${actual}'")
+  endif()
+endfunction()
+
+# Shared dependency: D must remain after both B and C in the final link order.
+check_order("LLVMA;LLVMC;LLVMB;LLVMD" A)
+
+# Multiple roots preserve the recursive implementation's reverse-postorder.
+check_order("LLVME;LLVMA;LLVMC;LLVMB;LLVMD" A E)
+check_order("LLVME;LLVMA;LLVMC;LLVMB;LLVMD" E A)
+
+# Cycles terminate because nodes are marked visited before dependencies expand.
+set_property(TARGET LLVMD PROPERTY LLVM_LINK_COMPONENTS "A")
+check_order("LLVME;LLVMD;LLVMA;LLVMC;LLVMB" D A E)
