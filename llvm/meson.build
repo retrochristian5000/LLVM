@@ -2,10 +2,7 @@ project(
   'llvm-nm-meson',
   'cpp',
   meson_version : '>=0.55.0',
-  default_options : [
-    'cpp_std=c++17',
-    'cpp_stdlib=auto',
-  ],
+  default_options : ['cpp_std=c++17'],
 )
 
 # This is intentionally a narrow bootstrap build.  CMake remains the complete
