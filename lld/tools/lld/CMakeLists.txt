@@ -3,6 +3,41 @@ set(LLVM_LINK_COMPONENTS
   TargetParser
   )
 
+set(lld_driver_libraries lldCommon)
+set(lld_driver_definitions)
+set(lld_default_symlinks)
+
+if("COFF" IN_LIST LLD_ENABLED_BACKENDS)
+  list(APPEND lld_driver_libraries lldCOFF)
+  list(APPEND lld_driver_definitions LLD_ENABLE_COFF_DRIVER)
+  list(APPEND lld_default_symlinks lld-link)
+endif()
+if("ELF" IN_LIST LLD_ENABLED_BACKENDS)
+  list(APPEND lld_driver_libraries lldELF)
+  list(APPEND lld_driver_definitions LLD_ENABLE_ELF_DRIVER)
+  list(APPEND lld_default_symlinks ld.lld)
+endif()
+if("MachO" IN_LIST LLD_ENABLED_BACKENDS)
+  list(APPEND lld_driver_libraries lldMachO)
+  list(APPEND lld_driver_definitions LLD_ENABLE_MACHO_DRIVER)
+  list(APPEND lld_default_symlinks ld64.lld)
+endif()
+if("MinGW" IN_LIST LLD_ENABLED_BACKENDS)
+  list(APPEND lld_driver_libraries lldMinGW)
+  list(APPEND lld_driver_definitions LLD_ENABLE_MINGW_DRIVER)
+  if(LLD_DEFAULT_LD_LLD_IS_MINGW AND NOT "ld.lld" IN_LIST lld_default_symlinks)
+    list(APPEND lld_default_symlinks ld.lld)
+  endif()
+endif()
+if("wasm" IN_LIST LLD_ENABLED_BACKENDS)
+  list(APPEND lld_driver_libraries lldWasm)
+  list(APPEND lld_driver_definitions LLD_ENABLE_WASM_DRIVER)
+  list(APPEND lld_default_symlinks wasm-ld)
+endif()
+
+set_property(SOURCE lld.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS ${lld_driver_definitions})
+
 add_lld_tool(lld
   lld.cpp
 
@@ -26,17 +61,11 @@ endfunction()
 
 lld_target_link_libraries(lld
   PRIVATE
-  lldCommon
-  lldCOFF
-  lldELF
-  lldMachO
-  lldMinGW
-  lldWasm
+  ${lld_driver_libraries}
   )
 
 if(NOT LLD_SYMLINKS_TO_CREATE)
-  set(LLD_SYMLINKS_TO_CREATE
-      lld-link ld.lld ld64.lld wasm-ld)
+  set(LLD_SYMLINKS_TO_CREATE ${lld_default_symlinks})
 endif()
 
 foreach(link ${LLD_SYMLINKS_TO_CREATE})
