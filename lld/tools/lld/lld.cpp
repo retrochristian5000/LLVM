@@ -10,18 +10,9 @@
 // function is a thin wrapper which dispatches to the platform specific
 // driver.
 //
-// lld is a single executable that contains four different linkers for ELF,
-// COFF, WebAssembly and Mach-O. The main function dispatches according to
-// argv[0] (i.e. command name). The most common name for each target is shown
-// below:
-//
-//  - ld.lld:    ELF (Unix)
-//  - ld64:      Mach-O (macOS)
-//  - lld-link:  COFF (Windows)
-//  - ld-wasm:   WebAssembly
-//
-// lld can be invoked as "lld" along with "-flavor" option. This is for
-// backward compatibility and not recommended.
+// lld can contain one or more format-specific drivers. Full builds enable the
+// historical set of ELF, COFF, WebAssembly, Mach-O and MinGW drivers, while
+// focused builds can compile only the formats they ship.
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,11 +57,39 @@ static unsigned inTestVerbosity() {
   return v;
 }
 
+#ifdef LLD_ENABLE_COFF_DRIVER
 LLD_HAS_DRIVER(coff)
+#endif
+#ifdef LLD_ENABLE_ELF_DRIVER
 LLD_HAS_DRIVER(elf)
+#endif
+#ifdef LLD_ENABLE_MINGW_DRIVER
 LLD_HAS_DRIVER(mingw)
+#endif
+#ifdef LLD_ENABLE_MACHO_DRIVER
 LLD_HAS_DRIVER(macho)
+#endif
+#ifdef LLD_ENABLE_WASM_DRIVER
 LLD_HAS_DRIVER(wasm)
+#endif
+
+static constexpr lld::DriverDef lldDrivers[] = {
+#ifdef LLD_ENABLE_COFF_DRIVER
+    {lld::WinLink, &lld::coff::link},
+#endif
+#ifdef LLD_ENABLE_ELF_DRIVER
+    {lld::Gnu, &lld::elf::link},
+#endif
+#ifdef LLD_ENABLE_MINGW_DRIVER
+    {lld::MinGW, &lld::mingw::link},
+#endif
+#ifdef LLD_ENABLE_MACHO_DRIVER
+    {lld::Darwin, &lld::macho::link},
+#endif
+#ifdef LLD_ENABLE_WASM_DRIVER
+    {lld::Wasm, &lld::wasm::link},
+#endif
+};
 
 int lld_main(int argc, char **argv, const llvm::ToolContext &) {
   sys::Process::UseANSIEscapeCodes(true);
@@ -86,9 +105,8 @@ int lld_main(int argc, char **argv, const llvm::ToolContext &) {
   // Not running in lit tests, just take the shortest codepath with global
   // exception handling and no memory cleanup on exit.
   if (!inTestVerbosity()) {
-    int r =
-        lld::unsafeLldMain(args, llvm::outs(), llvm::errs(), LLD_ALL_DRIVERS,
-                           /*exitEarly=*/true);
+    int r = lld::unsafeLldMain(args, llvm::outs(), llvm::errs(), lldDrivers,
+                               /*exitEarly=*/true);
     return r;
   }
 
@@ -100,7 +118,7 @@ int lld_main(int argc, char **argv, const llvm::ToolContext &) {
     inTestOutputDisabled = (i != 1);
 
     // Execute one iteration.
-    auto r = lldMain(args, llvm::outs(), llvm::errs(), LLD_ALL_DRIVERS);
+    auto r = lldMain(args, llvm::outs(), llvm::errs(), lldDrivers);
     if (!r.canRunAgain)
       exitLld(r.retCode); // Exit now, can't re-execute again.
 
