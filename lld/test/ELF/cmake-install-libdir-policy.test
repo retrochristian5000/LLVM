@@ -1,0 +1,9 @@
+# REQUIRES: system-linux
+# RUN: rm -rf %t
+# RUN: cmake -S %llvm_src_root/../lld -B %t -G Ninja \
+# RUN:   -DLLVM_DIR=%llvm_obj_root/lib/cmake/llvm \
+# RUN:   -DCMAKE_INSTALL_PREFIX=/usr \
+# RUN:   -DLLVM_INCLUDE_TESTS=OFF \
+# RUN:   -DLLD_BUILD_TOOLS=OFF \
+# RUN:   -DLLD_ENABLE_BACKENDS=ELF
+# RUN: not grep -q '^CMAKE_INSTALL_LIBDIR:PATH=' %t/CMakeCache.txt
