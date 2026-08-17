@@ -23,7 +23,7 @@ endfunction()
 # )
 function(is_llvm_target_library library return_var)
   cmake_parse_arguments(ARG "ALL_TARGETS;INCLUDED_TARGETS;OMITTED_TARGETS" "" "" ${ARGN})
-  # Sets variable `return_var' to ON if `library' corresponds to a
+  # Sets variable `return_var' to ON if `library' corresponds to an
   # LLVM supported target. To OFF if it doesn't.
   set(${return_var} OFF PARENT_SCOPE)
   string(TOUPPER "${library}" capitalized_lib)
@@ -215,7 +215,18 @@ function(llvm_map_components_to_libnames out_libs)
     # Inside LLVM itself available libs are in a global property.
     get_property(LLVM_AVAILABLE_LIBS GLOBAL PROPERTY LLVM_LIBS)
   endif()
-  string(TOUPPER "${LLVM_AVAILABLE_LIBS}" capitalized_libs)
+
+  # CMake lists are strings. Re-uppercasing the complete LLVM library registry
+  # for every target/component mapping becomes noticeable in large builds, so
+  # reuse the canonicalized list while the underlying registry is unchanged.
+  get_property(capitalized_libs_source GLOBAL PROPERTY LLVM_CONFIG_CAPITALIZED_LIBS_SOURCE)
+  if(NOT "${capitalized_libs_source}" STREQUAL "${LLVM_AVAILABLE_LIBS}")
+    string(TOUPPER "${LLVM_AVAILABLE_LIBS}" capitalized_libs)
+    set_property(GLOBAL PROPERTY LLVM_CONFIG_CAPITALIZED_LIBS_SOURCE "${LLVM_AVAILABLE_LIBS}")
+    set_property(GLOBAL PROPERTY LLVM_CONFIG_CAPITALIZED_LIBS "${capitalized_libs}")
+  else()
+    get_property(capitalized_libs GLOBAL PROPERTY LLVM_CONFIG_CAPITALIZED_LIBS)
+  endif()
 
   get_property(LLVM_TARGETS_CONFIGURED GLOBAL PROPERTY LLVM_TARGETS_CONFIGURED)
 
@@ -289,15 +300,22 @@ function(llvm_map_components_to_libnames out_libs)
   set(${out_libs} ${expanded_components} PARENT_SCOPE)
 endfunction()
 
-# Perform a post-order traversal of the dependency graph.
-# This duplicates the algorithm used by llvm-config, originally
-# in tools/llvm-config/llvm-config.cpp, function ComputeLibsForComponents.
-function(expand_topologically name required_libs visited_libs)
-  if(NOT ${name} IN_LIST visited_libs)
-    list(APPEND visited_libs ${name})
-    set(visited_libs ${visited_libs} PARENT_SCOPE)
+# Expand dependencies in the same order as the old recursive post-order walk,
+# but keep the traversal state in one function scope. CMake function arguments
+# and PARENT_SCOPE assignments copy list strings, so the recursive version grew
+# increasingly expensive as the component graph expanded.
+function(llvm_expand_dependencies out_libs)
+  set(worklist ${ARGN})
+  set(required_libs)
+  set(visited_libs)
 
-    #
+  while(worklist)
+    list(POP_BACK worklist name)
+    if(name IN_LIST visited_libs)
+      continue()
+    endif()
+    list(APPEND visited_libs ${name})
+
     get_property(libname GLOBAL PROPERTY LLVM_COMPONENT_NAME_${name})
     if(libname)
       set(cname LLVM${libname})
@@ -309,31 +327,16 @@ function(expand_topologically name required_libs visited_libs)
       message(FATAL_ERROR "unknown component ${name}")
     endif()
 
-    get_property(lib_deps TARGET ${cname} PROPERTY LLVM_LINK_COMPONENTS)
-    foreach( lib_dep ${lib_deps} )
-      expand_topologically(${lib_dep} "${required_libs}" "${visited_libs}")
-      set(required_libs ${required_libs} PARENT_SCOPE)
-      set(visited_libs ${visited_libs} PARENT_SCOPE)
-    endforeach()
-
+    # The previous algorithm performed a post-order traversal and reversed the
+    # final list. Popping from the back and appending dependencies in their
+    # declared order produces that same reversed-post-order directly.
     list(APPEND required_libs ${cname})
-    set(required_libs ${required_libs} PARENT_SCOPE)
-  endif()
-endfunction()
+    get_property(lib_deps TARGET ${cname} PROPERTY LLVM_LINK_COMPONENTS)
+    if(lib_deps)
+      list(APPEND worklist ${lib_deps})
+    endif()
+  endwhile()
 
-# Expand dependencies while topologically sorting the list of libraries:
-function(llvm_expand_dependencies out_libs)
-  set(expanded_components ${ARGN})
-
-  set(required_libs)
-  set(visited_libs)
-  foreach( lib ${expanded_components} )
-    expand_topologically(${lib} "${required_libs}" "${visited_libs}")
-  endforeach()
-
-  if(required_libs)
-    list(REVERSE required_libs)
-  endif()
   set(${out_libs} ${required_libs} PARENT_SCOPE)
 endfunction()
 
