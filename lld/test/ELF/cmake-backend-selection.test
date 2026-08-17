@@ -1,0 +1,27 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: cmake -DLLD_BACKEND_MODULE=%llvm_src_root/../lld/cmake/modules/LLDBackendSelection.cmake -P %t/check.cmake
+# RUN: not cmake -DLLD_BACKEND_MODULE=%llvm_src_root/../lld/cmake/modules/LLDBackendSelection.cmake -P %t/invalid.cmake 2>&1 | FileCheck %s --check-prefix=INVALID
+
+#--- check.cmake
+include("${LLD_BACKEND_MODULE}")
+
+lld_resolve_backends("ELF" actual)
+if(NOT "${actual}" STREQUAL "ELF")
+  message(FATAL_ERROR "ELF-only selection expanded to '${actual}'")
+endif()
+
+lld_resolve_backends("MinGW" actual)
+if(NOT "${actual}" STREQUAL "COFF;MinGW")
+  message(FATAL_ERROR "MinGW dependency closure is '${actual}'")
+endif()
+
+lld_resolve_backends("all" actual)
+if(NOT "${actual}" STREQUAL "COFF;ELF;MachO;MinGW;wasm")
+  message(FATAL_ERROR "all backend selection expanded to '${actual}'")
+endif()
+
+#--- invalid.cmake
+include("${LLD_BACKEND_MODULE}")
+lld_resolve_backends("Bogus" actual)
+
+# INVALID: Unknown LLD backend 'Bogus'
