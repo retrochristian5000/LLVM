@@ -16,7 +16,7 @@ from lit.llvm import llvm_config
 # name: The name of this test suite.
 config.name = "lld"
 
-# testFormat: The test format to use to interpret tests.
+# testFormat: A list of file extensions to treat as test files.
 #
 # For now we require '&&' between commands, until they get globally killed and the test runner updated.
 config.test_format = lit.formats.ShTest()
@@ -28,6 +28,13 @@ config.suffixes = [".ll", ".s", ".test", ".yaml", ".objtxt"]
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
 config.excludes = ["Inputs"]
+
+enabled_backends = set(
+    getattr(config, "lld_enabled_backends", "COFF;ELF;MachO;MinGW;wasm").split(";")
+)
+for backend in ["COFF", "ELF", "MachO", "MinGW", "wasm"]:
+    if backend not in enabled_backends:
+        config.excludes.append(backend)
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
