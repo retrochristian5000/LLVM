@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
-  message(WARNING
+  message(STATUS
     "Your CMake version is ${CMAKE_VERSION}. Starting with LLVM 24, the "
     "minimum version of CMake required to build LLVM will become 3.31.0, and "
     "using an older CMake will become an error. Please upgrade your CMake to "
@@ -163,6 +163,7 @@ list(INSERT CMAKE_MODULE_PATH 0
   )
 
 include(AddLLD)
+include(LLDBackendSelection)
 
 option(LLD_USE_VTUNE
        "Enable VTune user task tracking."
@@ -182,7 +183,14 @@ option(LLD_BUILD_TOOLS
 option(LLD_DEFAULT_LD_LLD_IS_MINGW
     "Use MinGW as the default backend for ld.lld. If OFF, ELF will be used." OFF)
 if (LLD_DEFAULT_LD_LLD_IS_MINGW)
+  if(NOT "MinGW" IN_LIST LLD_ENABLED_BACKENDS)
+    message(FATAL_ERROR
+      "LLD_DEFAULT_LD_LLD_IS_MINGW requires the MinGW backend")
+  endif()
   add_definitions("-DLLD_DEFAULT_LD_LLD_IS_MINGW=1")
+elseif(NOT "ELF" IN_LIST LLD_ENABLED_BACKENDS)
+  message(FATAL_ERROR
+    "The default ld.lld flavor requires the ELF backend; enable ELF or set LLD_DEFAULT_LD_LLD_IS_MINGW=ON")
 endif()
 
 if (MSVC)
@@ -208,11 +216,9 @@ if (LLVM_INCLUDE_TESTS)
 endif()
 
 add_subdirectory(docs)
-add_subdirectory(COFF)
-add_subdirectory(ELF)
-add_subdirectory(MachO)
-add_subdirectory(MinGW)
-add_subdirectory(wasm)
+foreach(backend IN LISTS LLD_ENABLED_BACKENDS)
+  add_subdirectory(${backend})
+endforeach()
 
 add_custom_target(lld-headers)
 set_target_properties(lld-headers PROPERTIES FOLDER "Misc")
