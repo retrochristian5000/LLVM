@@ -22,8 +22,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(LLD_BUILT_STANDALONE TRUE)
 endif()
 
-# Must go below project(..)
-include(GNUInstallDirs)
+# A standalone build must learn LLVM's library-directory policy before
+# GNUInstallDirs derives and caches a build-machine default such as lib64 or a
+# Debian multiarch directory.
+if(LLD_BUILT_STANDALONE)
+  find_package(LLVM REQUIRED HINTS "${LLVM_CMAKE_DIR}")
+endif()
+
+# Must go below project(..), and after find_package(LLVM) for standalone LLD.
+include(${LLVM_COMMON_CMAKE_UTILS}/Modules/LLVMInstallDirs.cmake)
 
 if(LLD_BUILT_STANDALONE)
   set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
@@ -32,7 +39,6 @@ if(LLD_BUILT_STANDALONE)
 
   set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-  find_package(LLVM REQUIRED HINTS "${LLVM_CMAKE_DIR}")
   list(APPEND CMAKE_MODULE_PATH "${LLVM_DIR}")
 
   # Turn into CACHE PATHs for overwriting
