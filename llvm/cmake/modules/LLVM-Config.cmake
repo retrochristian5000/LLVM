@@ -2,13 +2,13 @@ cmake_policy(PUSH)
 cmake_policy(SET CMP0057 NEW)
 
 function(get_system_libs return_var)
-  message(AUTHOR_WARNING "get_system_libs no longer needed")
+  message(VERBOSE "get_system_libs is retained only for compatibility")
   set(${return_var} "" PARENT_SCOPE)
 endfunction()
 
 
 function(link_system_libs target)
-  message(AUTHOR_WARNING "link_system_libs no longer needed")
+  message(VERBOSE "link_system_libs is retained only for compatibility")
 endfunction()
 
 # is_llvm_target_library(
@@ -120,7 +120,7 @@ endfunction(explicit_llvm_config)
 
 # This is Deprecated
 function(llvm_map_components_to_libraries OUT_VAR)
-  message(AUTHOR_WARNING "Using llvm_map_components_to_libraries() is deprecated. Use llvm_map_components_to_libnames() instead")
+  message(VERBOSE "llvm_map_components_to_libraries is deprecated; use llvm_map_components_to_libnames")
   explicit_map_components_to_libraries(result ${ARGN})
   set( ${OUT_VAR} ${result} ${sys_result} PARENT_SCOPE )
 endfunction(llvm_map_components_to_libraries)
