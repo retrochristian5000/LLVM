@@ -306,11 +306,25 @@ endfunction()
 # increasingly expensive as the component graph expanded.
 function(llvm_expand_dependencies out_libs)
   set(worklist ${ARGN})
+  if(worklist)
+    # The recursive implementation visits root components left-to-right.
+    # This is a LIFO worklist, so reverse the initial roots to preserve that.
+    list(REVERSE worklist)
+  endif()
   set(required_libs)
   set(visited_libs)
 
   while(worklist)
-    list(POP_BACK worklist name)
+    list(POP_BACK worklist entry)
+
+    # A post marker delays appending a component until after its dependencies,
+    # exactly matching the old recursive post-order traversal.
+    if(entry MATCHES "^__LLVM_CONFIG_POST__(.*)$")
+      list(APPEND required_libs "${CMAKE_MATCH_1}")
+      continue()
+    endif()
+
+    set(name "${entry}")
     if(name IN_LIST visited_libs)
       continue()
     endif()
@@ -327,16 +341,20 @@ function(llvm_expand_dependencies out_libs)
       message(FATAL_ERROR "unknown component ${name}")
     endif()
 
-    # The previous algorithm performed a post-order traversal and reversed the
-    # final list. Popping from the back and appending dependencies in their
-    # declared order produces that same reversed-post-order directly.
-    list(APPEND required_libs ${cname})
+    list(APPEND worklist "__LLVM_CONFIG_POST__${cname}")
     get_property(lib_deps TARGET ${cname} PROPERTY LLVM_LINK_COMPONENTS)
     if(lib_deps)
-      list(APPEND worklist ${lib_deps})
+      # Dependencies are visited left-to-right by the recursive implementation.
+      # Reverse before pushing so the first declared dependency is popped first.
+      set(reversed_deps ${lib_deps})
+      list(REVERSE reversed_deps)
+      list(APPEND worklist ${reversed_deps})
     endif()
   endwhile()
 
+  if(required_libs)
+    list(REVERSE required_libs)
+  endif()
   set(${out_libs} ${required_libs} PARENT_SCOPE)
 endfunction()
 
