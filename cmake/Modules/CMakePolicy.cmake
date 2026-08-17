@@ -1,5 +1,14 @@
 # CMake policy settings shared between LLVM projects
 
+# Keep the runtime minimum at CMake 3.20 while declaring that this source tree
+# has been updated for policy behavior through CMake 3.31. This prevents newer
+# CMake releases from repeatedly falling back to deprecated policy behavior and
+# emitting policy warnings during every incremental configure.
+#
+# The version-range form changes policy behavior only; it does not raise the
+# minimum CMake executable version required to configure LLVM.
+cmake_policy(VERSION 3.20...3.31)
+
 # MSVC debug information format flags are selected via
 # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT, instead of
 # embedding flags in e.g. CMAKE_CXX_FLAGS_RELEASE.
