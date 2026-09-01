@@ -6,6 +6,9 @@ include(LLVMDistributionSupport)
 
 function(tablegen project ofn)
   cmake_parse_arguments(ARG "" "" "DEPENDS;EXTRA_INCLUDES" ${ARGN})
+  # Avoid emitting repeated caller-supplied dependency edges while preserving
+  # the first occurrence and every distinct dependency.
+  list(REMOVE_DUPLICATES ARG_DEPENDS)
 
   # Override ${project} with ${project}_TABLEGEN_PROJECT
   if(NOT "${${project}_TABLEGEN_PROJECT}" STREQUAL "")
