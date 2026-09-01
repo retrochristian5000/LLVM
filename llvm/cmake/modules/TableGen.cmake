@@ -21,8 +21,10 @@ function(tablegen project ofn)
   get_directory_property(tblgen_includes INCLUDE_DIRECTORIES)
   list(PREPEND tblgen_includes ${ARG_EXTRA_INCLUDES})
   list(PREPEND tblgen_includes ${CMAKE_CURRENT_SOURCE_DIR})
-  # Filter out any empty include items.
+  # Filter out any empty or duplicate include items while preserving the first
+  # occurrence so TableGen's include precedence remains unchanged.
   list(REMOVE_ITEM tblgen_includes "")
+  list(REMOVE_DUPLICATES tblgen_includes)
 
   # Use depfile instead of globbing arbitrary *.td(s) for Ninja. We force
   # CMake versions older than v3.30 on Windows to use the fallback behavior
@@ -120,17 +122,16 @@ function(tablegen project ofn)
   # Prepend each include entry with -I for arguments.
   list(TRANSFORM tblgen_includes PREPEND -I)
 
-  # We need both _TABLEGEN_TARGET and _TABLEGEN_EXE in the  DEPENDS list
+  # We need both _TABLEGEN_TARGET and _TABLEGEN_EXE in the DEPENDS list
   # (both the target and the file) to have .inc files rebuilt on
   # a tablegen change, as cmake does not propagate file-level dependencies
   # of custom targets. See the following ticket for more information:
   # https://cmake.org/Bug/view.php?id=15858
-  # The dependency on both, the target and the file, produces the same
-  # dependency twice in the result file when
-  # ("${${project}_TABLEGEN_TARGET}" STREQUAL "${${project}_TABLEGEN_EXE}")
-  # but lets us having smaller and cleaner code here.
+  # Preserve both edges when they differ, but avoid emitting the same dependency
+  # twice when the target and executable resolve to the same value.
   set(tablegen_exe ${${project}_TABLEGEN_EXE})
   set(tablegen_depends ${${project}_TABLEGEN_TARGET} ${tablegen_exe})
+  list(REMOVE_DUPLICATES tablegen_depends)
 
   if(LLVM_PARALLEL_TABLEGEN_JOBS)
     set(LLVM_TABLEGEN_JOB_POOL JOB_POOL tablegen_job_pool)
