@@ -64,10 +64,9 @@ bool MCAsmParser::parseEOL(const Twine &Msg) {
 }
 
 bool MCAsmParser::parseToken(AsmToken::TokenKind T, const Twine &Msg) {
-  if (T == AsmToken::EndOfStatement)
-    return parseEOL(Msg);
-  if (getTok().getKind() != T)
-    return Error(getTok().getLoc(), Msg);
+  const AsmToken &Tok = getTok();
+  if (Tok.isNot(T))
+    return Error(Tok.getLoc(), Msg);
   Lex();
   return false;
 }
@@ -81,10 +80,10 @@ bool MCAsmParser::parseIntToken(int64_t &V, const Twine &Msg) {
 }
 
 bool MCAsmParser::parseOptionalToken(AsmToken::TokenKind T) {
-  bool Present = (getTok().getKind() == T);
-  if (Present)
-    parseToken(T);
-  return Present;
+  if (getTok().isNot(T))
+    return false;
+  Lex();
+  return true;
 }
 
 bool MCAsmParser::check(bool P, const Twine &Msg) {
