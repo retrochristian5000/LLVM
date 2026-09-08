@@ -193,7 +193,7 @@ namespace CallingConv {
     /// Used for Mesa/AMDPAL pixel shaders.
     AMDGPU_PS = 89,
 
-    /// Used for Mesa/AMDPAL compute shaders.
+    /// Used for AMDGPU compute shaders.
     AMDGPU_CS = 90,
 
     /// Used for AMDGPU code object kernels.
@@ -296,6 +296,9 @@ namespace CallingConv {
     /// Calling convention used for CHERIoT for cross-library calls to a
     /// stateless compartment.
     CHERIoT_LibraryCall = 127,
+
+    /// Pascal calling convention for 32-bit x86 targets.
+    X86_Pascal = 128,
 
     /// The highest possible ID. Must be some 2^k - 1.
     MaxID = 1023
