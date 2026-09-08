@@ -193,7 +193,7 @@ namespace CallingConv {
     /// Used for Mesa/AMDPAL pixel shaders.
     AMDGPU_PS = 89,
 
-    /// Used for AMDGPU compute shaders.
+    /// Used for Mesa/AMDPAL compute shaders.
     AMDGPU_CS = 90,
 
     /// Used for AMDGPU code object kernels.
