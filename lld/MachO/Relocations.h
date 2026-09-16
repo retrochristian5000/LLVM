@@ -41,7 +41,8 @@ enum class RelocAttrBits {
   LOAD = 1 << 13,      // Relaxable indirect load
   POINTER = 1 << 14,   // Non-relaxable indirect load (pointer is taken)
   UNSIGNED = 1 << 15,  // *_UNSIGNED relocs
-  LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue*/ (1 << 16) - 1),
+  AUTH = 1 << 16,      // ARM64e pointer-authenticated relocation
+  LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue*/ (1 << 17) - 1),
 };
 // Note: SUBTRACTOR always pairs with UNSIGNED (a delta between two symbols).
 
