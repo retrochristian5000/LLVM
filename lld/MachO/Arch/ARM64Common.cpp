@@ -39,7 +39,7 @@ int64_t ARM64Common::getEmbeddedAddend(MemoryBufferRef mb, uint64_t offset,
     // remain in the input section bytes and carry PAC diversity/key/address
     // metadata for the chained-fixup writer to consume in the next porting
     // layer. Do not reinterpret the whole 64-bit datum as an addend.
-    return SignExtend64<32>(read32le(loc));
+    return llvm::SignExtend64<32>(read32le(loc));
   }
 
   switch (rel.r_length) {
