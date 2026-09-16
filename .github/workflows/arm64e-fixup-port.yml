@@ -1,0 +1,681 @@
+name: ARM64e chained-fixup port
+
+on:
+  push:
+    paths:
+      - '.github/workflows/arm64e-fixup-port.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  port:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure focused LLD build
+        run: |
+          cmake -S llvm -B build-arm64e -G Ninja \
+            -DLLVM_ENABLE_PROJECTS=lld \
+            -DLLVM_TARGETS_TO_BUILD=AArch64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_INCLUDE_TESTS=ON
+          ninja -C build-arm64e lld llvm-mc llvm-objdump FileCheck
+
+      - name: Confirm RED authenticated-fixup test
+        run: |
+          set +e
+          build-arm64e/bin/llvm-lit -sv lld/test/MachO/arm64e-auth-reloc-foundation.s > arm64e-red.log 2>&1
+          rc=$?
+          set -e
+          cat arm64e-red.log
+          if [ "$rc" -eq 0 ]; then
+            echo "error: ARM64e emission test unexpectedly passed before implementation" >&2
+            exit 1
+          fi
+          grep -Eq 'authenticated pointer relocation output is not implemented|ARM64e|arm64e' arm64e-red.log
+
+      - name: Apply audited ARM64e chained-fixup emission slice
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(s.replace(old, new, 1))
+
+          replace("llvm/include/llvm/BinaryFormat/MachO.h",
+          """struct dyld_chained_ptr_64_rebase {
+            uint64_t target : 36;
+            uint64_t high8 : 8;
+            uint64_t reserved : 7;
+            uint64_t next : 12;
+            uint64_t bind : 1; // set to 0
+          };
+
+          // Byte order swapping functions for MachO structs
+          """,
+          """struct dyld_chained_ptr_64_rebase {
+            uint64_t target : 36;
+            uint64_t high8 : 8;
+            uint64_t reserved : 7;
+            uint64_t next : 12;
+            uint64_t bind : 1; // set to 0
+          };
+
+          // ARM64_RELOC_AUTHENTICATED_POINTER in-object representation.
+          struct arm64e_auth_embedded_pointer {
+            uint64_t addend : 32;
+            uint64_t diversity : 16;
+            uint64_t addrDiv : 1;
+            uint64_t key : 2;
+            uint64_t reserved : 12;
+            uint64_t auth : 1;
+          };
+
+          // DYLD_CHAINED_PTR_ARM64E / DYLD_CHAINED_PTR_ARM64E_USERLAND.
+          struct dyld_chained_ptr_arm64e_rebase {
+            uint64_t target : 43;
+            uint64_t high8 : 8;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          struct dyld_chained_ptr_arm64e_bind {
+            uint64_t ordinal : 16;
+            uint64_t zero : 16;
+            uint64_t addend : 19;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          struct dyld_chained_ptr_arm64e_auth_bind {
+            uint64_t ordinal : 16;
+            uint64_t zero : 16;
+            uint64_t diversity : 16;
+            uint64_t addrDiv : 1;
+            uint64_t key : 2;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          struct dyld_chained_ptr_arm64e_auth_rebase {
+            uint64_t target : 32;
+            uint64_t diversity : 16;
+            uint64_t addrDiv : 1;
+            uint64_t key : 2;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          // DYLD_CHAINED_PTR_ARM64E_USERLAND24.
+          struct dyld_chained_ptr_arm64e_bind24 {
+            uint64_t ordinal : 24;
+            uint64_t zero : 8;
+            uint64_t addend : 19;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          struct dyld_chained_ptr_arm64e_auth_bind24 {
+            uint64_t ordinal : 24;
+            uint64_t zero : 8;
+            uint64_t diversity : 16;
+            uint64_t addrDiv : 1;
+            uint64_t key : 2;
+            uint64_t next : 11;
+            uint64_t bind : 1;
+            uint64_t auth : 1;
+          };
+
+          // Byte order swapping functions for MachO structs
+          """)
+
+          replace("lld/MachO/SyntheticSections.h",
+          """class ChainedFixupsSection final : public LinkEditSection {
+          public:
+          """,
+          """struct AuthInfo {
+            uint16_t diversity = 0;
+            uint8_t key = 0;
+            bool addrDiv = false;
+          };
+
+          class ChainedFixupsSection final : public LinkEditSection {
+          public:
+          """)
+
+          replace("lld/MachO/SyntheticSections.h",
+          """  void addBinding(const Symbol *dysym, const InputSection *isec,
+                            uint64_t offset, int64_t addend = 0);
+          """,
+          """  void addBinding(const Symbol *dysym, const InputSection *isec,
+                            uint64_t offset, int64_t addend = 0,
+                            bool forceOutline = false);
+          """)
+
+          replace("lld/MachO/SyntheticSections.h",
+          """  std::pair<uint32_t, uint8_t> getBinding(const Symbol *sym,
+                                                    int64_t addend) const;
+
+            const std::vector<Location> &getLocations() const { return locations; }
+
+            bool hasWeakBinding() const { return hasWeakBind; }
+            bool hasNonWeakDefinition() const { return hasNonWeakDef; }
+
+          private:
+          """,
+          """  std::pair<uint32_t, uint8_t> getBinding(const Symbol *sym,
+                                                    int64_t addend,
+                                                    bool forceOutline = false) const;
+
+            const std::vector<Location> &getLocations() const { return locations; }
+
+            bool hasWeakBinding() const { return hasWeakBind; }
+            bool hasNonWeakDefinition() const { return hasNonWeakDef; }
+
+            const uint16_t pointerFormat;
+
+          private:
+          """)
+
+          replace("lld/MachO/SyntheticSections.h",
+          """void writeChainedRebase(uint8_t *buf, uint64_t targetVA);
+          void writeChainedFixup(uint8_t *buf, const Symbol *sym, int64_t addend);
+          """,
+          """void writeChainedRebase(uint8_t *buf, uint64_t targetVA,
+                                  const AuthInfo *authInfo = nullptr);
+          void writeChainedFixup(uint8_t *buf, const Symbol *sym, int64_t addend,
+                                  const AuthInfo *authInfo = nullptr);
+          """)
+
+          replace("lld/MachO/Writer.h",
+          """void addNonLazyBindingEntries(const Symbol *, const InputSection *,
+                                        uint64_t offset, int64_t addend = 0);
+          """,
+          """void addNonLazyBindingEntries(const Symbol *, const InputSection *,
+                                        uint64_t offset, int64_t addend = 0,
+                                        bool forceOutlineAuth = false);
+          """)
+
+          replace("lld/MachO/SyntheticSections.cpp",
+          """void macho::addNonLazyBindingEntries(const Symbol *sym,
+                                               const InputSection *isec, uint64_t offset,
+                                               int64_t addend) {
+            if (config->emitChainedFixups) {
+              if (needsBinding(sym))
+                in.chainedFixups->addBinding(sym, isec, offset, addend);
+          """,
+          """void macho::addNonLazyBindingEntries(const Symbol *sym,
+                                               const InputSection *isec, uint64_t offset,
+                                               int64_t addend, bool forceOutlineAuth) {
+            if (config->emitChainedFixups) {
+              if (needsBinding(sym))
+                in.chainedFixups->addBinding(sym, isec, offset, addend,
+                                             forceOutlineAuth);
+          """)
+
+          old_fixup_writers = """void macho::writeChainedRebase(uint8_t *buf, uint64_t targetVA) {
+            assert(config->emitChainedFixups);
+            assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
+            auto *rebase = reinterpret_cast<dyld_chained_ptr_64_rebase *>(buf);
+            rebase->target = targetVA & 0xf'ffff'ffff;
+            rebase->high8 = (targetVA >> 56);
+            rebase->reserved = 0;
+            rebase->next = 0;
+            rebase->bind = 0;
+
+            // The fixup format places a 64 GiB limit on the output's size.
+            // Should we handle this gracefully?
+            uint64_t encodedVA = rebase->target | ((uint64_t)rebase->high8 << 56);
+            if (encodedVA != targetVA)
+              error("rebase target address 0x" + Twine::utohexstr(targetVA) +
+                    " does not fit into chained fixup. Re-link with -no_fixup_chains");
+          }
+
+          static void writeChainedBind(uint8_t *buf, const Symbol *sym, int64_t addend) {
+            assert(config->emitChainedFixups);
+            assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
+            auto *bind = reinterpret_cast<dyld_chained_ptr_64_bind *>(buf);
+            auto [ordinal, inlineAddend] = in.chainedFixups->getBinding(sym, addend);
+            bind->ordinal = ordinal;
+            bind->addend = inlineAddend;
+            bind->reserved = 0;
+            bind->next = 0;
+            bind->bind = 1;
+          }
+
+          void macho::writeChainedFixup(uint8_t *buf, const Symbol *sym, int64_t addend) {
+            if (needsBinding(sym))
+              writeChainedBind(buf, sym, addend);
+            else
+              writeChainedRebase(buf, sym->getVA() + addend);
+          }
+          """
+          new_fixup_writers = """void macho::writeChainedRebase(uint8_t *buf, uint64_t targetVA,
+                                        const AuthInfo *authInfo) {
+            assert(config->emitChainedFixups);
+            assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
+
+            if (config->arch() == AK_arm64e) {
+              if (authInfo) {
+                auto *rebase =
+                    reinterpret_cast<dyld_chained_ptr_arm64e_auth_rebase *>(buf);
+                uint64_t runtimeOffset = targetVA - in.header->addr;
+                if (!isUInt<32>(runtimeOffset))
+                  error("arm64e authenticated rebase target 0x" +
+                        Twine::utohexstr(targetVA) +
+                        " is more than 4 GiB from the image base");
+                rebase->target = runtimeOffset;
+                rebase->diversity = authInfo->diversity;
+                rebase->addrDiv = authInfo->addrDiv;
+                rebase->key = authInfo->key;
+                rebase->next = 0;
+                rebase->bind = 0;
+                rebase->auth = 1;
+                return;
+              }
+
+              auto *rebase =
+                  reinterpret_cast<dyld_chained_ptr_arm64e_rebase *>(buf);
+              bool useUserland24 =
+                  in.chainedFixups->pointerFormat ==
+                  DYLD_CHAINED_PTR_ARM64E_USERLAND24;
+              uint64_t targetValue =
+                  useUserland24 ? targetVA - in.header->addr : targetVA;
+              rebase->target = targetValue & 0x7ff'ffff'ffff;
+              rebase->high8 = targetValue >> 56;
+              rebase->next = 0;
+              rebase->bind = 0;
+              rebase->auth = 0;
+              uint64_t encodedVA =
+                  static_cast<uint64_t>(rebase->target) |
+                  (static_cast<uint64_t>(rebase->high8) << 56);
+              if (encodedVA != targetValue)
+                error("arm64e rebase target 0x" + Twine::utohexstr(targetVA) +
+                      " does not fit into chained fixup");
+              return;
+            }
+
+            auto *rebase = reinterpret_cast<dyld_chained_ptr_64_rebase *>(buf);
+            rebase->target = targetVA & 0xf'ffff'ffff;
+            rebase->high8 = (targetVA >> 56);
+            rebase->reserved = 0;
+            rebase->next = 0;
+            rebase->bind = 0;
+
+            uint64_t encodedVA = rebase->target | ((uint64_t)rebase->high8 << 56);
+            if (encodedVA != targetVA)
+              error("rebase target address 0x" + Twine::utohexstr(targetVA) +
+                    " does not fit into chained fixup. Re-link with -no_fixup_chains");
+          }
+
+          static void writeChainedBind(uint8_t *buf, const Symbol *sym,
+                                       int64_t addend,
+                                       const AuthInfo *authInfo) {
+            assert(config->emitChainedFixups);
+            assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
+
+            if (config->arch() == AK_arm64e) {
+              bool useUserland24 =
+                  in.chainedFixups->pointerFormat ==
+                  DYLD_CHAINED_PTR_ARM64E_USERLAND24;
+              if (authInfo) {
+                auto [ordinal, ignored] =
+                    in.chainedFixups->getBinding(sym, addend,
+                                                 /*forceOutline=*/true);
+                if (useUserland24) {
+                  auto *bind =
+                      reinterpret_cast<dyld_chained_ptr_arm64e_auth_bind24 *>(buf);
+                  bind->ordinal = ordinal;
+                  bind->zero = 0;
+                  bind->diversity = authInfo->diversity;
+                  bind->addrDiv = authInfo->addrDiv;
+                  bind->key = authInfo->key;
+                  bind->next = 0;
+                  bind->bind = 1;
+                  bind->auth = 1;
+                } else {
+                  auto *bind =
+                      reinterpret_cast<dyld_chained_ptr_arm64e_auth_bind *>(buf);
+                  bind->ordinal = ordinal;
+                  bind->zero = 0;
+                  bind->diversity = authInfo->diversity;
+                  bind->addrDiv = authInfo->addrDiv;
+                  bind->key = authInfo->key;
+                  bind->next = 0;
+                  bind->bind = 1;
+                  bind->auth = 1;
+                }
+                return;
+              }
+
+              auto [ordinal, inlineAddend] =
+                  in.chainedFixups->getBinding(sym, addend);
+              if (useUserland24) {
+                auto *bind =
+                    reinterpret_cast<dyld_chained_ptr_arm64e_bind24 *>(buf);
+                bind->ordinal = ordinal;
+                bind->zero = 0;
+                bind->addend = inlineAddend;
+                bind->next = 0;
+                bind->bind = 1;
+                bind->auth = 0;
+              } else {
+                auto *bind =
+                    reinterpret_cast<dyld_chained_ptr_arm64e_bind *>(buf);
+                bind->ordinal = ordinal;
+                bind->zero = 0;
+                bind->addend = inlineAddend;
+                bind->next = 0;
+                bind->bind = 1;
+                bind->auth = 0;
+              }
+              return;
+            }
+
+            auto *bind = reinterpret_cast<dyld_chained_ptr_64_bind *>(buf);
+            auto [ordinal, inlineAddend] = in.chainedFixups->getBinding(sym, addend);
+            bind->ordinal = ordinal;
+            bind->addend = inlineAddend;
+            bind->reserved = 0;
+            bind->next = 0;
+            bind->bind = 1;
+          }
+
+          void macho::writeChainedFixup(uint8_t *buf, const Symbol *sym,
+                                        int64_t addend,
+                                        const AuthInfo *authInfo) {
+            if (needsBinding(sym))
+              writeChainedBind(buf, sym, addend, authInfo);
+            else
+              writeChainedRebase(buf, sym->getVA() + addend, authInfo);
+          }
+          """
+          replace("lld/MachO/SyntheticSections.cpp", old_fixup_writers,
+                  new_fixup_writers)
+
+          replace("lld/MachO/SyntheticSections.cpp",
+          """ChainedFixupsSection::ChainedFixupsSection()
+              : LinkEditSection(segment_names::linkEdit, section_names::chainFixups) {}
+          """,
+          """static uint16_t computePointerFormat() {
+            if (config->arch() != AK_arm64e)
+              return DYLD_CHAINED_PTR_64;
+
+            const VersionTuple &minVersion =
+                config->platformInfo.target.MinDeployment;
+            switch (config->platform()) {
+            case PLATFORM_MACOS:
+            case PLATFORM_MACCATALYST:
+              if (minVersion >= VersionTuple(12, 0))
+                return DYLD_CHAINED_PTR_ARM64E_USERLAND24;
+              break;
+            case PLATFORM_IOS:
+            case PLATFORM_IOSSIMULATOR:
+            case PLATFORM_TVOS:
+            case PLATFORM_TVOSSIMULATOR:
+              if (minVersion >= VersionTuple(15, 0))
+                return DYLD_CHAINED_PTR_ARM64E_USERLAND24;
+              break;
+            case PLATFORM_WATCHOS:
+            case PLATFORM_WATCHOSSIMULATOR:
+              if (minVersion >= VersionTuple(8, 0))
+                return DYLD_CHAINED_PTR_ARM64E_USERLAND24;
+              break;
+            default:
+              break;
+            }
+            return DYLD_CHAINED_PTR_ARM64E;
+          }
+
+          ChainedFixupsSection::ChainedFixupsSection()
+              : LinkEditSection(segment_names::linkEdit, section_names::chainFixups),
+                pointerFormat(computePointerFormat()) {}
+          """)
+
+          replace("lld/MachO/SyntheticSections.cpp",
+          """void ChainedFixupsSection::addBinding(const Symbol *sym,
+                                                const InputSection *isec, uint64_t offset,
+                                                int64_t addend) {
+            locations.emplace_back(isec, offset);
+            int64_t outlineAddend = (addend < 0 || addend > 0xFF) ? addend : 0;
+          """,
+          """void ChainedFixupsSection::addBinding(const Symbol *sym,
+                                                const InputSection *isec, uint64_t offset,
+                                                int64_t addend, bool forceOutline) {
+            locations.emplace_back(isec, offset);
+            int64_t outlineAddend =
+                (forceOutline || addend < 0 || addend > 0xFF) ? addend : 0;
+          """)
+
+          replace("lld/MachO/SyntheticSections.cpp",
+          """std::pair<uint32_t, uint8_t>
+          ChainedFixupsSection::getBinding(const Symbol *sym, int64_t addend) const {
+            int64_t outlineAddend = (addend < 0 || addend > 0xFF) ? addend : 0;
+          """,
+          """std::pair<uint32_t, uint8_t>
+          ChainedFixupsSection::getBinding(const Symbol *sym, int64_t addend,
+                                           bool forceOutline) const {
+            int64_t outlineAddend =
+                (forceOutline || addend < 0 || addend > 0xFF) ? addend : 0;
+          """)
+
+          replace("lld/MachO/SyntheticSections.cpp",
+          """  // FIXME: Use DYLD_CHAINED_PTR_64_OFFSET on newer OS versions.
+            segInfo->pointer_format = DYLD_CHAINED_PTR_64;
+          """,
+          """  segInfo->pointer_format = in.chainedFixups->pointerFormat;
+          """)
+
+          replace("lld/MachO/InputSection.cpp",
+          """    const bool needsFixup = config->emitChainedFixups &&
+                                      target->hasAttr(r.type, RelocAttrBits::UNSIGNED);
+            if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND)) {
+          """,
+          """    const bool needsFixup = config->emitChainedFixups &&
+                                      target->hasAttr(r.type, RelocAttrBits::UNSIGNED);
+            AuthInfo authInfo;
+            const AuthInfo *authInfoPtr = nullptr;
+            if (r.type == ARM64_RELOC_AUTHENTICATED_POINTER) {
+              auto embedded =
+                  *reinterpret_cast<const arm64e_auth_embedded_pointer *>(loc);
+              if (!embedded.auth)
+                error(getLocation(r.offset) +
+                      ": ARM64e authenticated relocation is missing auth bit");
+              authInfo.diversity = embedded.diversity;
+              authInfo.addrDiv = embedded.addrDiv;
+              authInfo.key = embedded.key;
+              authInfoPtr = &authInfo;
+            }
+            if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND)) {
+          """)
+
+          replace("lld/MachO/InputSection.cpp",
+          """        writeChainedFixup(loc, referentSym, r.addend);
+          """,
+          """        writeChainedFixup(loc, referentSym, r.addend, authInfoPtr);
+          """)
+
+          replace("lld/MachO/InputSection.cpp",
+          """        writeChainedRebase(loc, referentVA);
+          """,
+          """        writeChainedRebase(loc, referentVA, authInfoPtr);
+          """)
+
+          replace("lld/MachO/Writer.cpp",
+          """  if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
+              if (needsBinding(sym))
+                in.stubs->addEntry(sym);
+          """,
+          """  if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
+              if (needsBinding(sym)) {
+                if (config->arch() == AK_arm64e) {
+                  error(isec->getLocation(r.offset) +
+                        ": arm64e authenticated stubs are not implemented yet");
+                  return;
+                }
+                in.stubs->addEntry(sym);
+              }
+          """)
+
+          replace("lld/MachO/Writer.cpp",
+          """      addNonLazyBindingEntries(sym, isec, r.offset, r.addend);
+          """,
+          """      addNonLazyBindingEntries(
+                  sym, isec, r.offset, r.addend,
+                  relocAttrs.hasAttr(RelocAttrBits::AUTH));
+          """)
+
+          replace("lld/MachO/Writer.cpp",
+          """  const uint64_t pageSize = target->getPageSize();
+            constexpr uint32_t stride = 4; // for DYLD_CHAINED_PTR_64
+          """,
+          """  const uint64_t pageSize = target->getPageSize();
+            const uint32_t stride = config->arch() == AK_arm64e ? 8 : 4;
+          """)
+
+          replace("lld/MachO/Writer.cpp",
+          """      // The "next" field is in the same location for bind and rebase entries.
+              reinterpret_cast<dyld_chained_ptr_64_bind *>(buf + loc[i - 1].offset)
+                  ->next = offset / stride;
+          """,
+          """      // The "next" field is in the same bit position for every format of
+              // a given architecture.
+              uint8_t *prev = buf + loc[i - 1].offset;
+              if (config->arch() == AK_arm64e)
+                reinterpret_cast<dyld_chained_ptr_arm64e_auth_bind *>(prev)->next =
+                    offset / stride;
+              else
+                reinterpret_cast<dyld_chained_ptr_64_bind *>(prev)->next =
+                    offset / stride;
+          """)
+
+          replace("lld/MachO/Target.h",
+          """TargetInfo *createX86_64TargetInfo();
+          TargetInfo *createARM64TargetInfo();
+          TargetInfo *createARM64_32TargetInfo();
+          """,
+          """TargetInfo *createX86_64TargetInfo();
+          TargetInfo *createARM64TargetInfo();
+          TargetInfo *createARM64eTargetInfo();
+          TargetInfo *createARM64_32TargetInfo();
+          """)
+
+          replace("lld/MachO/Arch/ARM64.cpp",
+          """struct ARM64 : ARM64Common {
+            ARM64();
+          """,
+          """struct ARM64 : ARM64Common {
+            explicit ARM64(uint32_t cpuSubtype = CPU_SUBTYPE_ARM64_ALL);
+          """)
+
+          replace("lld/MachO/Arch/ARM64.cpp",
+          """ARM64::ARM64() : ARM64Common(LP64()) {
+            cpuType = CPU_TYPE_ARM64;
+            cpuSubtype = CPU_SUBTYPE_ARM64_ALL;
+          """,
+          """ARM64::ARM64(uint32_t subtype) : ARM64Common(LP64()) {
+            cpuType = CPU_TYPE_ARM64;
+            cpuSubtype = subtype;
+          """)
+
+          replace("lld/MachO/Arch/ARM64.cpp",
+          """TargetInfo *macho::createARM64TargetInfo() {
+            static ARM64 t;
+            return &t;
+          }
+          """,
+          """TargetInfo *macho::createARM64TargetInfo() {
+            static ARM64 t;
+            return &t;
+          }
+
+          TargetInfo *macho::createARM64eTargetInfo() {
+            static ARM64 t(
+                CPU_SUBTYPE_ARM64E_WITH_PTRAUTH_VERSION(/*version=*/0,
+                                                        /*kernel=*/false));
+            return &t;
+          }
+          """)
+
+          replace("lld/MachO/Driver.cpp",
+          """  case CPU_TYPE_ARM64:
+              return createARM64TargetInfo();
+          """,
+          """  case CPU_TYPE_ARM64:
+              if ((cpuSubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E)
+                return createARM64eTargetInfo();
+              return createARM64TargetInfo();
+          """)
+
+          replace("lld/MachO/Driver.cpp",
+          """  const Arg *arg = args.getLastArg(OPT_fixup_chains, OPT_no_fixup_chains);
+            if (arg && arg->getOption().matches(OPT_no_fixup_chains))
+              return false;
+          """,
+          """  const Arg *arg = args.getLastArg(OPT_fixup_chains, OPT_no_fixup_chains);
+            if (arg && arg->getOption().matches(OPT_no_fixup_chains)) {
+              if (config->arch() == AK_arm64e) {
+                warn("-no_fixup_chains is incompatible with arm64e; using chained fixups");
+                return true;
+              }
+              return false;
+            }
+          """)
+
+          replace("lld/MachO/Driver.cpp",
+          """  if (!is_contained({AK_x86_64, AK_x86_64h, AK_arm64}, config->arch())) {
+          """,
+          """  if (!is_contained({AK_x86_64, AK_x86_64h, AK_arm64, AK_arm64e},
+                            config->arch())) {
+          """)
+
+          replace("lld/MachO/Arch/ARM64Common.cpp",
+          """  case ARM64_RELOC_AUTHENTICATED_POINTER:
+              error("ARM64e authenticated pointer relocation output is not implemented yet");
+              break;
+          """,
+          """  case ARM64_RELOC_AUTHENTICATED_POINTER:
+              llvm_unreachable("authenticated pointer relocation must use chained fixups");
+          """)
+
+          print("ARM64e chained-fixup emission patch applied")
+          PY
+
+      - name: Rebuild and require GREEN authenticated-fixup test
+        run: |
+          ninja -C build-arm64e lld llvm-mc llvm-objdump FileCheck
+          build-arm64e/bin/llvm-lit -sv lld/test/MachO/arm64e-auth-reloc-foundation.s
+
+      - name: Commit verified emission slice
+        run: |
+          git config user.name "WHP ARM64e port"
+          git config user.email "252152985+retrochristian5000@users.noreply.github.com"
+          git add \
+            llvm/include/llvm/BinaryFormat/MachO.h \
+            lld/MachO/SyntheticSections.h \
+            lld/MachO/SyntheticSections.cpp \
+            lld/MachO/InputSection.cpp \
+            lld/MachO/Writer.cpp \
+            lld/MachO/Writer.h \
+            lld/MachO/Target.h \
+            lld/MachO/Arch/ARM64.cpp \
+            lld/MachO/Arch/ARM64Common.cpp \
+            lld/MachO/Driver.cpp
+          git diff --cached --check
+          git commit -m "lld: emit arm64e authenticated chained fixups"
+          git push origin HEAD:main
