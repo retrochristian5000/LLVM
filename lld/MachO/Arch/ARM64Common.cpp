@@ -19,7 +19,8 @@ using namespace lld::macho;
 int64_t ARM64Common::getEmbeddedAddend(MemoryBufferRef mb, uint64_t offset,
                                        const relocation_info rel) const {
   if (rel.r_type != ARM64_RELOC_UNSIGNED &&
-      rel.r_type != ARM64_RELOC_SUBTRACTOR) {
+      rel.r_type != ARM64_RELOC_SUBTRACTOR &&
+      rel.r_type != ARM64_RELOC_AUTHENTICATED_POINTER) {
     // All other reloc types should use the ADDEND relocation to store their
     // addends.
     // TODO(gkm): extract embedded addend just so we can assert that it is 0
@@ -28,6 +29,19 @@ int64_t ARM64Common::getEmbeddedAddend(MemoryBufferRef mb, uint64_t offset,
 
   const auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
   const uint8_t *loc = buf + offset + rel.r_address;
+
+  if (rel.r_type == ARM64_RELOC_AUTHENTICATED_POINTER) {
+    if (config->arch() != AK_arm64e) {
+      error("ARM64_RELOC_AUTHENTICATED_POINTER is only valid for arm64e");
+      return 0;
+    }
+    // ARM64e stores the signed addend in the low 32 bits. The upper 32 bits
+    // remain in the input section bytes and carry PAC diversity/key/address
+    // metadata for the chained-fixup writer to consume in the next porting
+    // layer. Do not reinterpret the whole 64-bit datum as an addend.
+    return SignExtend64<32>(read32le(loc));
+  }
+
   switch (rel.r_length) {
   case 2:
     return static_cast<int32_t>(read32le(loc));
@@ -68,6 +82,9 @@ void ARM64Common::relocateOne(uint8_t *loc, const Relocation &r, uint64_t value,
   case ARM64_RELOC_SUBTRACTOR:
   case ARM64_RELOC_UNSIGNED:
     writeValue(loc, r, value);
+    break;
+  case ARM64_RELOC_AUTHENTICATED_POINTER:
+    error("ARM64e authenticated pointer relocation output is not implemented yet");
     break;
   case ARM64_RELOC_POINTER_TO_GOT:
     if (r.pcrel)
