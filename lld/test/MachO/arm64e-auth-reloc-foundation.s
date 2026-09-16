@@ -1,23 +1,35 @@
 # REQUIRES: aarch64
 
-## ARM64e authenticated-pointer relocations must be recognized as a real
-## relocation kind rather than falling through to INVALID relocation metadata.
-## The first porting slice intentionally stops before chained-fixup emission;
-## keep that boundary explicit so later work can turn this test into a success
-## case without ever accepting a silently malformed pointer.
+## ARM64e authenticated-pointer relocations must survive all the way through
+## Mach-O chained-fixup emission. This is the acceptance test for the first
+## ARM64e LLD output path: type 11 must no longer be INVALID, and the linker
+## must preserve its pointer-authentication semantics rather than flattening it
+## into an ordinary 64-bit relocation.
 
-# RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t.o %s
-# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
-# RUN:   -dylib %t.o -o %t.dylib 2>&1 | FileCheck %s
+# RUN: rm -rf %t; split-file %s %t
+# RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/foo.o %t/foo.s
+# RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/test.o %t/test.s
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -install_name @rpath/libfoo.dylib %t/foo.o -o %t/libfoo.dylib
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib %t/libfoo.dylib %t/test.o -o %t/libtest.dylib
+# RUN: llvm-objdump --macho --private-header %t/libtest.dylib | \
+# RUN:   FileCheck %s --check-prefix=HEADER
+# RUN: llvm-objdump --macho --chained-fixups %t/libtest.dylib | \
+# RUN:   FileCheck %s --check-prefix=FIXUPS
 
-# CHECK: error: ARM64e authenticated pointer relocation output is not implemented yet
-# CHECK-NOT: INVALID relocation has invalid width
+# HEADER: ARM64          E
+# FIXUPS: chained fixups header (LC_DYLD_CHAINED_FIXUPS)
+# FIXUPS: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
+# FIXUPS: _foo
 
+#--- foo.s
 .text
 .globl _foo
 _foo:
   ret
 
+#--- test.s
 .data
 .p2align 3
 .quad _foo@AUTH(ia,42,addr)
