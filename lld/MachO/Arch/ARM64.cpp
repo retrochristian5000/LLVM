@@ -50,7 +50,7 @@ struct ARM64 : ARM64Common {
 // absolute version of this relocation. The semantics of the absolute relocation
 // are weird -- it results in the value of the GOT slot being written, instead
 // of the address. Let's not support it unless we find a real-world use case.
-static constexpr std::array<RelocAttrs, 11> relocAttrsArray{{
+static constexpr std::array<RelocAttrs, 12> relocAttrsArray{{
 #define B(x) RelocAttrBits::x
     {"UNSIGNED",
      B(UNSIGNED) | B(ABSOLUTE) | B(EXTERN) | B(LOCAL) | B(BYTE4) | B(BYTE8)},
@@ -66,6 +66,8 @@ static constexpr std::array<RelocAttrs, 11> relocAttrsArray{{
     {"TLVP_LOAD_PAGEOFF12",
      B(ABSOLUTE) | B(EXTERN) | B(TLV) | B(LOAD) | B(BYTE4)},
     {"ADDEND", B(ADDEND)},
+    {"AUTHENTICATED_POINTER",
+     B(AUTH) | B(ABSOLUTE) | B(UNSIGNED) | B(EXTERN) | B(LOCAL) | B(BYTE8)},
 #undef B
 }};
 
