@@ -24,7 +24,7 @@ using namespace lld::macho;
 namespace {
 
 struct ARM64 : ARM64Common {
-  ARM64();
+  explicit ARM64(uint32_t cpuSubtype);
   void writeStub(uint8_t *buf, const Symbol &, uint64_t) const override;
   void writeStubHelperHeader(uint8_t *buf) const override;
   void writeStubHelperEntry(uint8_t *buf, const Symbol &,
@@ -206,9 +206,9 @@ Symbol *ARM64::getThunkBranchTarget(InputSection *thunk) const {
 
 uint32_t ARM64::getICFSafeThunkSize() const { return sizeof(icfSafeThunkCode); }
 
-ARM64::ARM64() : ARM64Common(LP64()) {
+ARM64::ARM64(uint32_t cpuSubtype) : ARM64Common(LP64()) {
   cpuType = CPU_TYPE_ARM64;
-  cpuSubtype = CPU_SUBTYPE_ARM64_ALL;
+  this->cpuSubtype = cpuSubtype;
 
   stubSize = sizeof(stubCode);
   thunkSize = sizeof(thunkCode);
@@ -235,6 +235,7 @@ ARM64::ARM64() : ARM64Common(LP64()) {
 }
 
 TargetInfo *macho::createARM64TargetInfo() {
-  static ARM64 t;
-  return &t;
+  static ARM64 arm64(CPU_SUBTYPE_ARM64_ALL);
+  static ARM64 arm64e(CPU_SUBTYPE_ARM64E);
+  return config->arch() == AK_arm64e ? &arm64e : &arm64;
 }
