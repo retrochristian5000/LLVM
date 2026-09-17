@@ -1,0 +1,233 @@
+name: Apple host CPU detection port
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apple-host-cpu-detection-port.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apple-host-cpu-detection-port
+  cancel-in-progress: true
+
+jobs:
+  port:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Confirm RED unsafe Apple-family fallback
+        run: |
+          set +e
+          python3 - <<'PY'
+          from pathlib import Path
+
+          src = Path('llvm/lib/TargetParser/Host.cpp').read_text()
+          start = src.index('#elif defined(__APPLE__) && (defined(__arm__) || defined(__aarch64__))')
+          end = src.index('#elif defined(_AIX)', start)
+          apple = src[start:end]
+
+          assert 'Default to the newest CPU we know about' not in apple, \
+              'unknown Apple CPU families still select the newest known CPU'
+          assert 'sysctlbyname("hw.cpufamily", &Family, &Length, nullptr, 0) != 0' in apple, \
+              'hw.cpufamily query failure is still unchecked'
+          PY
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'error: Apple host CPU safety test unexpectedly passed before the fix' >&2
+            exit 1
+          fi
+          echo 'RED confirmed: current Apple host CPU detection is not conservative.'
+
+      - name: Apply audited Apple host CPU detection fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Expose a pure family-to-LLVM-name mapper so the Darwin policy can be
+          # regression-tested on every CI host, not only Apple hardware.
+          host_h = Path('llvm/include/llvm/TargetParser/Host.h')
+          h = host_h.read_text()
+          if '#include <cstdint>\n' not in h:
+              h = h.replace('#include "llvm/Support/Compiler.h"\n#include <string>\n',
+                            '#include "llvm/Support/Compiler.h"\n#include <cstdint>\n#include <string>\n', 1)
+          needle = '''LLVM_ABI StringRef getHostCPUNameForARM(uint64_t PrimaryCpuInfo,
+                                        ArrayRef<uint64_t> UniqueCpuInfos);
+'''
+          declaration = needle + '''/// Map Darwin's hw.cpufamily value to an LLVM CPU name.
+LLVM_ABI StringRef getHostCPUNameForAppleARM(uint32_t CPUFamily);
+'''
+          if h.count(needle) != 1:
+              raise SystemExit('Host.h: ARM helper declaration anchor changed')
+          h = h.replace(needle, declaration, 1)
+          host_h.write_text(h)
+
+          host_cpp = Path('llvm/lib/TargetParser/Host.cpp')
+          s = host_cpp.read_text()
+          start_marker = '#elif defined(__APPLE__) && (defined(__arm__) || defined(__aarch64__))\n'
+          end_marker = '#elif defined(_AIX)\n'
+          start = s.index(start_marker)
+          end = s.index(end_marker, start)
+          apple_impl = '''#elif defined(__APPLE__) && (defined(__arm__) || defined(__aarch64__))
+StringRef sys::getHostCPUName() {
+  uint32_t Family = 0;
+  size_t Length = sizeof(Family);
+  if (sysctlbyname("hw.cpufamily", &Family, &Length, nullptr, 0) != 0 ||
+      Length != sizeof(Family))
+    return "generic";
+  return detail::getHostCPUNameForAppleARM(Family);
+}
+'''
+          s = s[:start] + apple_impl + s[end:]
+
+          helper = r'''
+
+StringRef sys::detail::getHostCPUNameForAppleARM(uint32_t Family) {
+  // Values mirror Darwin's CPUFAMILY_ARM_* constants. Keep the mapping pure
+  // so unknown/future families cannot silently inherit a newer CPU model.
+  switch (Family) {
+  case 0xe73283ae: // ARM_9
+    return "arm920t"; // or arm926ej-s
+  case 0x8ff620d8: // ARM_11
+    return "arm1136jf-s";
+  case 0x53b005f5: // ARM_XSCALE
+    return "xscale";
+  case 0xbd1b0ae9: // ARM_12, apparently unused by the kernel
+    return "generic";
+  case 0x0cc90e64: // ARM_13
+    return "cortex-a8";
+  case 0x96077ef1: // ARM_14
+    return "cortex-a9";
+  case 0xa8511bca: // ARM_15
+    return "cortex-a7";
+  case 0x1e2d6381: // SWIFT
+    return "swift";
+  case 0x37a09642: // CYCLONE
+    return "apple-a7";
+  case 0x2c91a47e: // TYPHOON
+    return "apple-a8";
+  case 0x92fb37c8: // TWISTER
+    return "apple-a9";
+  case 0x67ceee93: // HURRICANE
+    return "apple-a10";
+  case 0xe81e7ef6: // MONSOON_MISTRAL
+    return "apple-a11";
+  case 0x07d34b9f: // VORTEX_TEMPEST
+    return "apple-a12";
+  case 0x462504d2: // LIGHTNING_THUNDER
+    return "apple-a13";
+  case 0x1b588bb3: // FIRESTORM_ICESTORM: A14 / M1 share a family
+    return "apple-m1";
+  case 0xda33d83d: // BLIZZARD_AVALANCHE: A15 / M2 share a family
+    return "apple-m2";
+  case 0x8765edea: // EVEREST_SAWTOOTH: A16
+    return "apple-a16";
+  case 0xfa33415e: // IBIZA: M3
+  case 0x72015832: // PALMA: M3 Max
+  case 0x5f4dea93: // LOBOS: M3 Pro
+    return "apple-m3";
+  case 0x2876f5b5: // COLL: A17 Pro
+    return "apple-a17";
+  case 0x6f5129ac: // DONAN: M4
+  case 0x17d5b93a: // BRAVA: M4 Pro / Max
+    return "apple-m4";
+  case 0x75d4acb9: // TAHITI: A18 Pro
+  case 0x204526d0: // TUPAI: A18
+    return "apple-a18";
+  case 0x1d5a87e8: // HIDRA: M5
+  case 0xf76c5b1a: // SOTRA: M5 Pro / Max
+    return "apple-m5";
+  case 0xab345f09: // THERA: A19 Pro
+  case 0x01d7a72b: // TILOS: A19
+    return "apple-a19";
+  default:
+    return "generic";
+  }
+}
+'''
+          if 'StringRef sys::detail::getHostCPUNameForAppleARM' in s:
+              raise SystemExit('Host.cpp: Apple family helper already exists unexpectedly')
+          s = s.rstrip() + helper + '\n'
+          host_cpp.write_text(s)
+
+          test_cpp = Path('llvm/unittests/TargetParser/Host.cpp')
+          t = test_cpp.read_text().rstrip()
+          test = r'''
+
+TEST(getDarwinHostCPUName, AppleARMFamilyMapping) {
+  // Mac17,5 / A18 Pro: preserve the A-series identity. apple-a18 is
+  // code-generation-compatible with the existing apple-m4 alias today.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x75d4acb9), "apple-a18");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x204526d0), "apple-a18");
+
+  // Do not collapse distinct A- and M-series families when Darwin gives us
+  // enough information to tell them apart.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x8765edea), "apple-a16");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xfa33415e), "apple-m3");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x6f5129ac), "apple-m4");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x1d5a87e8), "apple-m5");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xab345f09), "apple-a19");
+
+  // Unknown and unavailable family values must be conservative.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0), "generic");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xdeadbeef), "generic");
+}
+'''
+          if 'AppleARMFamilyMapping' in t:
+              raise SystemExit('Host unit test already contains AppleARMFamilyMapping')
+          test_cpp.write_text(t + test + '\n')
+          PY
+
+      - name: Configure focused TargetParser build
+        run: |
+          cmake -S llvm -B build-apple-hostcpu -G Ninja \
+            -DLLVM_TARGETS_TO_BUILD=AArch64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_INCLUDE_TESTS=ON
+
+      - name: Build TargetParser tests
+        run: ninja -C build-apple-hostcpu TargetParserTests
+
+      - name: Verify GREEN Apple family mapping
+        run: |
+          build-apple-hostcpu/unittests/TargetParser/TargetParserTests \
+            --gtest_filter=getDarwinHostCPUName.AppleARMFamilyMapping
+
+      - name: Verify conservative Darwin syscall path
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path('llvm/lib/TargetParser/Host.cpp').read_text()
+          start = src.index('#elif defined(__APPLE__) && (defined(__arm__) || defined(__aarch64__))')
+          end = src.index('#elif defined(_AIX)', start)
+          apple = src[start:end]
+          assert 'sysctlbyname("hw.cpufamily", &Family, &Length, nullptr, 0) != 0 ||' in apple
+          assert 'Length != sizeof(Family)' in apple
+          assert 'return detail::getHostCPUNameForAppleARM(Family);' in apple
+          assert 'Default to the newest CPU we know about' not in apple
+          PY
+
+      - name: Commit verified CPU detection fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add llvm/include/llvm/TargetParser/Host.h \
+                  llvm/lib/TargetParser/Host.cpp \
+                  llvm/unittests/TargetParser/Host.cpp
+          git diff --cached --check
+          git commit -m 'llvm: harden Apple host CPU detection'
+          git push origin HEAD:main
