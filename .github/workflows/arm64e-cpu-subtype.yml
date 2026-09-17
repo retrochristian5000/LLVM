@@ -7,11 +7,22 @@ on:
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
 
+concurrency:
+  group: arm64e-cpu-subtype
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            cmake
+            llvm
+            lld
+            third-party
       - name: Configure focused LLD build
         run: |
           cmake -S llvm -B build-arm64e-subtype -G Ninja \
