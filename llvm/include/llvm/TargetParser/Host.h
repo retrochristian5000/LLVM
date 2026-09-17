@@ -15,6 +15,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Compiler.h"
+#include <cstdint>
 #include <string>
 
 namespace llvm {
@@ -66,6 +67,8 @@ LLVM_ABI StringRef getHostCPUNameForPowerPC(StringRef ProcCpuinfoContent);
 LLVM_ABI StringRef getHostCPUNameForARM(StringRef ProcCpuinfoContent);
 LLVM_ABI StringRef getHostCPUNameForARM(uint64_t PrimaryCpuInfo,
                                         ArrayRef<uint64_t> UniqueCpuInfos);
+/// Map Darwin's hw.cpufamily value to an LLVM CPU name.
+LLVM_ABI StringRef getHostCPUNameForAppleARM(uint32_t CPUFamily);
 LLVM_ABI StringRef getHostCPUNameForS390x(StringRef ProcCpuinfoContent);
 LLVM_ABI StringRef getHostCPUNameForRISCV(StringRef ProcCpuinfoContent);
 LLVM_ABI StringRef getHostCPUNameForSPARC(StringRef ProcCpuinfoContent);

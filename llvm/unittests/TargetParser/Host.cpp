@@ -662,3 +662,22 @@ TEST(HostTest, AIXHostCPUDetect) {
 
   EXPECT_EQ(HostCPU, MCPU);
 }
+
+TEST(getDarwinHostCPUName, AppleARMFamilyMapping) {
+  // Mac17,5 / A18 Pro: preserve the A-series identity. apple-a18 is
+  // code-generation-compatible with the existing apple-m4 alias today.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x75d4acb9), "apple-a18");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x204526d0), "apple-a18");
+
+  // Do not collapse distinct A- and M-series families when Darwin gives us
+  // enough information to tell them apart.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x8765edea), "apple-a16");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xfa33415e), "apple-m3");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x6f5129ac), "apple-m4");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x1d5a87e8), "apple-m5");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xab345f09), "apple-a19");
+
+  // Unknown and unavailable family values must be conservative.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0), "generic");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xdeadbeef), "generic");
+}

@@ -1732,114 +1732,13 @@ StringRef sys::getHostCPUName() {
   return getCPUNameFromS390Model(Id, HaveVectorSupport);
 }
 #elif defined(__APPLE__) && (defined(__arm__) || defined(__aarch64__))
-// Copied from <mach/machine.h> in the macOS SDK.
-//
-// Also available here, though usually not as up-to-date:
-// https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.41.3/osfmk/mach/machine.h#L403-L452.
-#define CPUFAMILY_UNKNOWN 0
-#define CPUFAMILY_ARM_9 0xe73283ae
-#define CPUFAMILY_ARM_11 0x8ff620d8
-#define CPUFAMILY_ARM_XSCALE 0x53b005f5
-#define CPUFAMILY_ARM_12 0xbd1b0ae9
-#define CPUFAMILY_ARM_13 0x0cc90e64
-#define CPUFAMILY_ARM_14 0x96077ef1
-#define CPUFAMILY_ARM_15 0xa8511bca
-#define CPUFAMILY_ARM_SWIFT 0x1e2d6381
-#define CPUFAMILY_ARM_CYCLONE 0x37a09642
-#define CPUFAMILY_ARM_TYPHOON 0x2c91a47e
-#define CPUFAMILY_ARM_TWISTER 0x92fb37c8
-#define CPUFAMILY_ARM_HURRICANE 0x67ceee93
-#define CPUFAMILY_ARM_MONSOON_MISTRAL 0xe81e7ef6
-#define CPUFAMILY_ARM_VORTEX_TEMPEST 0x07d34b9f
-#define CPUFAMILY_ARM_LIGHTNING_THUNDER 0x462504d2
-#define CPUFAMILY_ARM_FIRESTORM_ICESTORM 0x1b588bb3
-#define CPUFAMILY_ARM_BLIZZARD_AVALANCHE 0xda33d83d
-#define CPUFAMILY_ARM_EVEREST_SAWTOOTH 0x8765edea
-#define CPUFAMILY_ARM_IBIZA 0xfa33415e
-#define CPUFAMILY_ARM_PALMA 0x72015832
-#define CPUFAMILY_ARM_COLL 0x2876f5b5
-#define CPUFAMILY_ARM_LOBOS 0x5f4dea93
-#define CPUFAMILY_ARM_DONAN 0x6f5129ac
-#define CPUFAMILY_ARM_BRAVA 0x17d5b93a
-#define CPUFAMILY_ARM_TAHITI 0x75d4acb9
-#define CPUFAMILY_ARM_TUPAI 0x204526d0
-#define CPUFAMILY_ARM_HIDRA 0x1d5a87e8
-#define CPUFAMILY_ARM_SOTRA 0xf76c5b1a
-#define CPUFAMILY_ARM_THERA 0xab345f09
-#define CPUFAMILY_ARM_TILOS 0x01d7a72b
-
 StringRef sys::getHostCPUName() {
-  uint32_t Family;
+  uint32_t Family = 0;
   size_t Length = sizeof(Family);
-  sysctlbyname("hw.cpufamily", &Family, &Length, NULL, 0);
-
-  // This is found by testing on actual hardware, and by looking at:
-  // https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.41.3/osfmk/arm/cpuid.c#L109-L231.
-  //
-  // Another great resource is
-  // https://github.com/AsahiLinux/docs/wiki/Codenames.
-  //
-  // NOTE: We choose to return `apple-mX` instead of `apple-aX`, since the M1,
-  // M2, M3 etc. aliases are more widely known to users than A14, A15, A16 etc.
-  // (and this code is basically only used on host macOS anyways).
-  switch (Family) {
-  case CPUFAMILY_UNKNOWN:
+  if (sysctlbyname("hw.cpufamily", &Family, &Length, nullptr, 0) != 0 ||
+      Length != sizeof(Family))
     return "generic";
-  case CPUFAMILY_ARM_9:
-    return "arm920t"; // or arm926ej-s
-  case CPUFAMILY_ARM_11:
-    return "arm1136jf-s";
-  case CPUFAMILY_ARM_XSCALE:
-    return "xscale";
-  case CPUFAMILY_ARM_12: // Seems unused by the kernel
-    return "generic";
-  case CPUFAMILY_ARM_13:
-    return "cortex-a8";
-  case CPUFAMILY_ARM_14:
-    return "cortex-a9";
-  case CPUFAMILY_ARM_15:
-    return "cortex-a7";
-  case CPUFAMILY_ARM_SWIFT:
-    return "swift";
-  case CPUFAMILY_ARM_CYCLONE:
-    return "apple-a7";
-  case CPUFAMILY_ARM_TYPHOON:
-    return "apple-a8";
-  case CPUFAMILY_ARM_TWISTER:
-    return "apple-a9";
-  case CPUFAMILY_ARM_HURRICANE:
-    return "apple-a10";
-  case CPUFAMILY_ARM_MONSOON_MISTRAL:
-    return "apple-a11";
-  case CPUFAMILY_ARM_VORTEX_TEMPEST:
-    return "apple-a12";
-  case CPUFAMILY_ARM_LIGHTNING_THUNDER:
-    return "apple-a13";
-  case CPUFAMILY_ARM_FIRESTORM_ICESTORM: // A14 / M1
-    return "apple-m1";
-  case CPUFAMILY_ARM_BLIZZARD_AVALANCHE: // A15 / M2
-    return "apple-m2";
-  case CPUFAMILY_ARM_EVEREST_SAWTOOTH: // A16
-  case CPUFAMILY_ARM_IBIZA:            // M3
-  case CPUFAMILY_ARM_PALMA:            // M3 Max
-  case CPUFAMILY_ARM_LOBOS:            // M3 Pro
-    return "apple-m3";
-  case CPUFAMILY_ARM_COLL: // A17 Pro
-    return "apple-a17";
-  case CPUFAMILY_ARM_DONAN:  // M4
-  case CPUFAMILY_ARM_BRAVA:  // M4 Pro/Max
-  case CPUFAMILY_ARM_TAHITI: // A18 Pro
-  case CPUFAMILY_ARM_TUPAI:  // A18
-    return "apple-m4";
-  case CPUFAMILY_ARM_HIDRA: // M5
-  case CPUFAMILY_ARM_SOTRA: // M5 Pro/Max
-  case CPUFAMILY_ARM_THERA: // A19 Pro
-  case CPUFAMILY_ARM_TILOS: // A19
-    return "apple-m5";
-  default:
-    // Default to the newest CPU we know about.
-    return "apple-m5";
-  }
+  return detail::getHostCPUNameForAppleARM(Family);
 }
 #elif defined(_AIX)
 StringRef sys::getHostCPUName() {
@@ -2676,4 +2575,67 @@ void sys::printDefaultTargetAndDetectedCPU(raw_ostream &OS) {
   OS << "  Default target: " << sys::getDefaultTargetTriple() << '\n'
      << "  Host CPU: " << CPU << '\n';
 #endif
+}
+
+StringRef sys::detail::getHostCPUNameForAppleARM(uint32_t Family) {
+  // Values mirror Darwin's CPUFAMILY_ARM_* constants. Keep the mapping pure
+  // so unknown/future families cannot silently inherit a newer CPU model.
+  switch (Family) {
+  case 0xe73283ae: // ARM_9
+    return "arm920t"; // or arm926ej-s
+  case 0x8ff620d8: // ARM_11
+    return "arm1136jf-s";
+  case 0x53b005f5: // ARM_XSCALE
+    return "xscale";
+  case 0xbd1b0ae9: // ARM_12, apparently unused by the kernel
+    return "generic";
+  case 0x0cc90e64: // ARM_13
+    return "cortex-a8";
+  case 0x96077ef1: // ARM_14
+    return "cortex-a9";
+  case 0xa8511bca: // ARM_15
+    return "cortex-a7";
+  case 0x1e2d6381: // SWIFT
+    return "swift";
+  case 0x37a09642: // CYCLONE
+    return "apple-a7";
+  case 0x2c91a47e: // TYPHOON
+    return "apple-a8";
+  case 0x92fb37c8: // TWISTER
+    return "apple-a9";
+  case 0x67ceee93: // HURRICANE
+    return "apple-a10";
+  case 0xe81e7ef6: // MONSOON_MISTRAL
+    return "apple-a11";
+  case 0x07d34b9f: // VORTEX_TEMPEST
+    return "apple-a12";
+  case 0x462504d2: // LIGHTNING_THUNDER
+    return "apple-a13";
+  case 0x1b588bb3: // FIRESTORM_ICESTORM: A14 / M1 share a family
+    return "apple-m1";
+  case 0xda33d83d: // BLIZZARD_AVALANCHE: A15 / M2 share a family
+    return "apple-m2";
+  case 0x8765edea: // EVEREST_SAWTOOTH: A16
+    return "apple-a16";
+  case 0xfa33415e: // IBIZA: M3
+  case 0x72015832: // PALMA: M3 Max
+  case 0x5f4dea93: // LOBOS: M3 Pro
+    return "apple-m3";
+  case 0x2876f5b5: // COLL: A17 Pro
+    return "apple-a17";
+  case 0x6f5129ac: // DONAN: M4
+  case 0x17d5b93a: // BRAVA: M4 Pro / Max
+    return "apple-m4";
+  case 0x75d4acb9: // TAHITI: A18 Pro
+  case 0x204526d0: // TUPAI: A18
+    return "apple-a18";
+  case 0x1d5a87e8: // HIDRA: M5
+  case 0xf76c5b1a: // SOTRA: M5 Pro / Max
+    return "apple-m5";
+  case 0xab345f09: // THERA: A19 Pro
+  case 0x01d7a72b: // TILOS: A19
+    return "apple-a19";
+  default:
+    return "generic";
+  }
 }
