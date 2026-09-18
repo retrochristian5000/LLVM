@@ -83,15 +83,15 @@ enum ArchExtKind : uint64_t {
 // Arch extension modifiers for CPUs.
 enum MultiArchExtKind : uint64_t {
   MAEK_E1 = CSKY::AEK_E1 | CSKY::AEK_ELRW,
-  MAEK_E2 = CSKY::AEK_E2 | CSKY::MAEK_E1,
-  MAEK_2E3 = CSKY::AEK_2E3 | CSKY::MAEK_E2,
-  MAEK_MP = CSKY::AEK_MP | CSKY::MAEK_2E3,
+  MAEK_E2 = static_cast<uint64_t>(CSKY::AEK_E2) |\n            static_cast<uint64_t>(CSKY::MAEK_E1),
+  MAEK_2E3 = static_cast<uint64_t>(CSKY::AEK_2E3) |\n             static_cast<uint64_t>(CSKY::MAEK_E2),
+  MAEK_MP = static_cast<uint64_t>(CSKY::AEK_MP) |\n            static_cast<uint64_t>(CSKY::MAEK_2E3),
   MAEK_3E3R1 = CSKY::AEK_3E3R1,
   MAEK_3E3R2 = CSKY::AEK_3E3R1 | CSKY::AEK_3E3R2 | CSKY::AEK_DOLOOP,
-  MAEK_3E7 = CSKY::AEK_3E7 | CSKY::MAEK_2E3,
-  MAEK_MP1E2 = CSKY::AEK_MP1E2 | CSKY::MAEK_3E7,
-  MAEK_7E10 = CSKY::AEK_7E10 | CSKY::MAEK_3E7,
-  MAEK_10E60 = CSKY::AEK_10E60 | CSKY::MAEK_7E10,
+  MAEK_3E7 = static_cast<uint64_t>(CSKY::AEK_3E7) |\n             static_cast<uint64_t>(CSKY::MAEK_2E3),
+  MAEK_MP1E2 = static_cast<uint64_t>(CSKY::AEK_MP1E2) |\n               static_cast<uint64_t>(CSKY::MAEK_3E7),
+  MAEK_7E10 = static_cast<uint64_t>(CSKY::AEK_7E10) |\n               static_cast<uint64_t>(CSKY::MAEK_3E7),
+  MAEK_10E60 = static_cast<uint64_t>(CSKY::AEK_10E60) |\n                static_cast<uint64_t>(CSKY::MAEK_7E10),
 };
 // FPU names.
 enum CSKYFPUKind {
