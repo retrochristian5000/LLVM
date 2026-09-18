@@ -7236,8 +7236,11 @@ std::string llvm::UpgradeDataLayoutString(StringRef DL, StringRef TT) {
     if (StringRef Ref = Res; !Ref.contains(I128)) {
       SmallVector<StringRef, 4> Groups;
       Regex R("^(e(-[mpi][^-]*)*)((-[^mpi][^-]*)*)$");
-      if (R.match(Res, &Groups))
-        Res = (Groups[1] + I128 + Groups[3]).str();
+      if (R.match(Res, &Groups)) {
+        Res = Groups[1].str();
+        Res += I128;
+        Res += Groups[3];
+      }
     }
   }
 
