@@ -100,6 +100,15 @@ enum MultiArchExtKind : uint64_t {
   MAEK_10E60 = static_cast<uint64_t>(CSKY::AEK_10E60) |
                 static_cast<uint64_t>(CSKY::MAEK_7E10),
 };
+
+constexpr uint64_t operator|(ArchExtKind LHS, MultiArchExtKind RHS) {
+  return static_cast<uint64_t>(LHS) | static_cast<uint64_t>(RHS);
+}
+
+constexpr uint64_t operator|(MultiArchExtKind LHS, ArchExtKind RHS) {
+  return static_cast<uint64_t>(LHS) | static_cast<uint64_t>(RHS);
+}
+
 // FPU names.
 enum CSKYFPUKind {
 #define CSKY_FPU(NAME, KIND, VERSION) KIND,
