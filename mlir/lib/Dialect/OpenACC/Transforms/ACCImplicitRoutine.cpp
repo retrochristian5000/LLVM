@@ -97,8 +97,8 @@ private:
   // Generate a unique name for the routine and create the routine operation
   acc::RoutineOp createRoutineOp(OpBuilder &builder, Location loc,
                                  FunctionOpInterface &callee) {
-    std::string routineName =
-        (accRoutinePrefix + std::to_string(routineCounter++)).str();
+    std::string routineName = accRoutinePrefix.str();
+    routineName += std::to_string(routineCounter++);
     auto routineOp = acc::RoutineOp::create(
         builder, loc,
         /* sym_name=*/builder.getStringAttr(routineName),

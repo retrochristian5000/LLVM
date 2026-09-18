@@ -377,8 +377,10 @@ mangleTypeDescriptorKinds(llvm::ArrayRef<std::int64_t> kinds) {
   if (kinds.empty())
     return "";
   std::string result;
-  for (std::int64_t kind : kinds)
-    result += (fir::kNameSeparator + std::to_string(kind)).str();
+  for (std::int64_t kind : kinds) {
+    result += fir::kNameSeparator;
+    result += std::to_string(kind);
+  }
   return result;
 }
 
@@ -423,7 +425,9 @@ fir::NameUniquer::getComponentInitName(llvm::StringRef mangledTypeName,
 
   std::string prefix =
       getDerivedTypeObjectName(mangledTypeName, fir::kComponentInitSeparator);
-  return (prefix + fir::kNameSeparator + componentName).str();
+  prefix += fir::kNameSeparator;
+  prefix += componentName;
+  return prefix;
 }
 
 llvm::StringRef
