@@ -599,6 +599,12 @@ void ELFWriter::computeSymbolTable(const RevGroupMapTy &RevGroupMap) {
 
   StrTabBuilder.finalize();
 
+  // STT_FILE symbols are always local. Pack st_info explicitly instead of
+  // mixing the symbol-binding and symbol-type enum families in a bitwise OR.
+  constexpr uint8_t FileInfo =
+      (static_cast<uint8_t>(ELF::STB_LOCAL) << 4) |
+      static_cast<uint8_t>(ELF::STT_FILE);
+
   // Make the first STT_FILE precede previous local symbols.
   unsigned Index = 1;
   auto FileNameIt = FileNames.begin();
@@ -610,7 +616,7 @@ void ELFWriter::computeSymbolTable(const RevGroupMapTy &RevGroupMap) {
     for (; FileNameIt != FileNames.end() && FileNameIt->second <= MSD.Order;
          ++FileNameIt) {
       Writer.writeSymbol(StrTabBuilder.getOffset(FileNameIt->first),
-                         ELF::STT_FILE | ELF::STB_LOCAL, 0, 0, ELF::STV_DEFAULT,
+                         FileInfo, 0, 0, ELF::STV_DEFAULT,
                          ELF::SHN_ABS, true);
       ++Index;
     }
@@ -623,7 +629,7 @@ void ELFWriter::computeSymbolTable(const RevGroupMapTy &RevGroupMap) {
   }
   for (; FileNameIt != FileNames.end(); ++FileNameIt) {
     Writer.writeSymbol(StrTabBuilder.getOffset(FileNameIt->first),
-                       ELF::STT_FILE | ELF::STB_LOCAL, 0, 0, ELF::STV_DEFAULT,
+                       FileInfo, 0, 0, ELF::STV_DEFAULT,
                        ELF::SHN_ABS, true);
     ++Index;
   }
