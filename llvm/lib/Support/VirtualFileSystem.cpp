@@ -708,7 +708,11 @@ public:
   llvm::MemoryBuffer *getBuffer() const { return Buffer.get(); }
 
   std::string toString(unsigned Indent) const override {
-    return (std::string(Indent, ' ') + Stat.getName() + "\n").str();
+    std::string Result(Indent, ' ');
+    StringRef Name = Stat.getName();
+    Result.append(Name.data(), Name.size());
+    Result += '\n';
+    return Result;
   }
 
   static bool classof(const InMemoryNode *N) {
@@ -829,8 +833,10 @@ public:
   const_iterator end() const { return Entries.end(); }
 
   std::string toString(unsigned Indent) const override {
-    std::string Result =
-        (std::string(Indent, ' ') + Stat.getName() + "\n").str();
+    std::string Result(Indent, ' ');
+    StringRef Name = Stat.getName();
+    Result.append(Name.data(), Name.size());
+    Result += '\n';
     for (const auto &Entry : Entries)
       Result += Entry.second->toString(Indent + 2);
     return Result;
