@@ -241,9 +241,14 @@ std::string prettifyFunctionName(StringRef FunctionName) {
   auto ParentName = deconstructOpenMPKernelName(FunctionName, LineNo);
   if (LineNo == 0)
     return FunctionName.str();
-  return ("omp target in " + ParentName + " @ " + std::to_string(LineNo) +
-          " (" + FunctionName + ")")
-      .str();
+  std::string Result = "omp target in ";
+  Result += ParentName;
+  Result += " @ ";
+  Result += std::to_string(LineNo);
+  Result += " (";
+  Result += FunctionName;
+  Result += ')';
+  return Result;
 }
 
 std::string deconstructOpenMPKernelName(StringRef KernelName,
