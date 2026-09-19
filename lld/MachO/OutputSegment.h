@@ -21,6 +21,7 @@ namespace lld::macho {
 
 namespace segment_names {
 
+constexpr const char authConst[] = "__AUTH_CONST";
 constexpr const char dataConst[] = "__DATA_CONST";
 constexpr const char dataDirty[] = "__DATA_DIRTY";
 constexpr const char data[] = "__DATA";

@@ -15,10 +15,14 @@
 # RUN:   -dylib %t/libfoo.dylib %t/test.o -o %t/libtest.dylib
 # RUN: llvm-objdump --macho --private-header %t/libtest.dylib | \
 # RUN:   FileCheck %s --check-prefix=HEADER
+# RUN: llvm-objdump --macho --private-headers %t/libtest.dylib | \
+# RUN:   FileCheck %s --check-prefix=SECTIONS
 # RUN: llvm-objdump --macho --chained-fixups %t/libtest.dylib | \
 # RUN:   FileCheck %s --check-prefix=FIXUPS
 
 # HEADER: ARM64          E
+# SECTIONS: segname __AUTH_CONST
+# SECTIONS: sectname __const
 # FIXUPS: chained fixups header (LC_DYLD_CHAINED_FIXUPS)
 # FIXUPS: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 # FIXUPS: _foo
@@ -33,3 +37,7 @@ _foo:
 .data
 .p2align 3
 .quad _foo@AUTH(ia,42,addr)
+
+.section __DATA_CONST,__const
+.p2align 3
+.quad _foo@AUTH(da,7,addr)

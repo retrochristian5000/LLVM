@@ -53,7 +53,10 @@ static uint32_t maxProt(StringRef name) {
 static uint32_t flags(StringRef name) {
   // If we ever implement shared cache output support, SG_READ_ONLY should not
   // be used for dylibs that can be placed in it.
-  return name == segment_names::dataConst ? (uint32_t)SG_READ_ONLY : 0;
+  return (name == segment_names::dataConst ||
+          name == segment_names::authConst)
+             ? (uint32_t)SG_READ_ONLY
+             : 0;
 }
 
 size_t OutputSegment::numNonHiddenSections() const {
@@ -80,9 +83,10 @@ template <typename T, typename F> static auto compareByOrder(F ord) {
 
 static int segmentOrder(OutputSegment *seg) {
   return StringSwitch<int>(seg->name)
-      .Case(segment_names::pageZero, -4)
-      .Case(segment_names::text, -3)
-      .Case(segment_names::dataConst, -2)
+      .Case(segment_names::pageZero, -5)
+      .Case(segment_names::text, -4)
+      .Case(segment_names::dataConst, -3)
+      .Case(segment_names::authConst, -2)
       .Case(segment_names::data, -1)
       .Case(segment_names::llvm, std::numeric_limits<int>::max() - 1)
       // Make sure __LINKEDIT is the last segment (i.e. all its hidden

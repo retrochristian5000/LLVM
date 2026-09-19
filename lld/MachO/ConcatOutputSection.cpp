@@ -407,9 +407,25 @@ void ConcatOutputSection::finalizeFlags(InputSection *input) {
   }
 }
 
+static bool hasAuthenticatedPointerRelocation(const InputSection *isec) {
+  return llvm::any_of(isec->relocs, [](const Relocation &r) {
+    return target->hasAttr(r.type, RelocAttrBits::AUTH);
+  });
+}
+
 ConcatOutputSection *
 ConcatOutputSection::getOrCreateForInput(const InputSection *isec) {
   NamePair names = maybeRenameSection({isec->getSegName(), isec->getName()});
+
+  // Apple's arm64e ABI separates authenticated constant data from ordinary
+  // __DATA_CONST. Relocations have already been attached to Mach-O
+  // subsections before output-section grouping, so route only the subsection
+  // that actually carries pointer-authenticated data.
+  if (config->arch() == AK_arm64e &&
+      names.first == segment_names::dataConst &&
+      hasAuthenticatedPointerRelocation(isec))
+    names.first = segment_names::authConst;
+
   ConcatOutputSection *&osec = concatOutputSections[names];
   if (!osec) {
     if (isec->getSegName() == segment_names::text &&
