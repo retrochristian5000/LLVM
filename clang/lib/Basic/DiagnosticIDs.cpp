@@ -231,7 +231,8 @@ static const unsigned StaticDiagInfoSize = std::size(StaticDiagInfo);
 static const StaticDiagInfoRec *GetDiagInfo(unsigned DiagID) {
   // Out of bounds diag. Can't be in the table.
   using namespace diag;
-  if (DiagID >= DIAG_UPPER_LIMIT || DiagID <= DIAG_START_COMMON)
+  if (DiagID >= static_cast<unsigned>(DIAG_UPPER_LIMIT) ||
+      DiagID <= static_cast<unsigned>(DIAG_START_COMMON))
     return nullptr;
 
   // Compute the index of the requested diagnostic in the static table.
@@ -243,11 +244,15 @@ static const StaticDiagInfoRec *GetDiagInfo(unsigned DiagID) {
   // This is cheaper than a binary search on the table as it doesn't touch
   // memory at all.
   unsigned Offset = 0;
-  unsigned ID = DiagID - DIAG_START_COMMON - 1;
-#define CATEGORY(NAME, PREV) \
-  if (DiagID > DIAG_START_##NAME) { \
-    Offset += NUM_BUILTIN_##PREV##_DIAGNOSTICS - DIAG_START_##PREV - 1; \
-    ID -= DIAG_START_##NAME - DIAG_START_##PREV; \
+  unsigned ID = DiagID - static_cast<unsigned>(DIAG_START_COMMON) - 1;
+  // The generated diagnostic counts and range markers are distinct unscoped
+  // enum types. Convert them to the storage type before doing arithmetic.
+#define CATEGORY(NAME, PREV)                                                   \
+  if (DiagID > static_cast<unsigned>(DIAG_START_##NAME)) {                     \
+    Offset += static_cast<unsigned>(NUM_BUILTIN_##PREV##_DIAGNOSTICS) -        \
+              static_cast<unsigned>(DIAG_START_##PREV) - 1;                   \
+    ID -= static_cast<unsigned>(DIAG_START_##NAME) -                           \
+          static_cast<unsigned>(DIAG_START_##PREV);                            \
   }
 CATEGORY(DRIVER, COMMON)
 CATEGORY(FRONTEND, DRIVER)
