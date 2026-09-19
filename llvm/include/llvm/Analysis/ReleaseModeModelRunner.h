@@ -118,8 +118,9 @@ private:
   // input in the first place.
   void populateTensor(size_t Pos, const TensorSpec &Spec, StringRef Prefix,
                       bool &InputIsPresent) {
-    const int Index =
-        CompiledModel->LookupArgIndex((Prefix + Spec.name()).str());
+    std::string InputName = Prefix.str();
+    InputName += Spec.name();
+    const int Index = CompiledModel->LookupArgIndex(InputName);
     void *Buffer = nullptr;
     InputIsPresent = Index >= 0;
     if (InputIsPresent)
