@@ -255,9 +255,8 @@ static Error isTrivialOperatorNode(const TreePatternNode &N) {
     HasUnsupportedPredicate = true;
     Explanation = Separator + "Has a predicate (" + explainPredicates(N) + ")";
     Separator = ", ";
-    Explanation += (Separator + "first-failing:" +
-                    Predicate.getOrigPatFragRecord()->getRecord()->getName())
-                       .str();
+    Explanation += Separator + "first-failing:" +
+                   Predicate.getOrigPatFragRecord()->getRecord()->getName();
     break;
   }
 
