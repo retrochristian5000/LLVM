@@ -267,15 +267,15 @@ void RISCVTargetInfo::getTargetDefines(const LangOptions &Opts,
 }
 
 static constexpr int NumRVVBuiltins =
-    RISCVVector::FirstSiFiveBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(RISCVVector::FirstSiFiveBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static constexpr int NumRVVSiFiveBuiltins =
-    RISCVVector::FirstAndesBuiltin - RISCVVector::FirstSiFiveBuiltin;
+    static_cast<int>(RISCVVector::FirstAndesBuiltin) - static_cast<int>(RISCVVector::FirstSiFiveBuiltin);
 static constexpr int NumRVVAndesBuiltins =
-    RISCVVector::FirstTSBuiltin - RISCVVector::FirstAndesBuiltin;
+    static_cast<int>(RISCVVector::FirstTSBuiltin) - static_cast<int>(RISCVVector::FirstAndesBuiltin);
 static constexpr int NumRISCVBuiltins =
-    RISCV::LastTSBuiltin - RISCVVector::FirstTSBuiltin;
+    static_cast<int>(RISCV::LastTSBuiltin) - static_cast<int>(RISCVVector::FirstTSBuiltin);
 static constexpr int NumBuiltins =
-    RISCV::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(RISCV::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static_assert(NumBuiltins == (NumRVVBuiltins + NumRVVSiFiveBuiltins +
                               NumRVVAndesBuiltins + NumRISCVBuiltins));
 

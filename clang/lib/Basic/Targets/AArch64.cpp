@@ -26,18 +26,18 @@ using namespace clang;
 using namespace clang::targets;
 
 static constexpr int NumNeonBuiltins =
-    NEON::FirstFp16Builtin - Builtin::FirstTSBuiltin;
+    static_cast<int>(NEON::FirstFp16Builtin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static constexpr int NumFp16Builtins =
-    NEON::FirstTSBuiltin - NEON::FirstFp16Builtin;
+    static_cast<int>(NEON::FirstTSBuiltin) - static_cast<int>(NEON::FirstFp16Builtin);
 static constexpr int NumSVEBuiltins =
-    SVE::FirstNeonBridgeBuiltin - NEON::FirstTSBuiltin;
+    static_cast<int>(SVE::FirstNeonBridgeBuiltin) - static_cast<int>(NEON::FirstTSBuiltin);
 static constexpr int NumSVENeonBridgeBuiltins =
-    SVE::FirstTSBuiltin - SVE::FirstNeonBridgeBuiltin;
-static constexpr int NumSMEBuiltins = SME::FirstTSBuiltin - SVE::FirstTSBuiltin;
+    static_cast<int>(SVE::FirstTSBuiltin) - static_cast<int>(SVE::FirstNeonBridgeBuiltin);
+static constexpr int NumSMEBuiltins = static_cast<int>(SME::FirstTSBuiltin) - static_cast<int>(SVE::FirstTSBuiltin);
 static constexpr int NumAArch64Builtins =
-    AArch64::LastTSBuiltin - SME::FirstTSBuiltin;
+    static_cast<int>(AArch64::LastTSBuiltin) - static_cast<int>(SME::FirstTSBuiltin);
 static constexpr int NumBuiltins =
-    AArch64::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(AArch64::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static_assert(NumBuiltins ==
               (NumNeonBuiltins + NumFp16Builtins + NumSVEBuiltins +
                NumSVENeonBridgeBuiltins + NumSMEBuiltins + NumAArch64Builtins));

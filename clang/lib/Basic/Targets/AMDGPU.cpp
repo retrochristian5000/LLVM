@@ -62,7 +62,7 @@ const LangASMap AMDGPUTargetInfo::AMDGPUAddrSpaceMap = {
 } // namespace clang
 
 static constexpr int NumBuiltins =
-    clang::AMDGPU::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(clang::AMDGPU::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 
 #define GET_BUILTIN_STR_TABLE
 #include "clang/Basic/BuiltinsAMDGPU.inc"

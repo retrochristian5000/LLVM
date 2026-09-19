@@ -296,13 +296,13 @@ void LoongArchTargetInfo::getTargetDefines(const LangOptions &Opts,
 }
 
 static constexpr int NumBaseBuiltins =
-    LoongArch::FirstLSXBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(LoongArch::FirstLSXBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static constexpr int NumLSXBuiltins =
-    LoongArch::FirstLASXBuiltin - LoongArch::FirstLSXBuiltin;
+    static_cast<int>(LoongArch::FirstLASXBuiltin) - static_cast<int>(LoongArch::FirstLSXBuiltin);
 static constexpr int NumLASXBuiltins =
-    LoongArch::LastTSBuiltin - LoongArch::FirstLASXBuiltin;
+    static_cast<int>(LoongArch::LastTSBuiltin) - static_cast<int>(LoongArch::FirstLASXBuiltin);
 static constexpr int NumBuiltins =
-    LoongArch::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(LoongArch::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 static_assert(NumBuiltins ==
               (NumBaseBuiltins + NumLSXBuiltins + NumLASXBuiltins));
 

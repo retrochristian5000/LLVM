@@ -20,7 +20,7 @@ using namespace clang;
 using namespace clang::targets;
 
 static constexpr int NumBuiltins =
-    clang::SPIRV::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(clang::SPIRV::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 
 #define GET_BUILTIN_STR_TABLE
 #include "clang/Basic/BuiltinsSPIRVCommon.inc"

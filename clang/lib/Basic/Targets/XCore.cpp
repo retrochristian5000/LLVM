@@ -19,7 +19,7 @@ using namespace clang;
 using namespace clang::targets;
 
 static constexpr int NumBuiltins =
-    XCore::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(XCore::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 
 static constexpr llvm::StringTable BuiltinStrings =
     CLANG_BUILTIN_STR_TABLE_START

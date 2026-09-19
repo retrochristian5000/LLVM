@@ -21,7 +21,7 @@ using namespace clang;
 using namespace clang::targets;
 
 static constexpr int NumBuiltins =
-    clang::PPC::LastTSBuiltin - Builtin::FirstTSBuiltin;
+    static_cast<int>(clang::PPC::LastTSBuiltin) - static_cast<int>(Builtin::FirstTSBuiltin);
 
 static constexpr llvm::StringTable BuiltinStrings =
     CLANG_BUILTIN_STR_TABLE_START
