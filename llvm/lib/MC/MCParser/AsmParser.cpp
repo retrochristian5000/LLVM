@@ -6167,7 +6167,8 @@ bool AsmParser::parseMSInlineAsm(
         ++InputIdx;
         OutputDecls.push_back(OpDecl);
         OutputDeclsAddressOf.push_back(Operand.needAddressOf());
-        OutputConstraints.push_back(("=" + Constraint).str());
+        OutputConstraints.emplace_back("=");
+        OutputConstraints.back() += Constraint;
         AsmStrRewrites.emplace_back(AOK_Output, Start, SymName.size(), 0,
                                     Restricted);
       } else {
