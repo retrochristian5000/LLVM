@@ -361,7 +361,10 @@ void WinCOFFWriter::defineSection(const MCSectionCOFF &MCSec) {
     uint32_t N = 1;
     for (uint32_t Off = Interval, E = Asm->getSectionAddressSize(MCSec);
          Off < E; Off += Interval) {
-      auto Name = ("$L" + MCSec.getName() + "_" + Twine(N++)).str();
+      std::string Name = "$L";
+      Name += MCSec.getName();
+      Name += '_';
+      Name += Twine(N++).str();
       COFFSymbol *Label = createSymbol(Name);
       Label->Section = Section;
       Label->Data.StorageClass = COFF::IMAGE_SYM_CLASS_LABEL;
@@ -421,7 +424,9 @@ void WinCOFFWriter::defineSymbol(const MCSymbolCOFF &MCSym) {
 
     COFFSymbol *WeakDefault = getLinkedSymbol(MCSym);
     if (!WeakDefault) {
-      std::string WeakName = (".weak." + MCSym.getName() + ".default").str();
+      std::string WeakName = ".weak.";
+      WeakName += MCSym.getName();
+      WeakName += ".default";
       WeakDefault = createSymbol(WeakName);
       if (!Sec)
         WeakDefault->Data.SectionNumber = COFF::IMAGE_SYM_ABSOLUTE;

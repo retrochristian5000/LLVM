@@ -66,8 +66,9 @@ static bool useCompactUnwind(const Triple &T) {
 void MCObjectFileInfo::initMachOMCObjectFileInfo(const Triple &T) {
   EHFrameSection = Ctx->getMachOSection(
       "__TEXT", "__eh_frame",
-      MachO::S_COALESCED | MachO::S_ATTR_NO_TOC |
-          MachO::S_ATTR_STRIP_STATIC_SYMS | MachO::S_ATTR_LIVE_SUPPORT,
+      static_cast<uint32_t>(MachO::S_COALESCED) |
+          MachO::S_ATTR_NO_TOC | MachO::S_ATTR_STRIP_STATIC_SYMS |
+          MachO::S_ATTR_LIVE_SUPPORT,
       SectionKind::getReadOnly());
 
   if (T.isOSDarwin() &&
@@ -160,8 +161,8 @@ void MCObjectFileInfo::initMachOMCObjectFileInfo(const Triple &T) {
   if (ArchTy == Triple::ppc || ArchTy == Triple::ppc64) {
     TextCoalSection
       = Ctx->getMachOSection("__TEXT", "__textcoal_nt",
-                             MachO::S_COALESCED |
-                             MachO::S_ATTR_PURE_INSTRUCTIONS,
+                             static_cast<uint32_t>(MachO::S_COALESCED) |
+                                 MachO::S_ATTR_PURE_INSTRUCTIONS,
                              SectionKind::getText());
     ConstTextCoalSection
       = Ctx->getMachOSection("__TEXT", "__const_coal",

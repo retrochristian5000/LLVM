@@ -125,7 +125,9 @@ const Target *TargetRegistry::lookupTarget(StringRef ArchName,
                      [&](const Target &T) { return ArchName == T.getName(); });
 
     if (I == targets().end()) {
-      Error = ("invalid target '" + ArchName + "'.").str();
+      Error = "invalid target '";
+      Error += ArchName;
+      Error += "'.";
       return nullptr;
     }
 
