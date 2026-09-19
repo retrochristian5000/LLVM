@@ -40,7 +40,7 @@ struct CommandInfo {
   const char *EndCommandName;
 
   /// DRY definition of the number of bits used for a command ID.
-  enum { NumCommandIDBits = 20 };
+  static constexpr unsigned NumCommandIDBits = 20;
 
   /// The ID of the command.
   unsigned ID : NumCommandIDBits;

@@ -78,7 +78,7 @@ protected:
     LLVM_PREFERRED_TYPE(CommentKind)
     unsigned Kind : 8;
   };
-  enum { NumCommentBits = 8 };
+  static constexpr unsigned NumCommentBits = 8;
 
   class InlineContentCommentBitfields {
     friend class InlineContentComment;
@@ -91,7 +91,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     unsigned HasTrailingNewline : 1;
   };
-  enum { NumInlineContentCommentBits = NumCommentBits + 1 };
+  static constexpr unsigned NumInlineContentCommentBits = NumCommentBits + 1;
 
   class TextCommentBitfields {
     friend class TextComment;
@@ -107,7 +107,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     mutable unsigned IsWhitespace : 1;
   };
-  enum { NumTextCommentBits = NumInlineContentCommentBits + 2 };
+  static constexpr unsigned NumTextCommentBits = NumInlineContentCommentBits + 2;
 
   class InlineCommandCommentBitfields {
     friend class InlineCommandComment;
@@ -126,8 +126,8 @@ protected:
     LLVM_PREFERRED_TYPE(CommandMarkerKind)
     unsigned CommandMarker : 1;
   };
-  enum { NumInlineCommandCommentBits = NumInlineContentCommentBits + 3 +
-                                       CommandInfo::NumCommandIDBits };
+  static constexpr unsigned NumInlineCommandCommentBits =
+      NumInlineContentCommentBits + 3 + CommandInfo::NumCommandIDBits;
 
   class HTMLTagCommentBitfields {
     friend class HTMLTagComment;
@@ -139,7 +139,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     unsigned IsMalformed : 1;
   };
-  enum { NumHTMLTagCommentBits = NumInlineContentCommentBits + 1 };
+  static constexpr unsigned NumHTMLTagCommentBits = NumInlineContentCommentBits + 1;
 
   class HTMLStartTagCommentBitfields {
     friend class HTMLStartTagComment;
@@ -152,7 +152,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     unsigned IsSelfClosing : 1;
   };
-  enum { NumHTMLStartTagCommentBits = NumHTMLTagCommentBits + 1 };
+  static constexpr unsigned NumHTMLStartTagCommentBits = NumHTMLTagCommentBits + 1;
 
   class ParagraphCommentBitfields {
     friend class ParagraphComment;
@@ -168,7 +168,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     mutable unsigned IsWhitespace : 1;
   };
-  enum { NumParagraphCommentBits = NumCommentBits + 2 };
+  static constexpr unsigned NumParagraphCommentBits = NumCommentBits + 2;
 
   class BlockCommandCommentBitfields {
     friend class BlockCommandComment;
@@ -184,8 +184,8 @@ protected:
     LLVM_PREFERRED_TYPE(CommandMarkerKind)
     unsigned CommandMarker : 1;
   };
-  enum { NumBlockCommandCommentBits = NumCommentBits +
-                                      CommandInfo::NumCommandIDBits + 1 };
+  static constexpr unsigned NumBlockCommandCommentBits =
+      NumCommentBits + CommandInfo::NumCommandIDBits + 1;
 
   class ParamCommandCommentBitfields {
     friend class ParamCommandComment;
@@ -201,7 +201,7 @@ protected:
     LLVM_PREFERRED_TYPE(bool)
     unsigned IsDirectionExplicit : 1;
   };
-  enum { NumParamCommandCommentBits = NumBlockCommandCommentBits + 3 };
+  static constexpr unsigned NumParamCommandCommentBits = NumBlockCommandCommentBits + 3;
 
   union {
     CommentBitfields CommentBits;
