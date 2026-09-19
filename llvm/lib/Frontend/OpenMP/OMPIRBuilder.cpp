@@ -4504,7 +4504,7 @@ Expected<Function *> OpenMPIRBuilder::emitGlobalToListReduceFunction(
 std::string OpenMPIRBuilder::getReductionFuncName(StringRef Name) const {
   std::string Suffix =
       createPlatformSpecificName({"omp", "reduction", "reduction_func"});
-  return (Name + Suffix).str();
+  return Name.str() + Suffix;
 }
 
 Expected<Function *> OpenMPIRBuilder::createReductionFunction(
