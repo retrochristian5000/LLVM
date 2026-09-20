@@ -89,15 +89,15 @@ std::string lld::toString(const InputFile *f) {
   // Multiple dylibs can be defined in one .tbd file.
   if (const auto *dylibFile = dyn_cast<DylibFile>(f))
     if (f->getName().ends_with(".tbd"))
-      return (f->getName() + "(" + dylibFile->installName + ")").str();
+      return (Twine(f->getName()) + "(" + dylibFile->installName + ")").str();
 
   if (f->archiveName.empty())
     return std::string(f->getName());
-  return (f->archiveName + "(" + path::filename(f->getName()) + ")").str();
+  return (Twine(f->archiveName) + "(" + path::filename(f->getName()) + ")").str();
 }
 
 std::string lld::toString(const Section &sec) {
-  return (toString(sec.file) + ":(" + sec.name + ")").str();
+  return (Twine(toString(sec.file)) + ":(" + sec.name + ")").str();
 }
 
 SetVector<InputFile *> macho::inputFiles;
@@ -511,7 +511,7 @@ static bool validateRelocationInfo(InputFile *file, const SectionHeader &sec,
   bool valid = true;
   auto message = [relocAttrs, file, sec, rel, &valid](const Twine &diagnostic) {
     valid = false;
-    return (relocAttrs.name + " relocation " + diagnostic + " at offset " +
+    return (Twine(relocAttrs.name) + " relocation " + diagnostic + " at offset " +
             std::to_string(rel.r_address) + " of " + sec.segname + "," +
             sec.sectname + " in " + toString(file))
         .str();
@@ -1591,7 +1591,7 @@ std::string ObjFile::sourceFile() const {
   // in an absolute path. `append` would give us a relative path for that case.
   if (!dir.ends_with(sep))
     dir += sep;
-  return (dir + unitName).str();
+  return (Twine(dir) + unitName).str();
 }
 
 lld::DWARFCache *ObjFile::getDwarf() {
@@ -1659,7 +1659,7 @@ static DylibFile *findDylib(StringRef path, DylibFile *umbrella,
   if (path::is_absolute(path, path::Style::posix))
     for (StringRef root : config->systemLibraryRoots)
       if (std::optional<StringRef> dylibPath =
-              resolveDylibPath((root + path).str()))
+              resolveDylibPath((Twine(root) + path).str()))
         return loadDylib(*dylibPath, umbrella);
 
   // 3. As relative path.
@@ -2455,7 +2455,7 @@ void BitcodeFile::parseLazy() {
 std::string macho::replaceThinLTOSuffix(StringRef path) {
   auto [suffix, repl] = config->thinLTOObjectSuffixReplace;
   if (path.consume_back(suffix))
-    return (path + repl).str();
+    return (Twine(path) + repl).str();
   return std::string(path);
 }
 
