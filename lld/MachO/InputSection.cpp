@@ -235,6 +235,8 @@ void ConcatInputSection::writeTo(uint8_t *buf) {
 
     const bool needsFixup = config->emitChainedFixups &&
                             target->hasAttr(r.type, RelocAttrBits::UNSIGNED);
+    const bool authenticated =
+        target->hasAttr(r.type, RelocAttrBits::AUTH);
     if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND)) {
       const Symbol *fromSym = cast<Symbol *>(r.referent);
       const Relocation &minuend = relocs[++i];
@@ -266,7 +268,10 @@ void ConcatInputSection::writeTo(uint8_t *buf) {
         // contiguous).
         referentVA -= firstTLVDataSection->addr;
       } else if (needsFixup) {
-        writeChainedFixup(loc, referentSym, r.addend);
+        if (authenticated)
+          writeChainedFixup(loc, referentSym, r);
+        else
+          writeChainedFixup(loc, referentSym, r.addend);
         continue;
       }
     } else if (auto *referentIsec = r.referent.dyn_cast<InputSection *>()) {
@@ -274,7 +279,10 @@ void ConcatInputSection::writeTo(uint8_t *buf) {
       referentVA = referentIsec->getVA(r.addend);
 
       if (needsFixup) {
-        writeChainedRebase(loc, referentVA);
+        if (authenticated)
+          writeChainedRebase(loc, referentVA, r);
+        else
+          writeChainedRebase(loc, referentVA);
         continue;
       }
     }

@@ -34,9 +34,14 @@ _foo:
   ret
 
 #--- test.s
+.text
+_local:
+  ret
+
 .data
 .p2align 3
 .quad _foo@AUTH(ia,42,addr)
+.quad _local@AUTH(ib,99)
 
 .section __DATA_CONST,__const
 .p2align 3

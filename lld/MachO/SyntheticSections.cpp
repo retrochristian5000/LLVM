@@ -306,10 +306,10 @@ NonLazyPointerSectionBase::NonLazyPointerSectionBase(const char *segname,
 
 void macho::addNonLazyBindingEntries(const Symbol *sym,
                                      const InputSection *isec, uint64_t offset,
-                                     int64_t addend) {
+                                     int64_t addend, bool authenticated) {
   if (config->emitChainedFixups) {
     if (needsBinding(sym))
-      in.chainedFixups->addBinding(sym, isec, offset, addend);
+      in.chainedFixups->addBinding(sym, isec, offset, addend, authenticated);
     else if (isa<Defined>(sym))
       in.chainedFixups->addRebase(isec, offset);
     else
@@ -343,9 +343,80 @@ void NonLazyPointerSectionBase::addEntry(Symbol *sym) {
   }
 }
 
+static bool usesArm64eChainedFixups() {
+  return config->arch() == AK_arm64e;
+}
+
+static uint64_t getArm64eVmOffset(uint64_t targetVA) {
+  if (targetVA < in.header->addr) {
+    error("ARM64e chained fixup target precedes the image base");
+    return 0;
+  }
+  return targetVA - in.header->addr;
+}
+
+static void writeArm64eRebase(uint8_t *buf, uint64_t targetVA) {
+  uint64_t targetOffset = getArm64eVmOffset(targetVA);
+  uint64_t high8 = targetOffset >> 56;
+  uint64_t low56 = targetOffset & 0x00ffffffffffffffULL;
+  constexpr uint64_t targetMask = (1ULL << 43) - 1;
+
+  if ((low56 & ~targetMask) != 0) {
+    error("ARM64e rebase target offset 0x" + Twine::utohexstr(targetOffset) +
+          " does not fit into DYLD_CHAINED_PTR_ARM64E_USERLAND24");
+    return;
+  }
+
+  // USERLAND24 unauthenticated rebase:
+  // target:43 | high8:8 | next:11 | bind:1 | auth:1.
+  uint64_t raw = (low56 & targetMask) | (high8 << 43);
+  write64le(buf, raw);
+}
+
+struct Arm64eAuthData {
+  uint16_t diversity;
+  uint8_t key;
+  bool addressDiversity;
+};
+
+static Arm64eAuthData readArm64eAuthData(const uint8_t *buf) {
+  uint64_t raw = read64le(buf);
+  return {static_cast<uint16_t>((raw >> 32) & 0xffff),
+          static_cast<uint8_t>((raw >> 49) & 0x3),
+          static_cast<bool>((raw >> 48) & 0x1)};
+}
+
+static void writeArm64eAuthRebase(uint8_t *buf, uint64_t targetVA,
+                                  const Relocation &reloc) {
+  assert(target->hasAttr(reloc.type, RelocAttrBits::AUTH));
+  Arm64eAuthData auth = readArm64eAuthData(buf);
+  uint64_t targetOffset = getArm64eVmOffset(targetVA);
+  if (!isUInt<32>(targetOffset)) {
+    error("ARM64e authenticated rebase target offset 0x" +
+          Twine::utohexstr(targetOffset) +
+          " does not fit into a 32-bit authenticated chained fixup");
+    return;
+  }
+
+  // USERLAND24 authenticated rebase:
+  // target:32 | diversity:16 | addrDiv:1 | key:2 | next:11 |
+  // bind:1 | auth:1.
+  uint64_t raw = targetOffset |
+                 (static_cast<uint64_t>(auth.diversity) << 32) |
+                 (static_cast<uint64_t>(auth.addressDiversity) << 48) |
+                 (static_cast<uint64_t>(auth.key) << 49) | (1ULL << 63);
+  write64le(buf, raw);
+}
+
 void macho::writeChainedRebase(uint8_t *buf, uint64_t targetVA) {
   assert(config->emitChainedFixups);
   assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
+
+  if (usesArm64eChainedFixups()) {
+    writeArm64eRebase(buf, targetVA);
+    return;
+  }
+
   auto *rebase = reinterpret_cast<dyld_chained_ptr_64_rebase *>(buf);
   rebase->target = targetVA & 0xf'ffff'ffff;
   rebase->high8 = (targetVA >> 56);
@@ -361,13 +432,77 @@ void macho::writeChainedRebase(uint8_t *buf, uint64_t targetVA) {
           " does not fit into chained fixup. Re-link with -no_fixup_chains");
 }
 
+void macho::writeChainedRebase(uint8_t *buf, uint64_t targetVA,
+                               const Relocation &reloc) {
+  if (!usesArm64eChainedFixups()) {
+    error("authenticated chained fixups require an arm64e output");
+    return;
+  }
+  writeArm64eAuthRebase(buf, targetVA, reloc);
+}
+
+static void writeArm64eBind(uint8_t *buf, const Symbol *sym, int64_t addend) {
+  auto [ordinal, inlineAddend] =
+      in.chainedFixups->getBinding(sym, addend, /*authenticated=*/false);
+  if (!isUInt<24>(ordinal)) {
+    error("ARM64e chained bind ordinal " + Twine(ordinal) +
+          " does not fit into DYLD_CHAINED_PTR_ARM64E_USERLAND24");
+    return;
+  }
+  if (!isInt<19>(inlineAddend)) {
+    error("ARM64e chained bind inline addend " + Twine(inlineAddend) +
+          " does not fit in 19 bits");
+    return;
+  }
+
+  // USERLAND24 unauthenticated bind:
+  // ordinal:24 | zero:8 | addend:19 | next:11 | bind:1 | auth:1.
+  uint64_t raw = ordinal |
+                 ((static_cast<uint64_t>(inlineAddend) & 0x7ffffULL) << 32) |
+                 (1ULL << 62);
+  write64le(buf, raw);
+}
+
+static void writeArm64eAuthBind(uint8_t *buf, const Symbol *sym,
+                                const Relocation &reloc) {
+  assert(target->hasAttr(reloc.type, RelocAttrBits::AUTH));
+  Arm64eAuthData auth = readArm64eAuthData(buf);
+  auto [ordinal, inlineAddend] =
+      in.chainedFixups->getBinding(sym, reloc.addend, /*authenticated=*/true);
+  if (!isUInt<24>(ordinal)) {
+    error("ARM64e authenticated bind ordinal " + Twine(ordinal) +
+          " does not fit into DYLD_CHAINED_PTR_ARM64E_USERLAND24");
+    return;
+  }
+  if (inlineAddend != 0) {
+    error("ARM64e authenticated chained bind cannot encode an inline addend");
+    return;
+  }
+
+  // USERLAND24 authenticated bind:
+  // ordinal:24 | zero:8 | diversity:16 | addrDiv:1 | key:2 | next:11 |
+  // bind:1 | auth:1.
+  uint64_t raw = ordinal |
+                 (static_cast<uint64_t>(auth.diversity) << 32) |
+                 (static_cast<uint64_t>(auth.addressDiversity) << 48) |
+                 (static_cast<uint64_t>(auth.key) << 49) | (1ULL << 62) |
+                 (1ULL << 63);
+  write64le(buf, raw);
+}
+
 static void writeChainedBind(uint8_t *buf, const Symbol *sym, int64_t addend) {
   assert(config->emitChainedFixups);
   assert(target->wordSize == 8 && "Only 64-bit platforms are supported");
-  auto *bind = reinterpret_cast<dyld_chained_ptr_64_bind *>(buf);
+
+  if (usesArm64eChainedFixups()) {
+    writeArm64eBind(buf, sym, addend);
+    return;
+  }
+
   auto [ordinal, inlineAddend] = in.chainedFixups->getBinding(sym, addend);
+  auto *bind = reinterpret_cast<dyld_chained_ptr_64_bind *>(buf);
   bind->ordinal = ordinal;
-  bind->addend = inlineAddend;
+  bind->addend = static_cast<uint8_t>(inlineAddend);
   bind->reserved = 0;
   bind->next = 0;
   bind->bind = 1;
@@ -378,6 +513,18 @@ void macho::writeChainedFixup(uint8_t *buf, const Symbol *sym, int64_t addend) {
     writeChainedBind(buf, sym, addend);
   else
     writeChainedRebase(buf, sym->getVA() + addend);
+}
+
+void macho::writeChainedFixup(uint8_t *buf, const Symbol *sym,
+                              const Relocation &reloc) {
+  if (!usesArm64eChainedFixups()) {
+    error("authenticated chained fixups require an arm64e output");
+    return;
+  }
+  if (needsBinding(sym))
+    writeArm64eAuthBind(buf, sym, reloc);
+  else
+    writeArm64eAuthRebase(buf, sym->getVA() + reloc.addend, reloc);
 }
 
 void NonLazyPointerSectionBase::writeTo(uint8_t *buf) const {
@@ -2357,11 +2504,25 @@ bool ChainedFixupsSection::isNeeded() const {
   return true;
 }
 
+static int64_t getChainedFixupOutlineAddend(int64_t addend,
+                                             bool authenticated) {
+  // ARM64e authenticated binds use the inline field for PAC metadata, so any
+  // non-zero addend has to live in the imports table. USERLAND24 unauthenticated
+  // binds have a signed 19-bit inline addend. Other targets keep the existing
+  // unsigned 8-bit inline-addend policy of DYLD_CHAINED_PTR_64.
+  if (authenticated)
+    return addend;
+  if (config->arch() == AK_arm64e)
+    return isInt<19>(addend) ? 0 : addend;
+  return (addend < 0 || addend > 0xFF) ? addend : 0;
+}
+
 void ChainedFixupsSection::addBinding(const Symbol *sym,
                                       const InputSection *isec, uint64_t offset,
-                                      int64_t addend) {
+                                      int64_t addend, bool authenticated) {
   locations.emplace_back(isec, offset);
-  int64_t outlineAddend = (addend < 0 || addend > 0xFF) ? addend : 0;
+  int64_t outlineAddend =
+      getChainedFixupOutlineAddend(addend, authenticated);
   auto [it, inserted] = bindings.insert(
       {{sym, outlineAddend}, static_cast<uint32_t>(bindings.size())});
 
@@ -2375,9 +2536,11 @@ void ChainedFixupsSection::addBinding(const Symbol *sym,
   }
 }
 
-std::pair<uint32_t, uint8_t>
-ChainedFixupsSection::getBinding(const Symbol *sym, int64_t addend) const {
-  int64_t outlineAddend = (addend < 0 || addend > 0xFF) ? addend : 0;
+std::pair<uint32_t, int64_t>
+ChainedFixupsSection::getBinding(const Symbol *sym, int64_t addend,
+                                 bool authenticated) const {
+  int64_t outlineAddend =
+      getChainedFixupOutlineAddend(addend, authenticated);
   auto it = bindings.find({sym, outlineAddend});
   assert(it != bindings.end() && "binding not found in the imports table");
   if (outlineAddend == 0)
@@ -2426,8 +2589,11 @@ size_t ChainedFixupsSection::SegmentInfo::writeTo(uint8_t *buf) const {
   auto *segInfo = reinterpret_cast<dyld_chained_starts_in_segment *>(buf);
   segInfo->size = getSize();
   segInfo->page_size = target->getPageSize();
-  // FIXME: Use DYLD_CHAINED_PTR_64_OFFSET on newer OS versions.
-  segInfo->pointer_format = DYLD_CHAINED_PTR_64;
+  // ARM64e userland pointers use an 8-byte-stride VM-offset format with
+  // 24-bit bind ordinals. Other targets retain the generic 64-bit format.
+  segInfo->pointer_format = config->arch() == AK_arm64e
+                                ? DYLD_CHAINED_PTR_ARM64E_USERLAND24
+                                : DYLD_CHAINED_PTR_64;
   segInfo->segment_offset = oseg->addr - in.header->addr;
   segInfo->max_valid_pointer = 0; // not used on 64-bit
   segInfo->page_count = pageStarts.back().first + 1;

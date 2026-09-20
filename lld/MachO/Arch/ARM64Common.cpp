@@ -36,10 +36,24 @@ int64_t ARM64Common::getEmbeddedAddend(MemoryBufferRef mb, uint64_t offset,
       return 0;
     }
     // ARM64e stores the signed addend in the low 32 bits. The upper 32 bits
-    // remain in the input section bytes and carry PAC diversity/key/address
-    // metadata for the chained-fixup writer to consume in the next porting
-    // layer. Do not reinterpret the whole 64-bit datum as an addend.
-    return llvm::SignExtend64<32>(read32le(loc));
+    // carry the pointer-authentication schema:
+    //
+    //   63        51 50 49 48 47          32 31                 0
+    //   +-----------+-----+--+--------------+--------------------+
+    //   |1| reserved| key |AD| diversity    | signed addend      |
+    //   +-----------+-----+--+--------------+--------------------+
+    //
+    // The relocation marker must be set and the reserved bits must be zero.
+    // Keep the PAC metadata in the input bytes so the chained-fixup writer can
+    // consume it after section contents have been copied to the output buffer.
+    uint64_t raw = read64le(loc);
+    constexpr uint64_t authMarker = 1ULL << 63;
+    constexpr uint64_t reservedMask = 0x7ff8000000000000ULL;
+    if ((raw & authMarker) == 0 || (raw & reservedMask) != 0) {
+      error("malformed ARM64_RELOC_AUTHENTICATED_POINTER metadata");
+      return 0;
+    }
+    return llvm::SignExtend64<32>(static_cast<uint32_t>(raw));
   }
 
   switch (rel.r_length) {

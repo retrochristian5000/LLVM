@@ -32,6 +32,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LEB128.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SwapByteOrder.h"
@@ -3497,10 +3498,12 @@ void MachOChainedFixupEntry::moveNext() {
   SegmentIndex = SegInfo.SegIdx;
   SegmentOffset = SegInfo.Header.page_size * PageIndex + PageOffset;
 
-  // FIXME: Handle other pointer formats.
   uint16_t PointerFormat = SegInfo.Header.pointer_format;
+  const bool IsArm64eUserland24 =
+      PointerFormat == MachO::DYLD_CHAINED_PTR_ARM64E_USERLAND24;
   if (PointerFormat != MachO::DYLD_CHAINED_PTR_64 &&
-      PointerFormat != MachO::DYLD_CHAINED_PTR_64_OFFSET) {
+      PointerFormat != MachO::DYLD_CHAINED_PTR_64_OFFSET &&
+      !IsArm64eUserland24) {
     *E = createError("segment " + Twine(SegmentIndex) +
                      " has unsupported chained fixup pointer_format " +
                      Twine(PointerFormat));
@@ -3534,41 +3537,79 @@ void MachOChainedFixupEntry::moveNext() {
     return (RawValue >> Right) & ((1ULL << Count) - 1);
   };
 
-  // The `bind` field (most significant bit) of the encoded fixup determines
-  // whether it is dyld_chained_ptr_64_bind or dyld_chained_ptr_64_rebase.
-  bool IsBind = Field(63, 1);
-  Kind = IsBind ? FixupKind::Bind : FixupKind::Rebase;
-  uint32_t Next = Field(51, 12);
-  if (IsBind) {
-    uint32_t ImportOrdinal = Field(0, 24);
-    uint8_t InlineAddend = Field(24, 8);
+  uint32_t Next;
+  uint32_t Stride;
+  if (IsArm64eUserland24) {
+    // ARM64e uses bit 63 for auth and bit 62 for bind.
+    bool IsAuth = Field(63, 1);
+    bool IsBind = Field(62, 1);
+    Kind = IsBind ? FixupKind::Bind : FixupKind::Rebase;
+    Next = Field(51, 11);
+    Stride = 8;
 
-    if (ImportOrdinal >= FixupTargets.size()) {
-      *E = malformedError("fixup in segment " + Twine(SegmentIndex) +
-                          " at offset " + Twine(SegmentOffset) +
-                          "  has out-of range import ordinal " +
-                          Twine(ImportOrdinal));
-      moveToEnd();
-      return;
+    if (IsBind) {
+      uint32_t ImportOrdinal = Field(0, 24);
+      int64_t InlineAddend =
+          IsAuth ? 0 : llvm::SignExtend64<19>(Field(32, 19));
+
+      if (ImportOrdinal >= FixupTargets.size()) {
+        *E = malformedError("fixup in segment " + Twine(SegmentIndex) +
+                            " at offset " + Twine(SegmentOffset) +
+                            "  has out-of range import ordinal " +
+                            Twine(ImportOrdinal));
+        moveToEnd();
+        return;
+      }
+
+      ChainedFixupTarget &Target = FixupTargets[ImportOrdinal];
+      Ordinal = Target.libOrdinal();
+      Addend = InlineAddend ? InlineAddend : Target.addend();
+      Flags = Target.weakImport() ? MachO::BIND_SYMBOL_FLAGS_WEAK_IMPORT : 0;
+      SymbolName = Target.symbolName();
+    } else if (IsAuth) {
+      PointerValue = Field(0, 32) + textAddress();
+    } else {
+      uint64_t Target = Field(0, 43);
+      uint64_t High8 = Field(43, 8);
+      PointerValue = (Target | (High8 << 56)) + textAddress();
     }
-
-    ChainedFixupTarget &Target = FixupTargets[ImportOrdinal];
-    Ordinal = Target.libOrdinal();
-    Addend = InlineAddend ? InlineAddend : Target.addend();
-    Flags = Target.weakImport() ? MachO::BIND_SYMBOL_FLAGS_WEAK_IMPORT : 0;
-    SymbolName = Target.symbolName();
   } else {
-    uint64_t Target = Field(0, 36);
-    uint64_t High8 = Field(36, 8);
+    // The bind field (most significant bit) of the generic 64-bit encoded
+    // fixup selects between bind and rebase.
+    bool IsBind = Field(63, 1);
+    Kind = IsBind ? FixupKind::Bind : FixupKind::Rebase;
+    Next = Field(51, 12);
+    Stride = 4;
+    if (IsBind) {
+      uint32_t ImportOrdinal = Field(0, 24);
+      uint8_t InlineAddend = Field(24, 8);
 
-    PointerValue = Target | (High8 << 56);
-    if (PointerFormat == MachO::DYLD_CHAINED_PTR_64_OFFSET)
-      PointerValue += textAddress();
+      if (ImportOrdinal >= FixupTargets.size()) {
+        *E = malformedError("fixup in segment " + Twine(SegmentIndex) +
+                            " at offset " + Twine(SegmentOffset) +
+                            "  has out-of range import ordinal " +
+                            Twine(ImportOrdinal));
+        moveToEnd();
+        return;
+      }
+
+      ChainedFixupTarget &Target = FixupTargets[ImportOrdinal];
+      Ordinal = Target.libOrdinal();
+      Addend = InlineAddend ? InlineAddend : Target.addend();
+      Flags = Target.weakImport() ? MachO::BIND_SYMBOL_FLAGS_WEAK_IMPORT : 0;
+      SymbolName = Target.symbolName();
+    } else {
+      uint64_t Target = Field(0, 36);
+      uint64_t High8 = Field(36, 8);
+
+      PointerValue = Target | (High8 << 56);
+      if (PointerFormat == MachO::DYLD_CHAINED_PTR_64_OFFSET)
+        PointerValue += textAddress();
+    }
   }
 
-  // The stride is 4 bytes for DYLD_CHAINED_PTR_64(_OFFSET).
   if (Next != 0) {
-    PageOffset += 4 * Next;
+    PageOffset += Stride * Next;
   } else {
     ++PageIndex;
     findNextPageWithFixups();

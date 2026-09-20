@@ -26,6 +26,7 @@
 #include "lld/Common/CommonLinkerContext.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Config/llvm-config.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -691,7 +692,9 @@ static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
     // relative to the start of the referent section, and therefore have no
     // need of rebase opcodes.
     if (!(isThreadLocalVariables(isec->getFlags()) && isa<Defined>(sym)))
-      addNonLazyBindingEntries(sym, isec, r.offset, r.addend);
+      addNonLazyBindingEntries(
+          sym, isec, r.offset, r.addend,
+          relocAttrs.hasAttr(RelocAttrBits::AUTH));
   }
 }
 
@@ -1261,12 +1264,20 @@ void Writer::buildFixupChains() {
   TimeTraceScope timeScope("Build fixup chains");
 
   const uint64_t pageSize = target->getPageSize();
-  constexpr uint32_t stride = 4; // for DYLD_CHAINED_PTR_64
+  const bool arm64e = config->arch() == AK_arm64e;
+  const uint32_t stride = arm64e ? 8 : 4;
+  const uint32_t maxNext = arm64e ? 0x7ff : 0xfff;
 
   for (size_t i = 0, count = loc.size(); i < count;) {
     const OutputSegment *oseg = loc[i].isec->parent->parent;
     uint8_t *buf = buffer->getBufferStart() + oseg->fileOff;
     uint64_t pageIdx = loc[i].offset / pageSize;
+
+    if (arm64e && loc[i].offset % stride != 0) {
+      error(loc[i].isec->getSegName() + "," + loc[i].isec->getName() +
+            ": ARM64e chained fixup is not 8-byte aligned");
+      return;
+    }
     ++i;
 
     while (i < count && loc[i].isec->parent->parent == oseg &&
@@ -1287,9 +1298,21 @@ void Writer::buildFixupChains() {
             "fixups are unaligned (offset " + Twine(offset) +
             " is not a multiple of the stride). Re-link with -no_fixup_chains");
 
-      // The "next" field is in the same location for bind and rebase entries.
-      reinterpret_cast<dyld_chained_ptr_64_bind *>(buf + loc[i - 1].offset)
-          ->next = offset / stride;
+      uint64_t next = offset / stride;
+      if (next > maxNext)
+        return fail("fixups are too far apart for the chained pointer format");
+
+      uint8_t *prev = buf + loc[i - 1].offset;
+      if (arm64e) {
+        // All ARM64e USERLAND24 pointer variants place their 11-bit next
+        // field at bits 51..61. Preserve the bind/auth bits above it.
+        uint64_t raw = llvm::support::endian::read64le(prev);
+        constexpr uint64_t nextMask = 0x7ffULL << 51;
+        raw = (raw & ~nextMask) | (next << 51);
+        llvm::support::endian::write64le(prev, raw);
+      } else {
+        reinterpret_cast<dyld_chained_ptr_64_bind *>(prev)->next = next;
+      }
       ++i;
     }
   }

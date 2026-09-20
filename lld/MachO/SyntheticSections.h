@@ -779,13 +779,16 @@ public:
     locations.emplace_back(isec, offset);
   }
   void addBinding(const Symbol *dysym, const InputSection *isec,
-                  uint64_t offset, int64_t addend = 0);
+                  uint64_t offset, int64_t addend = 0,
+                  bool authenticated = false);
 
   void setHasNonWeakDefinition() { hasNonWeakDef = true; }
 
-  // Returns an (ordinal, inline addend) tuple used by dyld_chained_ptr_64_bind.
-  std::pair<uint32_t, uint8_t> getBinding(const Symbol *sym,
-                                          int64_t addend) const;
+  // Returns an (ordinal, inline addend) tuple for the selected chained-pointer
+  // format. Authenticated ARM64e bindings always use an outline addend.
+  std::pair<uint32_t, int64_t>
+  getBinding(const Symbol *sym, int64_t addend,
+             bool authenticated = false) const;
 
   const std::vector<Location> &getLocations() const { return locations; }
 
@@ -822,7 +825,11 @@ private:
 };
 
 void writeChainedRebase(uint8_t *buf, uint64_t targetVA);
+void writeChainedRebase(uint8_t *buf, uint64_t targetVA,
+                        const Relocation &reloc);
 void writeChainedFixup(uint8_t *buf, const Symbol *sym, int64_t addend);
+void writeChainedFixup(uint8_t *buf, const Symbol *sym,
+                       const Relocation &reloc);
 
 struct InStruct {
   const uint8_t *bufferStart = nullptr;
