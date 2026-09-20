@@ -277,7 +277,9 @@ void RebaseSection::finalizeContents() {
     return;
 
   raw_svector_ostream os{contents};
-  os << static_cast<uint8_t>(REBASE_OPCODE_SET_TYPE_IMM | REBASE_TYPE_POINTER);
+  os << static_cast<uint8_t>(
+    static_cast<uint8_t>(REBASE_OPCODE_SET_TYPE_IMM) |
+    static_cast<uint8_t>(REBASE_TYPE_POINTER));
 
   llvm::sort(locations, [](const Location &a, const Location &b) {
     return a.isec->getVA(a.offset) < b.isec->getVA(b.offset);
@@ -790,7 +792,9 @@ void BindingSection::finalizeContents() {
     if (sym->isWeakRef())
       flags |= BIND_SYMBOL_FLAGS_WEAK_IMPORT;
     os << flags << sym->getName() << '\0'
-       << static_cast<uint8_t>(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
+       << static_cast<uint8_t>(
+              static_cast<uint8_t>(BIND_OPCODE_SET_TYPE_IMM) |
+              static_cast<uint8_t>(BIND_TYPE_POINTER));
     int16_t ordinal = ordinalForSymbol(*sym);
     if (ordinal != lastOrdinal) {
       encodeDylibOrdinal(ordinal, os);
@@ -829,7 +833,9 @@ void WeakBindingSection::finalizeContents() {
     std::vector<BindingEntry> &bindings = p.second;
     os << static_cast<uint8_t>(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM)
        << sym->getName() << '\0'
-       << static_cast<uint8_t>(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
+       << static_cast<uint8_t>(
+              static_cast<uint8_t>(BIND_OPCODE_SET_TYPE_IMM) |
+              static_cast<uint8_t>(BIND_TYPE_POINTER));
     std::vector<BindIR> opcodes;
     for (const BindingEntry &b : bindings)
       encodeBinding(b.target.isec->parent,
@@ -850,7 +856,9 @@ void WeakBindingSection::writeTo(uint8_t *buf) const {
 
 StubsSection::StubsSection()
     : SyntheticSection(segment_names::text, section_names::stubs) {
-  flags = S_SYMBOL_STUBS | S_ATTR_SOME_INSTRUCTIONS | S_ATTR_PURE_INSTRUCTIONS;
+  flags = static_cast<uint32_t>(S_SYMBOL_STUBS) |
+          static_cast<uint32_t>(S_ATTR_SOME_INSTRUCTIONS) |
+          static_cast<uint32_t>(S_ATTR_PURE_INSTRUCTIONS);
   // The stubs section comprises machine instructions, which are aligned to
   // 4 bytes on the archs we care about.
   align = 4;
@@ -1002,7 +1010,8 @@ ConcatInputSection *ObjCSelRefsHelper::makeSelRef(StringRef methname) {
   write64le(selrefData, methnameOffset);
   ConcatInputSection *objcSelref =
       makeSyntheticInputSection(segment_names::data, section_names::objcSelrefs,
-                                S_LITERAL_POINTERS | S_ATTR_NO_DEAD_STRIP,
+                                static_cast<uint32_t>(S_LITERAL_POINTERS) |
+                                    static_cast<uint32_t>(S_ATTR_NO_DEAD_STRIP),
                                 ArrayRef<uint8_t>{selrefData, wordSize},
                                 /*align=*/wordSize);
   assert(objcSelref->live);
