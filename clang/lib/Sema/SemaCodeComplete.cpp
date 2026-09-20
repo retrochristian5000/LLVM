@@ -5472,8 +5472,10 @@ AddObjCProperties(const CodeCompletionContext &CCContext,
       AddResultTypeChunk(Context, Policy, M, CCContext.getBaseType(), Builder);
       Builder.AddTypedTextChunk(
           Results.getAllocator().CopyString(Name->getName()));
-      Result R = Result(Builder.TakeString(), M,
-                        CCP_MemberDeclaration + CCD_MethodAsProperty);
+      Result R =
+          Result(Builder.TakeString(), M,
+                 static_cast<unsigned>(CCP_MemberDeclaration) +
+                     static_cast<unsigned>(CCD_MethodAsProperty));
       if (!InOriginalClass)
         setInBaseClass(R);
       Results.MaybeAddResult(R, CurContext);
