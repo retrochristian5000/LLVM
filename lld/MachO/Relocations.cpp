@@ -63,7 +63,7 @@ bool macho::validateSymbolRelocation(const Symbol *sym,
   bool valid = true;
   auto message = [&](const Twine &diagnostic) {
     valid = false;
-    return (isec->getLocation(r.offset) + ": " + relocAttrs.name +
+    return (Twine(isec->getLocation(r.offset)) + ": " + relocAttrs.name +
             " relocation " + diagnostic)
         .str();
   };
