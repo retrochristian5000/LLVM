@@ -619,7 +619,7 @@ static void reportUndefinedSymbol(const Undefined &sym,
                                   bool correctSpelling) {
   std::string message = "undefined symbol";
   if (config->archMultiple)
-    message += (" for arch " + getArchitectureName(config->arch())).str();
+    message += (Twine(" for arch ") + getArchitectureName(config->arch())).str();
   message += ": " + toString(sym);
 
   const size_t maxUndefinedReferences = 3;
