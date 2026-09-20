@@ -79,7 +79,7 @@ void ScriptLexer::setError(const Twine &msg) {
   if (errCount(ctx))
     return;
 
-  std::string s = (getCurrentLocation() + ": " + msg).str();
+  std::string s = (Twine(getCurrentLocation()) + ": " + msg).str();
   if (prevTok.size())
     s += "\n>>> " + getLine().str() + "\n>>> " +
          std::string(getColumnNumber(), ' ') + "^";
