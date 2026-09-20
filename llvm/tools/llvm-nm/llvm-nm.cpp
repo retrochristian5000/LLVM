@@ -292,6 +292,14 @@ static StringRef CurrentFilename;
 
 static char getSymbolNMTypeChar(IRObjectFile &Obj, basic_symbol_iterator I);
 
+// Mach-O's n_type byte combines a symbol kind with independent attribute bits.
+// NListType and flags such as N_EXT are declared as different enum types, so
+// normalize the kind to the byte-sized storage representation before OR'ing.
+static constexpr uint8_t makeMachONType(MachO::NListType Type,
+                                        uint8_t Attributes) {
+  return static_cast<uint8_t>(Type) | Attributes;
+}
+
 // darwinPrintSymbol() is used to print a symbol from a Mach-O file when the
 // the OutputFormat is darwin or we are printing Mach-O symbols in hex.  For
 // the darwin format it produces the same output as darwin's nm(1) -m output
@@ -318,7 +326,7 @@ static void darwinPrintSymbol(SymbolicFile &Obj, const NMSymbol &S,
     if (SymFlags & SymbolRef::SF_Hidden)
       NType |= MachO::N_PEXT;
     if (SymFlags & SymbolRef::SF_Undefined)
-      NType |= MachO::N_EXT | MachO::N_UNDF;
+      NType |= makeMachONType(MachO::N_UNDF, MachO::N_EXT);
     else {
       // Here we have a symbol definition.  So to fake out a section name we
       // use 1, 2 and 3 for section numbers.  See below where they are used to
@@ -1298,13 +1306,13 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO,
         if (WeakDef)
           S.NDesc |= MachO::N_WEAK_DEF;
         if (Abs) {
-          S.NType = MachO::N_EXT | MachO::N_ABS;
+          S.NType = makeMachONType(MachO::N_ABS, MachO::N_EXT);
           S.TypeChar = 'A';
         } else if (ReExport) {
-          S.NType = MachO::N_EXT | MachO::N_INDR;
+          S.NType = makeMachONType(MachO::N_INDR, MachO::N_EXT);
           S.TypeChar = 'I';
         } else {
-          S.NType = MachO::N_EXT | MachO::N_SECT;
+          S.NType = makeMachONType(MachO::N_SECT, MachO::N_EXT);
           if (Resolver) {
             S.Address = Entry.other() + BaseSegmentAddress;
             if ((S.Address & 1) != 0 && !MachO.is64Bit() &&
@@ -1381,7 +1389,7 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO,
           U.Sym = BasicSymbolRef();
           U.SymFlags = SymbolRef::SF_Global | SymbolRef::SF_Undefined;
           U.Section = SectionRef();
-          U.NType = MachO::N_EXT | MachO::N_UNDF;
+          U.NType = makeMachONType(MachO::N_UNDF, MachO::N_EXT);
           U.NSect = 0;
           U.NDesc = 0;
           // The library ordinal for this undefined symbol is in the export
@@ -1440,7 +1448,7 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO,
         // it and not do things like Sym.getFlags() for it.
         B.Sym = BasicSymbolRef();
         B.SymFlags = SymbolRef::SF_Global | SymbolRef::SF_Undefined;
-        B.NType = MachO::N_EXT | MachO::N_UNDF;
+        B.NType = makeMachONType(MachO::N_UNDF, MachO::N_EXT);
         B.NSect = 0;
         B.NDesc = 0;
         MachO::SET_LIBRARY_ORDINAL(B.NDesc, Entry.ordinal());
@@ -1497,7 +1505,7 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO,
         // it and not do things like Sym.getFlags() for it.
         L.Sym = BasicSymbolRef();
         L.SymFlags = SymbolRef::SF_Global | SymbolRef::SF_Undefined;
-        L.NType = MachO::N_EXT | MachO::N_UNDF;
+        L.NType = makeMachONType(MachO::N_UNDF, MachO::N_EXT);
         L.NSect = 0;
         // The REFERENCE_FLAG_UNDEFINED_LAZY is no longer used but here it
         // makes sence since we are creating this from a lazy bind entry.
@@ -1557,7 +1565,7 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO,
         // it and not do things like Sym.getFlags() for it.
         W.Sym = BasicSymbolRef();
         W.SymFlags = SymbolRef::SF_Global | SymbolRef::SF_Undefined;
-        W.NType = MachO::N_EXT | MachO::N_UNDF;
+        W.NType = makeMachONType(MachO::N_UNDF, MachO::N_EXT);
         W.NSect = 0;
         // Odd that we are using N_WEAK_DEF on an undefined symbol but that is
         // what is created in this case by the linker when there are real
