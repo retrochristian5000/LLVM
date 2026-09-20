@@ -2038,7 +2038,7 @@ bool InputFile::shouldExtractForCommon(StringRef name) const {
 std::string elf::replaceThinLTOSuffix(Ctx &ctx, StringRef path) {
   auto [suffix, repl] = ctx.arg.thinLTOObjectSuffixReplace;
   if (path.consume_back(suffix))
-    return (path + repl).str();
+    return (Twine(path) + repl).str();
   return std::string(path);
 }
 
