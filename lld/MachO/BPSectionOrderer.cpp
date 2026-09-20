@@ -14,6 +14,7 @@
 #include "lld/Common/BPSectionOrdererBase.inc"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StableHashing.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/xxhash.h"
 
@@ -36,7 +37,7 @@ struct BPOrdererMachO : lld::BPOrderer<BPOrdererMachO> {
     return macho::isCodeSection(&sec);
   }
   static std::string getSectionName(const Section &sec) {
-    return (sec.getSegName() + sec.getName()).str();
+    return (Twine(sec.getSegName()) + sec.getName()).str();
   }
   static std::string getCompressionSubgroupKey(const Section &sec) {
     return sec.isCold ? ":cold" : "";
