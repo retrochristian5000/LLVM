@@ -148,7 +148,7 @@ StringMap<SmallVector<Symbol *, 0>> &SymbolTable::getDemangledSyms() {
           demangled = demangle(substr);
         } else {
           substr = name.substr(0, pos);
-          demangled = (demangle(substr) + name.substr(pos)).str();
+          demangled = (Twine(demangle(substr)) + name.substr(pos)).str();
         }
         (*demangledSyms)[demangled].push_back(sym);
       }
