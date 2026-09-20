@@ -1504,7 +1504,9 @@ class CGObjCGNUstep2 : public CGObjCGNUstep {
   llvm::Constant *GetConstantSelector(Selector Sel,
                                       const std::string &TypeEncoding) override {
     std::string MangledTypes = GetSymbolNameForTypeEncoding(TypeEncoding);
-    auto SelVarName = (llvm::Twine(".objc_selector_") + Sel.getAsString() + "_" + MangledTypes)
+    auto SelVarName =
+        (llvm::Twine(".objc_selector_") + Sel.getAsString() + "_" +
+         MangledTypes)
             .str();
     if (auto *GV = TheModule.getNamedGlobal(SelVarName))
       return GV;
