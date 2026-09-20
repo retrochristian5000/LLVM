@@ -122,7 +122,7 @@ std::string InputSection::getLocation(uint64_t off) const {
   // First, try to find a symbol that's near the offset. Use it as a reference
   // point.
   if (auto *sym = getContainingSymbol(off))
-    return (toString(getFile()) + ":(symbol " + toString(*sym) + "+0x" +
+    return (Twine(toString(getFile())) + ":(symbol " + toString(*sym) + "+0x" +
             Twine::utohexstr(off - sym->value) + ")")
         .str();
 
@@ -134,7 +134,7 @@ std::string InputSection::getLocation(uint64_t off) const {
     }
   }
 
-  return (toString(getFile()) + ":(" + getName() + "+0x" +
+  return (Twine(toString(getFile())) + ":(" + getName() + "+0x" +
           Twine::utohexstr(off) + ")")
       .str();
 }
@@ -160,7 +160,7 @@ std::string InputSection::getSourceLocation(uint64_t off) const {
     std::string lineStr = (":" + Twine(line)).str();
     if (filename == path)
       return filename + lineStr;
-    return (filename + lineStr + " (" + path + lineStr + ")").str();
+    return (Twine(filename) + lineStr + " (" + path + lineStr + ")").str();
   };
 
   // First, look up a function for a given offset.
@@ -418,5 +418,5 @@ bool macho::isGccExceptTabSection(const InputSection *isec) {
 }
 
 std::string lld::toString(const InputSection *isec) {
-  return (toString(isec->getFile()) + ":(" + isec->getName() + ")").str();
+  return (Twine(toString(isec->getFile())) + ":(" + isec->getName() + ")").str();
 }
