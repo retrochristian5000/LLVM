@@ -731,8 +731,9 @@ static void encodeDylibOrdinal(int16_t ordinal, raw_svector_ostream &os) {
 
 static void encodeWeakOverride(const Defined *defined,
                                raw_svector_ostream &os) {
-  os << static_cast<uint8_t>(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM |
-                             BIND_SYMBOL_FLAGS_NON_WEAK_DEFINITION)
+  os << static_cast<uint8_t>(
+            static_cast<uint8_t>(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM) |
+            static_cast<uint8_t>(BIND_SYMBOL_FLAGS_NON_WEAK_DEFINITION))
      << defined->getName() << '\0';
 }
 
