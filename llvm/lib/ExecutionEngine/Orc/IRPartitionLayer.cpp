@@ -56,7 +56,9 @@ static ThreadSafeModule extractSubModule(ThreadSafeModule &TSM,
 
   auto NewTSM = cloneToNewContext(TSM, ShouldExtract, DeleteExtractedDefs);
   NewTSM.withModuleDo([&](Module &M) {
-    M.setModuleIdentifier((M.getModuleIdentifier() + Suffix).str());
+    std::string ModuleIdentifier = M.getModuleIdentifier();
+    ModuleIdentifier.append(Suffix.data(), Suffix.size());
+    M.setModuleIdentifier(ModuleIdentifier);
   });
 
   return NewTSM;
