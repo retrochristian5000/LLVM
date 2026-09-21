@@ -2104,11 +2104,11 @@ void Generic_GCC::GCCInstallationDetector::init(
     if (TargetTriple.getEnvironment() == llvm::Triple::GNUX32)
       OSEnv = "linux-gnu";
     TripleNoVendor =
-        (Twine(TargetTriple.getArchName()) + '-' + OSEnv).str();
+        (Twine(TargetTriple.getArchName()) + "-" + OSEnv).str();
     CandidateTripleAliases.push_back(TripleNoVendor);
     if (BiarchVariantTriple.getArch() != llvm::Triple::UnknownArch) {
       BiarchTripleNoVendor =
-          (Twine(BiarchVariantTriple.getArchName()) + '-' + OSEnv).str();
+          (Twine(BiarchVariantTriple.getArchName()) + "-" + OSEnv).str();
       CandidateBiarchTripleAliases.push_back(BiarchTripleNoVendor);
     }
   }
