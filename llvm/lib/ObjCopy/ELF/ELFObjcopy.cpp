@@ -354,10 +354,11 @@ static Error updateAndRemoveSymbols(const CommonConfig &Config,
       if (StringRef(Sym.Name).starts_with(Config.SymbolsPrefixRemove))
         Sym.Name = Sym.Name.substr(Config.SymbolsPrefixRemove.size());
 
-    if (!Config.SymbolsPrefix.empty() && Sym.Type != STT_SECTION)
+    if (!Config.SymbolsPrefix.empty() && Sym.Type != STT_SECTION) {
       std::string NewName = Config.SymbolsPrefix.str();
       NewName += Sym.Name;
       Sym.Name = std::move(NewName);
+    }
   });
 
   // The purpose of this loop is to mark symbols referenced by sections
@@ -991,10 +992,11 @@ static Error handleArgs(const CommonConfig &Config, const ELFConfig &ELFConfig,
     // Rename relocation sections according to their target sections.
     for (RelocationSectionBase *RelocSec : RelocSections) {
       auto Iter = RenamedSections.find(RelocSec->getSection());
-      if (Iter != RenamedSections.end())
+      if (Iter != RenamedSections.end()) {
         std::string NewName = RelocSec->getNamePrefix().str();
         NewName += (*Iter)->Name;
         RelocSec->Name = std::move(NewName);
+      }
     }
   }
 
@@ -1023,16 +1025,17 @@ static Error handleArgs(const CommonConfig &Config, const ELFConfig &ELFConfig,
           // don't add Config.AllocSectionsPrefix because we've already added
           // the prefix to TargetSec->Name. Otherwise, if the relocation
           // section comes *before* the target section, we add the prefix.
-          if (PrefixedSections.count(TargetSec))
+          if (PrefixedSections.count(TargetSec)) {
             std::string NewName = RelocSec->getNamePrefix().str();
             NewName += TargetSec->Name;
             Sec.Name = std::move(NewName);
-          else
+          } else {
             std::string NewName = RelocSec->getNamePrefix().str();
             NewName.append(Config.AllocSectionsPrefix.data(),
                            Config.AllocSectionsPrefix.size());
             NewName += TargetSec->Name;
             Sec.Name = std::move(NewName);
+          }
         }
       }
     }
