@@ -39,8 +39,10 @@ static cl::opt<bool>
             cl::desc("Print only the CFG without blocks body"));
 
 static void writeMCFGToDotFile(MachineFunction &MF) {
-  std::string Filename =
-      (MCFGDotFilenamePrefix + "." + MF.getName() + ".dot").str();
+  std::string Filename = MCFGDotFilenamePrefix.getValue();
+  Filename += '.';
+  Filename.append(MF.getName().data(), MF.getName().size());
+  Filename += ".dot";
   errs() << "Writing '" << Filename << "'...";
 
   std::error_code EC;
