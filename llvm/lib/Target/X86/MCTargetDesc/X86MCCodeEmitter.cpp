@@ -569,7 +569,8 @@ void X86MCCodeEmitter::emitImmediate(const MCOperand &DispOp, SMLoc Loc,
       assert(ImmOffset == 0);
 
       if (Size == 8) {
-        FixupKind = FirstLiteralRelocationKind + ELF::R_X86_64_GOTPC64;
+        FixupKind = static_cast<unsigned>(FirstLiteralRelocationKind) +
+                    static_cast<unsigned>(ELF::R_X86_64_GOTPC64);
       } else {
         assert(Size == 4);
         FixupKind = X86::reloc_global_offset_table;
