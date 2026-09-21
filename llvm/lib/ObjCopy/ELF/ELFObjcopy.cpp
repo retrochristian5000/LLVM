@@ -355,7 +355,9 @@ static Error updateAndRemoveSymbols(const CommonConfig &Config,
         Sym.Name = Sym.Name.substr(Config.SymbolsPrefixRemove.size());
 
     if (!Config.SymbolsPrefix.empty() && Sym.Type != STT_SECTION)
-      Sym.Name = (Config.SymbolsPrefix + Sym.Name).str();
+      std::string NewName = Config.SymbolsPrefix.str();
+      NewName += Sym.Name;
+      Sym.Name = std::move(NewName);
   });
 
   // The purpose of this loop is to mark symbols referenced by sections
@@ -990,7 +992,9 @@ static Error handleArgs(const CommonConfig &Config, const ELFConfig &ELFConfig,
     for (RelocationSectionBase *RelocSec : RelocSections) {
       auto Iter = RenamedSections.find(RelocSec->getSection());
       if (Iter != RenamedSections.end())
-        RelocSec->Name = (RelocSec->getNamePrefix() + (*Iter)->Name).str();
+        std::string NewName = RelocSec->getNamePrefix().str();
+        NewName += (*Iter)->Name;
+        RelocSec->Name = std::move(NewName);
     }
   }
 
@@ -1001,7 +1005,9 @@ static Error handleArgs(const CommonConfig &Config, const ELFConfig &ELFConfig,
     DenseSet<SectionBase *> PrefixedSections;
     for (SectionBase &Sec : Obj.sections()) {
       if (Sec.Flags & SHF_ALLOC) {
-        Sec.Name = (Config.AllocSectionsPrefix + Sec.Name).str();
+        std::string NewName = Config.AllocSectionsPrefix.str();
+        NewName += Sec.Name;
+        Sec.Name = std::move(NewName);
         PrefixedSections.insert(&Sec);
       } else if (auto *RelocSec = dyn_cast<RelocationSectionBase>(&Sec)) {
         // Rename relocation sections associated to the allocated sections.
@@ -1018,11 +1024,15 @@ static Error handleArgs(const CommonConfig &Config, const ELFConfig &ELFConfig,
           // the prefix to TargetSec->Name. Otherwise, if the relocation
           // section comes *before* the target section, we add the prefix.
           if (PrefixedSections.count(TargetSec))
-            Sec.Name = (RelocSec->getNamePrefix() + TargetSec->Name).str();
+            std::string NewName = RelocSec->getNamePrefix().str();
+            NewName += TargetSec->Name;
+            Sec.Name = std::move(NewName);
           else
-            Sec.Name = (RelocSec->getNamePrefix() + Config.AllocSectionsPrefix +
-                        TargetSec->Name)
-                           .str();
+            std::string NewName = RelocSec->getNamePrefix().str();
+            NewName.append(Config.AllocSectionsPrefix.data(),
+                           Config.AllocSectionsPrefix.size());
+            NewName += TargetSec->Name;
+            Sec.Name = std::move(NewName);
         }
       }
     }
