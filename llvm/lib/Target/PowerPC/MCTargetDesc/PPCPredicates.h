@@ -80,7 +80,8 @@ namespace PPC {
 
   /// Return the hint bits of the predicate.
   inline unsigned getPredicateHint(Predicate Opcode) {
-    return (unsigned)(Opcode & BR_HINT_MASK);
+    return static_cast<unsigned>(Opcode) &
+           static_cast<unsigned>(BR_HINT_MASK);
   }
 
   /// Return predicate consisting of specified condition and hint bits.
