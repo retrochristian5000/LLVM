@@ -3150,7 +3150,8 @@ void Generic_GCC::AddMultilibPaths(const Driver &D,
     if (const auto &PathsCallback =
             GCCInstallation.getMultilibs().filePathsCallback())
       for (const auto &Path : PathsCallback(GCCMultilib))
-        addPathIfExists(D, GCCInstallation.getInstallPath() + Path, Paths);
+        addPathIfExists(D, Twine(GCCInstallation.getInstallPath()) + Path,
+                        Paths);
 
     // Add lib/gcc/$triple/$version, with an optional /multilib suffix.
     addPathIfExists(
@@ -3228,8 +3229,8 @@ void Generic_GCC::AddMultilibIncludeArgs(const ArgList &DriverArgs,
   const auto &Callback = GCCInstallation.getMultilibs().includeDirsCallback();
   if (Callback) {
     for (const auto &Path : Callback(GCCInstallation.getMultilib()))
-      addExternCSystemIncludeIfExists(DriverArgs, CC1Args,
-                                      GCCInstallation.getInstallPath() + Path);
+      addExternCSystemIncludeIfExists(
+          DriverArgs, CC1Args, Twine(GCCInstallation.getInstallPath()) + Path);
   }
 }
 
