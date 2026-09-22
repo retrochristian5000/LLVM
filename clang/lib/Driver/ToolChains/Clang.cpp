@@ -5685,7 +5685,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     case llvm::Triple::aarch64:
     case llvm::Triple::aarch64_32:
     case llvm::Triple::aarch64_be:
-      RenderAArch64ABI(Triple, Args, CmdArgs);
+      RenderAArch64ABI(D, Triple, Args, CmdArgs);
       break;
     }
 
