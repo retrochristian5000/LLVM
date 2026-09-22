@@ -263,7 +263,7 @@ void aarch64::getAArch64TargetFeatures(const Driver &D,
                                        const ArgList &Args,
                                        std::vector<StringRef> &Features,
                                        bool ForAS, bool ForMultilib) {
-  Arg *A;
+  Arg *A = nullptr;
   bool success = true;
   std::optional<std::string> InvalidArg;
   llvm::StringRef WaMArch;
