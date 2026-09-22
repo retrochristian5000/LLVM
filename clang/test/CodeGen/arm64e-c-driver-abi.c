@@ -1,5 +1,5 @@
 // RUN: %clang -target arm64e-apple-macos -S -emit-llvm \
- // RUN:   -Xclang -disable-llvm-passes %s -o - | FileCheck %s
+// RUN:   -Xclang -disable-llvm-passes %s -o - | FileCheck %s
 
 // Exercise the driver defaults and C CodeGen together.  The standard arm64e
 // function-pointer ABI uses IA with discriminator zero.
