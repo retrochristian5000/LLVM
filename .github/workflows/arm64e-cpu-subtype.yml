@@ -6,6 +6,7 @@ on:
       - 'clang/lib/Driver/ToolChains/Arch/AArch64.cpp'
       - 'clang/lib/Driver/ToolChains/Clang.cpp'
       - 'clang/test/Driver/arch-arm64e.c'
+      - 'clang/test/CodeGen/arm64e-c-driver-abi.c'
       - 'lld/MachO/Arch/ARM64.cpp'
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
@@ -38,4 +39,5 @@ jobs:
         run: |
           build-arm64e-subtype/bin/llvm-lit -sv \
             clang/test/Driver/arch-arm64e.c \
+            clang/test/CodeGen/arm64e-c-driver-abi.c \
             lld/test/MachO/arm64e-cpu-subtype.s
