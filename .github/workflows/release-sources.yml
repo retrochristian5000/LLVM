@@ -93,15 +93,25 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.inputs.outputs.ref }}
           fetch-tags: true
+      - name: Checkout trusted release scripts
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: .trusted-workflow
+          sparse-checkout: |
+            llvm/utils/git/requirements.txt
+            llvm/utils/release/export.sh
+          sparse-checkout-cone-mode: false
       - name: Install Dependencies
         run: |
-          pip install --require-hashes -r ./llvm/utils/git/requirements.txt
+          pip install --require-hashes -r ./.trusted-workflow/llvm/utils/git/requirements.txt
 
       - name: Create Tarballs
         env:
           EXPORT_ARGS: ${{ needs.inputs.outputs.export-args }}
         run: |
-          ./llvm/utils/release/export.sh $EXPORT_ARGS
+          ./.trusted-workflow/llvm/utils/release/export.sh $EXPORT_ARGS
 
       - name: Generate sha256 digest for sources
         id: digest
