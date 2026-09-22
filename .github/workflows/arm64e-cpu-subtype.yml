@@ -7,6 +7,9 @@ on:
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
 
+permissions:
+  contents: read
+
 concurrency:
   group: arm64e-cpu-subtype
   cancel-in-progress: true
