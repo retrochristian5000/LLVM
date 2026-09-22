@@ -88,3 +88,13 @@
 // GOOD-ARCH-NOT: error:
 // GOOD-A18: "-cc1"{{.*}} "-target-cpu" "apple-m4"
 // GOOD-A18-NOT: error:
+
+// arm64e must use the Darwin procedure-call ABI.  Mixing the arm64e ptrauth
+// defaults with AAPCS would create incompatible C calling conventions.
+//
+// RUN: not %clang -target arm64e-apple-ios -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
+// RUN: %clang -target arm64e-apple-ios -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+//
+// BAD-ABI: error: unsupported argument 'aapcs' to option '-mabi=' for target '{{.*arm64e.*}}'
+// GOOD-ABI: "-cc1"{{.*}} "-target-abi" "darwinpcs"
+// GOOD-ABI-NOT: error:
