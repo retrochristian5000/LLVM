@@ -1,8 +1,11 @@
-name: ARM64e CPU subtype
+name: ARM64e ABI
 
 on:
   push:
     paths:
+      - 'clang/lib/Driver/ToolChains/Arch/AArch64.cpp'
+      - 'clang/lib/Driver/ToolChains/Clang.cpp'
+      - 'clang/test/Driver/arch-arm64e.c'
       - 'lld/MachO/Arch/ARM64.cpp'
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
@@ -18,18 +21,21 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
       - name: Configure focused LLD build
         run: |
           cmake -S llvm -B build-arm64e-subtype -G Ninja \
-            -DLLVM_ENABLE_PROJECTS=lld \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD=AArch64 \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_INCLUDE_TESTS=ON
       - name: Build focused tools
-        run: ninja -C build-arm64e-subtype lld llvm-mc llvm-objdump FileCheck
-      - name: Run ARM64e CPU subtype regression
-        run: build-arm64e-subtype/bin/llvm-lit -sv lld/test/MachO/arm64e-cpu-subtype.s
+        run: ninja -C build-arm64e-subtype clang lld llvm-mc llvm-objdump FileCheck
+      - name: Run ARM64e ABI regressions
+        run: |
+          build-arm64e-subtype/bin/llvm-lit -sv \
+            clang/test/Driver/arch-arm64e.c \
+            lld/test/MachO/arm64e-cpu-subtype.s
