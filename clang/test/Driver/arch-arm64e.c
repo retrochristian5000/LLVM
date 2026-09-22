@@ -73,3 +73,18 @@
 // RUN: %clang -target arm64e-apple-ios -mcpu=apple-a13 -c %s -### 2>&1 | FileCheck %s --check-prefix APPLE-A13
 // APPLE-A12: "-cc1"{{.*}} "-target-cpu" "apple-a12"
 // APPLE-A13: "-cc1"{{.*}} "-target-cpu" "apple-a13"
+
+// The arm64e ABI requires Armv8.3-A pointer authentication.  Explicit target
+// selectors must not weaken the instruction set below the ABI floor.
+//
+// RUN: not %clang -target arm64e-apple-ios -mcpu=apple-a7 -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-CPU
+// RUN: not %clang -target arm64e-apple-ios -march=armv8-a -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ARCH
+// RUN: %clang -target arm64e-apple-ios -march=armv8.3-a -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ARCH
+// RUN: %clang -target arm64e-apple-ios -mcpu=apple-a18 -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-A18
+//
+// BAD-CPU: error: unsupported argument 'apple-a7' to option '-mcpu='
+// BAD-ARCH: error: unsupported argument 'armv8-a' to option '-march='
+// GOOD-ARCH: "-cc1"
+// GOOD-ARCH-NOT: error:
+// GOOD-A18: "-cc1"{{.*}} "-target-cpu" "apple-m4"
+// GOOD-A18-NOT: error:
