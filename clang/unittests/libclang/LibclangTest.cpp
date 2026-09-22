@@ -33,6 +33,25 @@ TEST(libclang, clang_parseTranslationUnit2_InvalidArgs) {
                                         0, 0, nullptr));
 }
 
+TEST(libclang, clang_parseTranslationUnit2FullArgv_FailedInvocationUnsavedFile) {
+  CXIndex Index = clang_createIndex(/*excludeDeclarationsFromPCH=*/0,
+                                    /*displayDiagnostics=*/0);
+  ASSERT_NE(nullptr, Index);
+
+  const char *Args[] = {"clang", "-this-is-not-a-valid-clang-option"};
+  const char Contents[] = "int value;\n";
+  CXUnsavedFile Unsaved = {"input.c", Contents, sizeof(Contents) - 1};
+  CXTranslationUnit TU = reinterpret_cast<CXTranslationUnit>(1);
+
+  EXPECT_NE(CXError_Success,
+            clang_parseTranslationUnit2FullArgv(
+                Index, "input.c", Args, std::size(Args), &Unsaved, 1,
+                CXTranslationUnit_None, &TU));
+  EXPECT_EQ(nullptr, TU);
+
+  clang_disposeIndex(Index);
+}
+
 TEST(libclang, clang_createTranslationUnit_InvalidArgs) {
   EXPECT_EQ(nullptr, clang_createTranslationUnit(nullptr, nullptr));
 }

@@ -4333,15 +4333,23 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
 
   std::unique_ptr<std::vector<ASTUnit::RemappedFile>> RemappedFiles(
       new std::vector<ASTUnit::RemappedFile>());
+  std::vector<std::unique_ptr<llvm::MemoryBuffer>> OwnedRemappedFileBuffers;
+  OwnedRemappedFileBuffers.reserve(unsaved_files.size());
 
   // Recover resources if we crash before exiting this function.
   llvm::CrashRecoveryContextCleanupRegistrar<std::vector<ASTUnit::RemappedFile>>
       RemappedCleanup(RemappedFiles.get());
 
+  /*
+   * Keep ownership until CreateASTUnitFromCommandLine() has created an ASTUnit.
+   * Driver argument parsing happens before the ASTUnit adopts RemappedFiles, so
+   * an invalid command line can otherwise leak all unsaved-file buffers.
+   */
   for (auto &UF : unsaved_files) {
     std::unique_ptr<llvm::MemoryBuffer> MB =
         llvm::MemoryBuffer::getMemBufferCopy(getContents(UF), UF.Filename);
-    RemappedFiles->push_back(std::make_pair(UF.Filename, MB.release()));
+    RemappedFiles->push_back(std::make_pair(UF.Filename, MB.get()));
+    OwnedRemappedFileBuffers.push_back(std::move(MB));
   }
 
   std::unique_ptr<std::vector<const char *>> Args(
@@ -4410,6 +4418,15 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
       /*UserFilesAreVolatile=*/true, ForSerialization, RetainExcludedCB,
       CXXIdx->getPCHContainerOperations()->getRawReader().getFormats().front(),
       &ErrUnit);
+
+  if (Unit || ErrUnit) {
+    /*
+     * ASTUnit now owns the raw pointers stored in RemappedFiles and releases
+     * them with its PreprocessorOptions.
+     */
+    for (auto &Buffer : OwnedRemappedFileBuffers)
+      Buffer.release();
+  }
 
   // Early failures in LoadFromCommandLine may return with ErrUnit unset.
   if (!Unit && !ErrUnit)
