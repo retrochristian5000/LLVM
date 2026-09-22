@@ -6,16 +6,18 @@
 name: Diff test-suite codegen
 
 on:
-  issue_comment:
+  pull_request:
     types:
-      - created
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
 
 jobs:
   permission-check:
-    if: github.event.issue.pull_request && startswith(github.event.comment.body, '/test-suite')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     environment:
       name: main-branch-only
