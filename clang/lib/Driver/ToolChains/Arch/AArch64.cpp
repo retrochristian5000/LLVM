@@ -340,12 +340,17 @@ void aarch64::getAArch64TargetFeatures(const Driver &D,
 
     if (!HasArm64eArch || !HasPAuth) {
       auto Diag = D.Diag(diag::err_drv_unsupported_option_argument);
-      if (!WaMArch.empty())
+      if (!WaMArch.empty()) {
         Diag << "-march=" << WaMArch;
-      else if (A)
-        Diag << A->getSpelling() << A->getValue();
-      else
-        Diag << "-target" << Triple.getTriple();
+      } else if (const Arg *MArch =
+                     Args.getLastArg(options::OPT_march_EQ)) {
+        Diag << MArch->getSpelling() << MArch->getValue();
+      } else if (const Arg *MCPU =
+                     Args.getLastArg(options::OPT_mcpu_EQ)) {
+        Diag << MCPU->getSpelling() << MCPU->getValue();
+      } else {
+        llvm_unreachable("default arm64e target must satisfy the ABI");
+      }
       success = false;
     }
   }
