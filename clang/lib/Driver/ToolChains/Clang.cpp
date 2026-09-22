@@ -1606,12 +1606,23 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
 }
 
 namespace {
-void RenderAArch64ABI(const llvm::Triple &Triple, const ArgList &Args,
-                      ArgStringList &CmdArgs) {
+void RenderAArch64ABI(const Driver &D, const llvm::Triple &Triple,
+                      const ArgList &Args, ArgStringList &CmdArgs) {
   const char *ABIName = nullptr;
-  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ))
-    ABIName = A->getValue();
-  else if (Triple.isOSDarwin())
+  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ)) {
+    /*
+     * arm64e names the Apple pointer-authenticated ABI, so pairing it with a
+     * different procedure-call standard produces object code that is neither
+     * standard arm64e nor interoperable with the Darwin runtime.
+     */
+    if (Triple.isArm64e() && StringRef(A->getValue()) != "darwinpcs") {
+      D.Diag(diag::err_drv_unsupported_option_argument_for_target)
+          << A->getSpelling() << A->getValue() << Triple.getTriple();
+      ABIName = "darwinpcs";
+    } else {
+      ABIName = A->getValue();
+    }
+  } else if (Triple.isOSDarwin())
     ABIName = "darwinpcs";
   // TODO: we probably want to have some target hook here.
   else if (Triple.isOSLinux() &&
@@ -1638,7 +1649,7 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
                     options::OPT_mno_implicit_float, true))
     CmdArgs.push_back("-no-implicit-float");
 
-  RenderAArch64ABI(Triple, Args, CmdArgs);
+  RenderAArch64ABI(getToolChain().getDriver(), Triple, Args, CmdArgs);
 
   // Forward the -mglobal-merge option for explicit control over the pass.
   if (Arg *A = Args.getLastArg(options::OPT_mglobal_merge,
