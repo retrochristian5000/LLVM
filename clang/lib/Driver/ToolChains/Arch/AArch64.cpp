@@ -320,6 +320,36 @@ void aarch64::getAArch64TargetFeatures(const Driver &D,
       Diag << A->getSpelling() << *InvalidArg;
   }
 
+  /*
+   * arm64e is an ABI, not merely an architecture spelling.  Its Darwin
+   * userspace ABI relies on Armv8.3 pointer authentication, so accepting an
+   * explicit pre-v8.3 CPU/architecture (or an explicit nopauth modifier)
+   * creates a contradictory cc1 invocation: Clang enables the arm64e ptrauth
+   * language ABI while the backend is told that the required instructions do
+   * not exist.
+   *
+   * Keep explicit -mcpu/-march useful for tuning newer Apple CPUs, but reject
+   * selections that cannot implement the ABI.
+   */
+  if (success && Triple.isArm64e()) {
+    const bool HasArm64eArch =
+        Extensions.BaseArch &&
+        Extensions.BaseArch->is_superset(llvm::AArch64::ARMV8_3A);
+    const bool HasPAuth =
+        Extensions.Enabled.test(llvm::AArch64::AEK_PAUTH);
+
+    if (!HasArm64eArch || !HasPAuth) {
+      auto Diag = D.Diag(diag::err_drv_unsupported_option_argument);
+      if (!WaMArch.empty())
+        Diag << "-march=" << WaMArch;
+      else if (A)
+        Diag << A->getSpelling() << A->getValue();
+      else
+        Diag << "-target" << Triple.getTriple();
+      success = false;
+    }
+  }
+
   // -mgeneral-regs-only disables all floating-point features.
   if (Args.getLastArg(options::OPT_mgeneral_regs_only)) {
     Extensions.disable(llvm::AArch64::AEK_FP);
