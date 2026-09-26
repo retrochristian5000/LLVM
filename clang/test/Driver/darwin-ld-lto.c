@@ -10,11 +10,15 @@
 // LINK_LTOLIB_PATH: {{ld(.exe)?"}}
 // LINK_LTOLIB_PATH: "-lto_library"
 
-// Also pass -lto_library even if the file doesn't exist; if it's needed at
-// link time, ld will complain instead.
+// Do not advertise a libLTO path that does not exist. Standalone LLVM
+// installations may intentionally omit libLTO.dylib, and passing the missing
+// path makes ld64 warn on every link.
 // RUN: %clang -fuse-ld= --target=x86_64-apple-darwin10 -### %s \
 // RUN:   -ccc-install-dir %S/dummytestdir -mlinker-version=133 2> %t.log
-// RUN: FileCheck -check-prefix=LINK_LTOLIB_PATH %s -input-file %t.log
+// RUN: FileCheck -check-prefix=NO_LINK_LTOLIB_PATH %s -input-file %t.log
+//
+// NO_LINK_LTOLIB_PATH: {{ld(.exe)?"}}
+// NO_LINK_LTOLIB_PATH-NOT: "-lto_library"
 
 
 // Check that -object_lto_path is passed correctly to ld64

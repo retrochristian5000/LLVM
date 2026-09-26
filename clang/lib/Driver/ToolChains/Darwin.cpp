@@ -272,23 +272,22 @@ void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
     }
   }
 
-  // Use -lto_library option to specify the libLTO.dylib path. Try to find
-  // it in clang installed libraries. ld64 will only look at this argument
-  // when it actually uses LTO, so libLTO.dylib only needs to exist at link
-  // time if ld64 decides that it needs to use LTO.
-  // Since this is passed unconditionally, ld64 will never look for libLTO.dylib
-  // next to it. That's ok since ld64 using a libLTO.dylib not matching the
-  // clang version won't work anyways.
-  // lld is built at the same revision as clang and statically links in
-  // LLVM libraries, so it doesn't need libLTO.dylib.
+  // Use -lto_library to point ld64 at the matching libLTO.dylib when
+  // the Clang installation actually provides one. Standalone LLVM installs
+  // may omit libLTO.dylib; advertising a missing path makes ld64 warn on every
+  // link, even when no LTO input is present. In that case leave ld64 to its
+  // normal discovery. lld is built at the same revision as Clang and links the
+  // LLVM LTO implementation directly, so it never needs this option.
   if (Version >= VersionTuple(133) && !LinkerIsLLD) {
     // Search for libLTO in <InstalledDir>/../lib/libLTO.dylib
     StringRef P = llvm::sys::path::parent_path(D.Dir);
     SmallString<128> LibLTOPath(P);
     llvm::sys::path::append(LibLTOPath, "lib");
     llvm::sys::path::append(LibLTOPath, "libLTO.dylib");
-    CmdArgs.push_back("-lto_library");
-    CmdArgs.push_back(C.getArgs().MakeArgString(LibLTOPath));
+    if (getToolChain().getVFS().exists(LibLTOPath)) {
+      CmdArgs.push_back("-lto_library");
+      CmdArgs.push_back(C.getArgs().MakeArgString(LibLTOPath));
+    }
   }
 
   // ld64 version 262 and above runs the deduplicate pass by default.
