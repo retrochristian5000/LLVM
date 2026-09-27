@@ -94,7 +94,7 @@ jobs:
             repo: ${{ github.repository }}
     steps:
       - name: Check for cached baseline ABI
-        if: ${{ matrix.name == 'build-baseline' }}
+        if: ${{ matrix.name == 'build-baseline' && github.event_name == 'push' }}
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
         with:
