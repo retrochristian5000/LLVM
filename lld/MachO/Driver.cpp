@@ -1299,9 +1299,10 @@ static bool shouldEmitChainedFixups(const InputArgList &args) {
     return false;
   }
 
-  if (!is_contained({AK_x86_64, AK_x86_64h, AK_arm64}, config->arch())) {
+  if (!is_contained({AK_x86_64, AK_x86_64h, AK_arm64, AK_arm64e},
+                    config->arch())) {
     if (requested)
-      error("-fixup_chains is only supported on x86_64 and arm64 targets");
+      error("-fixup_chains is only supported on x86_64, arm64, and arm64e targets");
 
     return false;
   }
