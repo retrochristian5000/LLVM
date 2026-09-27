@@ -79,7 +79,7 @@ jobs:
 
   release-sources:
     name: Package Release Sources
-    if: github.repository_owner == 'llvm'
+    if: github.repository_owner == 'llvm' && startsWith(needs.inputs.outputs.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
