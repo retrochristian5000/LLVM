@@ -363,6 +363,9 @@
 #  define _LIBCPP_RELEASE_SHARED_CAPABILITY
 #endif
 
+// Thread-safety analysis only. requires_capability does not participate in
+// C++ mangling or code generation, so it is valid to retain for Microsoft ABI
+// targets and keeps -Wthread-safety useful on Windows.
 #if __has_attribute(__requires_capability__)
 #  define _LIBCPP_REQUIRES_CAPABILITY(...) __attribute__((__requires_capability__(__VA_ARGS__)))
 #else
