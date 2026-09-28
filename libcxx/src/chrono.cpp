@@ -45,6 +45,12 @@
 #  define WIN32_LEAN_AND_MEAN
 #  define VC_EXTRA_LEAN
 #  include <windows.h>
+#  ifndef _WIN32_WINNT
+// libc++ supports Windows 7 and newer. Preserve an explicitly selected
+// Windows target, but provide the supported minimum when the SDK leaves
+// _WIN32_WINNT undefined.
+#    define _WIN32_WINNT _WIN32_WINNT_WIN7
+#  endif
 #  if _WIN32_WINNT >= _WIN32_WINNT_WIN8
 #    include <winapifamily.h>
 #  endif
