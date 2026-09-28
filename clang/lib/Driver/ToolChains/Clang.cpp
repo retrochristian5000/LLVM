@@ -7642,7 +7642,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(MSAnonOpt);
 
   if (Triple.isWindowsMSVCEnvironment() && !D.IsCLMode() &&
-      Args.hasArg(options::OPT_fms_runtime_lib_EQ))
+      Args.hasArg(options::OPT_fms_runtime_lib_EQ,
+                  options::OPT_fms_omit_default_lib))
     ProcessVSRuntimeLibrary(getToolChain(), Args, CmdArgs);
 
   // Handle -fgcc-version, if present.
