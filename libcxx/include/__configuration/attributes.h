@@ -239,7 +239,9 @@
 #define _LIBCPP_NOALIAS __attribute__((__malloc__))
 #define _LIBCPP_NODEBUG [[__gnu__::__nodebug__]]
 #define _LIBCPP_NO_SANITIZE(...) __attribute__((__no_sanitize__(__VA_ARGS__)))
-#define _LIBCPP_INIT_PRIORITY_MAX __attribute__((__init_priority__(100)))
+// Clang versions used as Water bootstrap compilers reject priorities below 101.
+// Keep the implementation priority at the oldest portable reserved boundary.
+#define _LIBCPP_INIT_PRIORITY_MAX __attribute__((__init_priority__(101)))
 #define _LIBCPP_ATTRIBUTE_FORMAT(archetype, format_string_index, first_format_arg_index)                               \
   __attribute__((__format__(archetype, format_string_index, first_format_arg_index)))
 
