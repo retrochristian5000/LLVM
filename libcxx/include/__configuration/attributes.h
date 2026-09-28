@@ -206,7 +206,10 @@
 // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
 //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
 //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
-#ifndef _LIBCPP_NO_ABI_TAG
+// abi_tag is part of the Itanium mangling scheme. The Microsoft mangler
+// doesn't encode it, so don't attach an ABI-significant attribute that cannot
+// participate in the selected ABI.
+#if !defined(_LIBCPP_NO_ABI_TAG) && !defined(_LIBCPP_ABI_MICROSOFT)
 #  define _LIBCPP_HIDE_FROM_ABI                                                                                        \
     _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                         \
     __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
@@ -222,7 +225,11 @@
 // (and hence their vtable symbol) changes too. Note that the vtable and RTTI are not marked with
 // [[gnu::visibility("hidden")]], since the vtable and RTTI should still be deduplicated across dylibs with the same
 // instatiations.
-#define _LIBCPP_HIDE_STRUCT_FROM_ABI [[__gnu__::__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))]]
+#if !defined(_LIBCPP_NO_ABI_TAG) && !defined(_LIBCPP_ABI_MICROSOFT)
+#  define _LIBCPP_HIDE_STRUCT_FROM_ABI [[__gnu__::__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))]]
+#else
+#  define _LIBCPP_HIDE_STRUCT_FROM_ABI
+#endif
 
 // Optional attributes
 // -------------------
