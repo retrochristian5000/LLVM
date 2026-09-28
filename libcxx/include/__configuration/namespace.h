@@ -49,16 +49,22 @@
 #if defined(_LIBCPP_OBJECT_FORMAT_COFF) || defined(_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS)
 #  define _LIBCPP_EXPLICIT_ABI_VISIBILITY
 #else
-#  define _LIBCPP_EXPLICIT_ABI_VISIBILITY __visibility__("hidden"),
+#  define _LIBCPP_EXPLICIT_ABI_VISIBILITY , __visibility__("hidden")
+#endif
+
+#if defined(_LIBCPP_ABI_MICROSOFT) || defined(_LIBCPP_NO_ABI_TAG)
+#  define _LIBCPP_EXPLICIT_ABI_TAG
+#else
+#  define _LIBCPP_EXPLICIT_ABI_TAG , __abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))
 #endif
 
 #ifdef _LIBCPP_COMPILER_CLANG_BASED
 #  define _LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS                                                                         \
     _LIBCPP_PUSH_ABI_PRAGMA_DIAGNOSTICS                                                                                \
     _Pragma(_LIBCPP_TOSTRING(clang attribute _LibcxxExplicitABIAnnotations.push(                                       \
-        __attribute__((__exclude_from_explicit_instantiation__,                                                        \
+        __attribute__((__exclude_from_explicit_instantiation__                                                         \
                        _LIBCPP_EXPLICIT_ABI_VISIBILITY                                                                 \
-                       __abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE)))),                                         \
+                       _LIBCPP_EXPLICIT_ABI_TAG)),                                                                     \
         apply_to = function))) _LIBCPP_POP_ABI_PRAGMA_DIAGNOSTICS
 
 #  define _LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS _Pragma("clang attribute _LibcxxExplicitABIAnnotations.pop")
