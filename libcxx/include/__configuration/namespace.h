@@ -46,12 +46,18 @@
 #  define _LIBCPP_POP_ABI_PRAGMA_DIAGNOSTICS
 #endif
 
+#if defined(_LIBCPP_OBJECT_FORMAT_COFF) || defined(_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS)
+#  define _LIBCPP_EXPLICIT_ABI_VISIBILITY
+#else
+#  define _LIBCPP_EXPLICIT_ABI_VISIBILITY __visibility__("hidden"),
+#endif
+
 #ifdef _LIBCPP_COMPILER_CLANG_BASED
 #  define _LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS                                                                         \
     _LIBCPP_PUSH_ABI_PRAGMA_DIAGNOSTICS                                                                                \
     _Pragma(_LIBCPP_TOSTRING(clang attribute _LibcxxExplicitABIAnnotations.push(                                       \
         __attribute__((__exclude_from_explicit_instantiation__,                                                        \
-                       __visibility__("hidden"),                                                                       \
+                       _LIBCPP_EXPLICIT_ABI_VISIBILITY                                                                 \
                        __abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE)))),                                         \
         apply_to = function))) _LIBCPP_POP_ABI_PRAGMA_DIAGNOSTICS
 
