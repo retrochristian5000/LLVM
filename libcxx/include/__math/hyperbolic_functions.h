@@ -23,7 +23,13 @@ namespace __math {
 
 // cosh
 
-inline _LIBCPP_HIDE_FROM_ABI float cosh(float __x) _NOEXCEPT { return __builtin_coshf(__x); }
+inline _LIBCPP_HIDE_FROM_ABI float cosh(float __x) _NOEXCEPT {
+#if defined(_LIBCPP_MSVCRT) && defined(__i386__)
+  return static_cast<float>(__builtin_cosh(static_cast<double>(__x)));
+#else
+  return __builtin_coshf(__x);
+#endif
+}
 
 template <class = int>
 _LIBCPP_HIDE_FROM_ABI double cosh(double __x) _NOEXCEPT {
@@ -39,7 +45,13 @@ inline _LIBCPP_HIDE_FROM_ABI double cosh(_A1 __x) _NOEXCEPT {
 
 // sinh
 
-inline _LIBCPP_HIDE_FROM_ABI float sinh(float __x) _NOEXCEPT { return __builtin_sinhf(__x); }
+inline _LIBCPP_HIDE_FROM_ABI float sinh(float __x) _NOEXCEPT {
+#if defined(_LIBCPP_MSVCRT) && defined(__i386__)
+  return static_cast<float>(__builtin_sinh(static_cast<double>(__x)));
+#else
+  return __builtin_sinhf(__x);
+#endif
+}
 
 template <class = int>
 _LIBCPP_HIDE_FROM_ABI double sinh(double __x) _NOEXCEPT {
@@ -55,7 +67,13 @@ inline _LIBCPP_HIDE_FROM_ABI double sinh(_A1 __x) _NOEXCEPT {
 
 // tanh
 
-inline _LIBCPP_HIDE_FROM_ABI float tanh(float __x) _NOEXCEPT { return __builtin_tanhf(__x); }
+inline _LIBCPP_HIDE_FROM_ABI float tanh(float __x) _NOEXCEPT {
+#if defined(_LIBCPP_MSVCRT) && defined(__i386__)
+  return static_cast<float>(__builtin_tanh(static_cast<double>(__x)));
+#else
+  return __builtin_tanhf(__x);
+#endif
+}
 
 template <class = int>
 _LIBCPP_HIDE_FROM_ABI double tanh(double __x) _NOEXCEPT {
