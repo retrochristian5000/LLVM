@@ -16,6 +16,7 @@ add_llvm_unittest(ObjectTests
   ELFTest.cpp
   GOFFObjectFileTest.cpp
   MinidumpTest.cpp
+  NEFileTest.cpp
   ObjectFileTest.cpp
   OffloadingTest.cpp
   OffloadingBundleTest.cpp
