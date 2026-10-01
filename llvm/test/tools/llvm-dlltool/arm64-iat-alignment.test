@@ -1,0 +1,19 @@
+Test that ARM64 import-address and lookup-table members retain pointer alignment.
+This is required by AArch64 PAGEOFFSET_12L loads, whose immediate is scaled by
+the 64-bit access width.
+
+RUN: split-file %s %t.dir && cd %t.dir
+RUN: llvm-dlltool -m arm64 -d test.def -l test.lib
+RUN: llvm-readobj -S test.lib | FileCheck %s
+
+CHECK:          Name: .idata$5
+CHECK:          Characteristics [
+CHECK-NEXT:       IMAGE_SCN_ALIGN_8BYTES
+CHECK:          Name: .idata$4
+CHECK:          Characteristics [
+CHECK-NEXT:       IMAGE_SCN_ALIGN_8BYTES
+
+#--- test.def
+LIBRARY test.dll
+EXPORTS
+    func
