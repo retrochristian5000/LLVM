@@ -11,6 +11,7 @@
 #include "llvm/Support/Error.h"
 #include "gtest/gtest.h"
 #include <array>
+#include <cstring>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -23,21 +24,22 @@ static std::array<char, 0x88> makeNEImage() {
   Data[1] = 'Z';
   Data[0x3c] = 0x40;
 
-  auto *Hdr = reinterpret_cast<NE::Header *>(Data.data() + 0x40);
-  Hdr->Signature = 0x454e;
-  Hdr->LinkerVersion = 5;
-  Hdr->LinkerRevision = 1;
-  Hdr->SegmentTableOffset = sizeof(NE::Header);
-  Hdr->SegmentCount = 1;
-  Hdr->SegmentAlignmentShift = 4;
-  Hdr->TargetOS = 2;
+  NE::Header Hdr{};
+  Hdr.Signature = 0x454e;
+  Hdr.LinkerVersion = 5;
+  Hdr.LinkerRevision = 1;
+  Hdr.SegmentTableOffset = sizeof(NE::Header);
+  Hdr.SegmentCount = 1;
+  Hdr.SegmentAlignmentShift = 4;
+  Hdr.TargetOS = 2;
+  std::memcpy(Data.data() + 0x40, &Hdr, sizeof(Hdr));
 
-  auto *Seg =
-      reinterpret_cast<NE::Segment *>(Data.data() + 0x40 + sizeof(NE::Header));
-  Seg->DataOffset = 0x20;
-  Seg->DataLength = 0x1234;
-  Seg->Flags = NE::SegmentData | NE::SegmentRelocations;
-  Seg->MinimumAllocation = 0x2000;
+  NE::Segment Seg{};
+  Seg.DataOffset = 0x20;
+  Seg.DataLength = 0x1234;
+  Seg.Flags = NE::SegmentData | NE::SegmentRelocations;
+  Seg.MinimumAllocation = 0x2000;
+  std::memcpy(Data.data() + 0x40 + sizeof(NE::Header), &Seg, sizeof(Seg));
   return Data;
 }
 
