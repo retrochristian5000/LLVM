@@ -11,6 +11,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/MachO.h"
+#include "llvm/BinaryFormat/NE.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
 
@@ -235,6 +236,10 @@ file_magic llvm::identify_magic(StringRef Magic) {
       if (Magic.substr(off).starts_with(
               StringRef(COFF::PEMagic, sizeof(COFF::PEMagic))))
         return file_magic::pecoff_executable;
+      // Windows 16-bit New Executable file.
+      if (Magic.substr(off).starts_with(
+              StringRef(NE::Magic, sizeof(NE::Magic))))
+        return file_magic::windows_ne;
     }
     if (Magic.starts_with("Microsoft C/C++ MSF 7.00\r\n"))
       return file_magic::pdb;
