@@ -2781,12 +2781,34 @@ Error DOSCOMWriter::finalize() {
     return createStringError(errc::invalid_argument,
                              "DOS COM entry point must be 0x100");
 
-  for (const SectionBase &Sec : Obj.allocSections())
+  bool EntryInExecutableSection = false;
+  for (const SectionBase &Sec : Obj.allocSections()) {
     if (Sec.Type == SHT_NOBITS && Sec.Size)
       return createStringError(
           errc::invalid_argument,
           "DOS COM output cannot represent allocated NOBITS section '%s'",
           Sec.Name.c_str());
+
+    if (Sec.Type != SHT_NOBITS && Sec.Size &&
+        (Sec.Flags & SHF_EXECINSTR) && Obj.Entry >= Sec.Addr &&
+        Obj.Entry - Sec.Addr < Sec.Size)
+      EntryInExecutableSection = true;
+
+    if (Sec.ParentSegment) {
+      uint64_t LoadAddr =
+          Sec.Offset - Sec.ParentSegment->Offset + Sec.ParentSegment->PAddr;
+      if (LoadAddr != Sec.Addr)
+        return createStringError(
+            errc::invalid_argument,
+            "DOS COM section '%s' has different virtual and load addresses",
+            Sec.Name.c_str());
+    }
+  }
+
+  if (!EntryInExecutableSection)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM entry point 0x100 is not in executable file-backed data");
 
   if (Error E = BinaryWriter::finalize())
     return E;

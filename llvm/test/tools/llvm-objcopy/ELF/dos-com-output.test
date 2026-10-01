@@ -26,6 +26,13 @@
 # RUN: not llvm-objcopy -I binary -O dos-com %t.raw %t.out 2>&1 | FileCheck %s --check-prefix=RAW
 # RAW: DOS COM output requires linked ELF32 i386 input
 
+# RUN: not llvm-objcopy -O dos-com --pad-to=0x10000 %t.good %t.out 2>&1 | FileCheck %s --check-prefix=SIZE
+# SIZE: DOS COM image is too large: 0xff00 bytes (maximum 0xfefe)
+
+# RUN: yaml2obj --docnum=6 %s -o %t.nonexec
+# RUN: not llvm-objcopy -O dos-com %t.nonexec %t.out 2>&1 | FileCheck %s --check-prefix=NONEXEC
+# NONEXEC: DOS COM entry point 0x100 is not in executable file-backed data
+
 --- !ELF
 FileHeader:
   Class:           ELFCLASS32
@@ -104,5 +111,20 @@ Sections:
     Type:          SHT_PROGBITS
     Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
     Address:       0x101
+    AddressAlign:  1
+    Content:       "90c3"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .data
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_WRITE ]
+    Address:       0x100
     AddressAlign:  1
     Content:       "90c3"
