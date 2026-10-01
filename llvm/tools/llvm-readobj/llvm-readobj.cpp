@@ -718,6 +718,14 @@ static void dumpInput(StringRef File, ScopedPrinter &Writer) {
                   File);
     return;
   }
+  if (Type == file_magic::windows_ne) {
+    Expected<std::unique_ptr<NEFile>> NEOrErr =
+        NEFile::create(Buffer->getMemBufferRef());
+    if (!NEOrErr)
+      reportError(NEOrErr.takeError(), File);
+    dumpNEFile(NEOrErr->get(), Writer);
+    return;
+  }
 
   Expected<std::unique_ptr<Binary>> BinaryOrErr = createBinary(
       Buffer->getMemBufferRef(), /*Context=*/nullptr, /*InitContent=*/false);
@@ -736,8 +744,6 @@ static void dumpInput(StringRef File, ScopedPrinter &Writer) {
     dumpObject(*Obj, Writer);
   else if (COFFImportFile *Import = dyn_cast<COFFImportFile>(Bin.get()))
     dumpCOFFImportFile(Import, Writer);
-  else if (NEFile *NE = dyn_cast<NEFile>(Bin.get()))
-    dumpNEFile(NE, Writer);
   else if (WindowsResource *WinRes = dyn_cast<WindowsResource>(Bin.get()))
     dumpWindowsResourceFile(WinRes, Writer);
   else
