@@ -57,7 +57,10 @@ enum RelocationType : uint8_t {
   RelocOrdinal = 1,
   RelocName = 2,
   RelocOSFixup = 3,
-  RelocAdditive = 4,
+};
+
+enum RelocationFlags : uint8_t {
+  RelocAdditive = 0x04,
 };
 
 struct Header {
