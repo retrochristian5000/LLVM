@@ -10,6 +10,7 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Support/Endian.h"
 #include <cstring>
+#include <utility>
 
 using namespace llvm;
 using namespace llvm::object;
