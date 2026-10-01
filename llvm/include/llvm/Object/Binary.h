@@ -49,6 +49,7 @@ protected:
 
     ID_Minidump,
 
+    ID_NE,     // Windows 16-bit New Executable file.
     ID_WinRes, // Windows resource (.res) file.
 
     ID_Offload, // Offloading binary file.
@@ -159,6 +160,8 @@ public:
              TypeID == ID_MachO32B || TypeID == ID_MachO64B ||
              TypeID == ID_XCOFF32 || TypeID == ID_XCOFF64);
   }
+
+  bool isNE() const { return TypeID == ID_NE; }
 
   bool isWinRes() const { return TypeID == ID_WinRes; }
 
