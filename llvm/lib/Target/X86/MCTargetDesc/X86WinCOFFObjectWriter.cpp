@@ -97,6 +97,8 @@ unsigned X86WinCOFFObjectWriter::getRelocType(MCContext &Ctx,
     }
   } else if (getMachine() == COFF::IMAGE_FILE_MACHINE_I386) {
     switch (FixupKind) {
+    case FK_Data_2:
+      return PCRel ? COFF::IMAGE_REL_I386_REL16 : COFF::IMAGE_REL_I386_DIR16;
     case X86::reloc_riprel_4byte:
     case X86::reloc_riprel_4byte_movq_load:
       return COFF::IMAGE_REL_I386_REL32;
