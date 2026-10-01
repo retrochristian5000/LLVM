@@ -22,7 +22,7 @@
 # RUN: not llvm-objcopy -O dos-com %t.bad-origin %t.out 2>&1 | FileCheck %s --check-prefix=ORIGIN
 # ORIGIN: DOS COM load image must begin at 0x100 (starts at 0x101)
 
-# RUN: printf '\x90\xc3' > %t.raw
+# RUN: %python -c "open(r'%t.raw', 'wb').write(bytes([0x90, 0xc3]))"
 # RUN: not llvm-objcopy -I binary -O dos-com %t.raw %t.out 2>&1 | FileCheck %s --check-prefix=RAW
 # RAW: DOS COM output requires linked ELF32 i386 input
 

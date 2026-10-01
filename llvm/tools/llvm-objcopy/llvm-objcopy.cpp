@@ -136,8 +136,8 @@ static Error executeObjcopyOnRawBinary(ConfigManager &ConfigMgr,
   llvm_unreachable("unsupported output format");
 }
 
-/// Returns the format name string for explicit file formats (binary, ihex,
-/// srec). Returns "" for all other formats so callers can fall back to the
+/// Returns the format name string for explicit file formats (binary, dos-com,
+/// ihex, srec). Returns "" for all other formats so callers can fall back to the
 /// input object's own format string (e.g. "elf64-x86-64").
 static StringRef toFileFormatName(FileFormat Fmt) {
   switch (Fmt) {
