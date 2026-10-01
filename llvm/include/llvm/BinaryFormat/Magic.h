@@ -48,6 +48,7 @@ struct file_magic {
     coff_object,               ///< COFF object file
     coff_import_library,       ///< COFF import library
     pecoff_executable,         ///< PECOFF executable file
+    windows_ne,                ///< Windows 16-bit New Executable file
     windows_resource,          ///< Windows compiled resource file (.res)
     xcoff_object_32,           ///< 32-bit XCOFF object file
     xcoff_object_64,           ///< 64-bit XCOFF object file
