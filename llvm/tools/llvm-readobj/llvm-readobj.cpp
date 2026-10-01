@@ -666,8 +666,8 @@ static void dumpNEFile(NEFile *Obj, ScopedPrinter &Writer) {
                        Obj->getSegmentAlignmentShift());
     Writer.printNumber("ResourceSegmentCount",
                        uint16_t(Hdr.ResourceSegmentCount));
-    Writer.printHex("TargetOS", Hdr.TargetOS);
-    Writer.printHex("OtherFlags", Hdr.OtherFlags);
+    Writer.printHex("TargetOS", unsigned(Hdr.TargetOS));
+    Writer.printHex("OtherFlags", unsigned(Hdr.OtherFlags));
     Writer.printHex("ReturnThunkOffset", uint16_t(Hdr.ReturnThunkOffset));
     Writer.printHex("SegmentReferenceBytesOffset",
                     uint16_t(Hdr.SegmentReferenceBytesOffset));
