@@ -16,6 +16,7 @@
 #include "llvm/Support/Error.h"
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace llvm {
 namespace object {
@@ -26,22 +27,21 @@ public:
 
   static Expected<std::unique_ptr<NEFile>> create(MemoryBufferRef Source);
 
-  const NE::Header &getHeader() const { return *Hdr; }
+  const NE::Header &getHeader() const { return Hdr; }
   uint32_t getHeaderOffset() const { return HeaderOffset; }
   ArrayRef<NE::Segment> segments() const { return Segments; }
 
   uint32_t getSegmentAlignmentShift() const {
-    return Hdr->SegmentAlignmentShift ? uint16_t(Hdr->SegmentAlignmentShift)
-                                      : 9;
+    return Hdr.SegmentAlignmentShift ? uint16_t(Hdr.SegmentAlignmentShift) : 9;
   }
 
 private:
-  NEFile(MemoryBufferRef Source, uint32_t HeaderOffset,
-         const NE::Header *Hdr, ArrayRef<NE::Segment> Segments);
+  NEFile(MemoryBufferRef Source, uint32_t HeaderOffset, NE::Header Hdr,
+         std::vector<NE::Segment> Segments);
 
   uint32_t HeaderOffset;
-  const NE::Header *Hdr;
-  ArrayRef<NE::Segment> Segments;
+  NE::Header Hdr;
+  std::vector<NE::Segment> Segments;
 };
 
 } // namespace object
