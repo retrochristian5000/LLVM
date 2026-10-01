@@ -9,14 +9,15 @@
 #include "llvm/Object/NEFile.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Support/Endian.h"
+#include <cstring>
 
 using namespace llvm;
 using namespace llvm::object;
 
 NEFile::NEFile(MemoryBufferRef Source, uint32_t HeaderOffset,
-               const NE::Header *Hdr, ArrayRef<NE::Segment> Segments)
+               NE::Header Hdr, std::vector<NE::Segment> Segments)
     : Binary(Binary::ID_NE, Source), HeaderOffset(HeaderOffset), Hdr(Hdr),
-      Segments(Segments) {}
+      Segments(std::move(Segments)) {}
 
 Expected<std::unique_ptr<NEFile>> NEFile::create(MemoryBufferRef Source) {
   StringRef Buffer = Source.getBuffer();
@@ -38,26 +39,26 @@ Expected<std::unique_ptr<NEFile>> NEFile::create(MemoryBufferRef Source) {
         Source.getBufferIdentifier() + ": truncated NE header",
         object_error::unexpected_eof);
 
-  const auto *Hdr =
-      reinterpret_cast<const NE::Header *>(Buffer.data() + HeaderOffset);
-  if (uint16_t(Hdr->Signature) != 0x454e)
+  NE::Header Hdr;
+  std::memcpy(&Hdr, Buffer.data() + HeaderOffset, sizeof(Hdr));
+  if (uint16_t(Hdr.Signature) != 0x454e)
     return make_error<GenericBinaryError>(
         Source.getBufferIdentifier() + ": invalid NE signature",
         object_error::invalid_file_type);
 
   uint64_t SegmentOffset =
-      uint64_t(HeaderOffset) + uint16_t(Hdr->SegmentTableOffset);
-  uint64_t SegmentSize =
-      uint64_t(uint16_t(Hdr->SegmentCount)) * sizeof(NE::Segment);
+      uint64_t(HeaderOffset) + uint16_t(Hdr.SegmentTableOffset);
+  uint64_t SegmentCount = uint16_t(Hdr.SegmentCount);
+  uint64_t SegmentSize = SegmentCount * sizeof(NE::Segment);
   if (SegmentOffset > Buffer.size() ||
       SegmentSize > Buffer.size() - SegmentOffset)
     return make_error<GenericBinaryError>(
         Source.getBufferIdentifier() + ": truncated NE segment table",
         object_error::unexpected_eof);
 
-  const auto *Segments =
-      reinterpret_cast<const NE::Segment *>(Buffer.data() + SegmentOffset);
+  std::vector<NE::Segment> Segments(SegmentCount);
+  if (SegmentSize)
+    std::memcpy(Segments.data(), Buffer.data() + SegmentOffset, SegmentSize);
   return std::unique_ptr<NEFile>(
-      new NEFile(Source, HeaderOffset, Hdr,
-                 ArrayRef<NE::Segment>(Segments, uint16_t(Hdr->SegmentCount))));
+      new NEFile(Source, HeaderOffset, Hdr, std::move(Segments)));
 }
