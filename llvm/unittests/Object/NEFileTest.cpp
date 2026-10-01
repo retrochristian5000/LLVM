@@ -11,7 +11,6 @@
 #include "llvm/Support/Error.h"
 #include "gtest/gtest.h"
 #include <array>
-#include <cstring>
 
 using namespace llvm;
 using namespace llvm::object;
