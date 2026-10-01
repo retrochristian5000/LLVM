@@ -20,6 +20,7 @@ add_llvm_component_library(LLVMObject
   MachOUniversal.cpp
   Minidump.cpp
   ModuleSymbolTable.cpp
+  NEFile.cpp
   Object.cpp
   ObjectFile.cpp
   OffloadBinary.cpp
