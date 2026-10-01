@@ -28,6 +28,7 @@
 #include "llvm/Object/COFFImportFile.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/MachOUniversal.h"
+#include "llvm/Object/NEFile.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Object/WindowsResource.h"
@@ -625,6 +626,73 @@ static void dumpCOFFObject(COFFObjectFile *Obj, ScopedPrinter &Writer) {
   dumpObject(**HybridObjOrErr, Writer);
 }
 
+/// Dumps a Windows 16-bit New Executable file.
+static void dumpNEFile(NEFile *Obj, ScopedPrinter &Writer) {
+  const NE::Header &Hdr = Obj->getHeader();
+
+  Writer.printString("Format", "NE");
+  if (opts::FileHeaders || opts::Headers) {
+    DictScope D(Writer, "NEHeader");
+    Writer.printHex("Offset", Obj->getHeaderOffset());
+    Writer.printHex("Signature", uint16_t(Hdr.Signature));
+    Writer.printNumber("LinkerVersion", Hdr.LinkerVersion);
+    Writer.printNumber("LinkerRevision", Hdr.LinkerRevision);
+    Writer.printHex("EntryTableOffset", uint16_t(Hdr.EntryTableOffset));
+    Writer.printNumber("EntryTableSize", uint16_t(Hdr.EntryTableSize));
+    Writer.printHex("Checksum", uint32_t(Hdr.Checksum));
+    Writer.printHex("Flags", uint16_t(Hdr.Flags));
+    Writer.printNumber("AutoDataSegment", uint16_t(Hdr.AutoDataSegment));
+    Writer.printNumber("InitialHeapSize", uint16_t(Hdr.InitialHeapSize));
+    Writer.printNumber("InitialStackSize", uint16_t(Hdr.InitialStackSize));
+    Writer.printHex("EntryPoint", uint32_t(Hdr.EntryPoint));
+    Writer.printHex("InitialStack", uint32_t(Hdr.InitialStack));
+    Writer.printNumber("SegmentCount", uint16_t(Hdr.SegmentCount));
+    Writer.printNumber("ModuleReferenceCount",
+                       uint16_t(Hdr.ModuleReferenceCount));
+    Writer.printNumber("NonResidentNameTableSize",
+                       uint16_t(Hdr.NonResidentNameTableSize));
+    Writer.printHex("SegmentTableOffset", uint16_t(Hdr.SegmentTableOffset));
+    Writer.printHex("ResourceTableOffset", uint16_t(Hdr.ResourceTableOffset));
+    Writer.printHex("ResidentNameTableOffset",
+                    uint16_t(Hdr.ResidentNameTableOffset));
+    Writer.printHex("ModuleReferenceTableOffset",
+                    uint16_t(Hdr.ModuleReferenceTableOffset));
+    Writer.printHex("ImportedNameTableOffset",
+                    uint16_t(Hdr.ImportedNameTableOffset));
+    Writer.printHex("NonResidentNameTableOffset",
+                    uint32_t(Hdr.NonResidentNameTableOffset));
+    Writer.printNumber("MovableEntryCount", uint16_t(Hdr.MovableEntryCount));
+    Writer.printNumber("SegmentAlignmentShift",
+                       Obj->getSegmentAlignmentShift());
+    Writer.printNumber("ResourceSegmentCount",
+                       uint16_t(Hdr.ResourceSegmentCount));
+    Writer.printHex("TargetOS", Hdr.TargetOS);
+    Writer.printHex("OtherFlags", Hdr.OtherFlags);
+    Writer.printHex("ReturnThunkOffset", uint16_t(Hdr.ReturnThunkOffset));
+    Writer.printHex("SegmentReferenceBytesOffset",
+                    uint16_t(Hdr.SegmentReferenceBytesOffset));
+    Writer.printNumber("MinimumCodeSwapArea",
+                       uint16_t(Hdr.MinimumCodeSwapArea));
+    Writer.printHex("ExpectedWindowsVersion",
+                    uint16_t(Hdr.ExpectedWindowsVersion));
+  }
+
+  if (opts::SectionHeaders || opts::Headers) {
+    ListScope L(Writer, "Segments");
+    unsigned Index = 1;
+    for (const NE::Segment &Seg : Obj->segments()) {
+      DictScope D(Writer, "Segment");
+      Writer.printNumber("Index", Index++);
+      Writer.printNumber("LogicalSector", uint16_t(Seg.DataOffset));
+      Writer.printNumber("DataLength", uint16_t(Seg.DataLength));
+      Writer.printHex("Flags", uint16_t(Seg.Flags));
+      Writer.printNumber("MinimumAllocation",
+                         uint16_t(Seg.MinimumAllocation));
+    }
+  }
+}
+
+
 /// Dumps \a WinRes, Windows Resource (.res) file;
 static void dumpWindowsResourceFile(WindowsResource *WinRes,
                                     ScopedPrinter &Printer) {
@@ -668,6 +736,8 @@ static void dumpInput(StringRef File, ScopedPrinter &Writer) {
     dumpObject(*Obj, Writer);
   else if (COFFImportFile *Import = dyn_cast<COFFImportFile>(Bin.get()))
     dumpCOFFImportFile(Import, Writer);
+  else if (NEFile *NE = dyn_cast<NEFile>(Bin.get()))
+    dumpNEFile(NE, Writer);
   else if (WindowsResource *WinRes = dyn_cast<WindowsResource>(Bin.get()))
     dumpWindowsResourceFile(WinRes, Writer);
   else
