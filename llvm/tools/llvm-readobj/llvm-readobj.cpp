@@ -635,8 +635,8 @@ static void dumpNEFile(NEFile *Obj, ScopedPrinter &Writer) {
     DictScope D(Writer, "NEHeader");
     Writer.printHex("Offset", Obj->getHeaderOffset());
     Writer.printHex("Signature", uint16_t(Hdr.Signature));
-    Writer.printNumber("LinkerVersion", Hdr.LinkerVersion);
-    Writer.printNumber("LinkerRevision", Hdr.LinkerRevision);
+    Writer.printNumber("LinkerVersion", unsigned(Hdr.LinkerVersion));
+    Writer.printNumber("LinkerRevision", unsigned(Hdr.LinkerRevision));
     Writer.printHex("EntryTableOffset", uint16_t(Hdr.EntryTableOffset));
     Writer.printNumber("EntryTableSize", uint16_t(Hdr.EntryTableSize));
     Writer.printHex("Checksum", uint32_t(Hdr.Checksum));
