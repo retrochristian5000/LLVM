@@ -222,7 +222,7 @@ void AArch64::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels,
         // relaxAuthTlsDescForNonPreemptibleUndefined
         sec.addReloc({R_TPREL, type, offset, addend, &sym});
       } else {
-        sym.setFlags(NEEDS_TLSDESC_AUTH);
+        sym.setFlags(NEEDS_TLSDESC | NEEDS_TLSDESC_AUTH);
         sec.addReloc({tlsdescExpr, type, offset, addend, &sym});
       }
     };
@@ -388,7 +388,7 @@ void AArch64::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels,
       if (sym.isUndefined() && !sym.isPreemptible)
         sec.addReloc({R_TPREL, type, offset, addend, &sym});
       else
-        sym.setFlags(NEEDS_TLSDESC_AUTH);
+        sym.setFlags(NEEDS_TLSDESC | NEEDS_TLSDESC_AUTH);
       continue;
 
     default:
