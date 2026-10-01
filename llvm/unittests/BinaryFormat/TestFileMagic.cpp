@@ -13,6 +13,7 @@
 #include "llvm/Support/Path.h"
 
 #include "gtest/gtest.h"
+#include <array>
 
 using namespace llvm;
 namespace fs = llvm::sys::fs;
@@ -138,6 +139,15 @@ TEST_F(MagicTest, Magic) {
        file_magic::tapi_file},
 #undef DEFINE
   };
+
+  std::array<char, 0x42> WindowsNE = {};
+  WindowsNE[0] = 'M';
+  WindowsNE[1] = 'Z';
+  WindowsNE[0x3c] = 0x40;
+  WindowsNE[0x40] = 'N';
+  WindowsNE[0x41] = 'E';
+  EXPECT_EQ(file_magic::windows_ne,
+            identify_magic(StringRef(WindowsNE.data(), WindowsNE.size())));
 
   // Create some files filled with magic.
   for (type *i = types, *e = types + std::size(types); i != e;
