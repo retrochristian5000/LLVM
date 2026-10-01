@@ -176,6 +176,8 @@ static std::unique_ptr<Writer> createWriter(const CommonConfig &Config,
   switch (Config.OutputFormat) {
   case FileFormat::Binary:
     return std::make_unique<BinaryWriter>(Obj, Out, Config);
+  case FileFormat::DOSCOM:
+    return std::make_unique<DOSCOMWriter>(Obj, Out, Config);
   case FileFormat::IHex:
     return std::make_unique<IHexWriter>(Obj, Out, Config.OutputFilename);
   case FileFormat::SREC:

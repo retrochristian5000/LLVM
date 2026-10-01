@@ -893,6 +893,7 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> ArgsArr,
 
   Config.OutputFormat = StringSwitch<FileFormat>(OutputFormat)
                             .Case("binary", FileFormat::Binary)
+                            .Case("dos-com", FileFormat::DOSCOM)
                             .Case("ihex", FileFormat::IHex)
                             .Case("srec", FileFormat::SREC)
                             .Default(FileFormat::Unspecified);
@@ -991,10 +992,11 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> ArgsArr,
     Config.ExtractPartition = Arg->getValue();
 
   if (const auto *A = InputArgs.getLastArg(OBJCOPY_gap_fill)) {
-    if (Config.OutputFormat != FileFormat::Binary)
+    if (Config.OutputFormat != FileFormat::Binary &&
+        Config.OutputFormat != FileFormat::DOSCOM)
       return createStringError(
           errc::invalid_argument,
-          "'--gap-fill' is only supported for binary output");
+          "'--gap-fill' is only supported for binary or dos-com output");
     ErrorOr<uint64_t> Val = getAsInteger<uint64_t>(A->getValue());
     if (!Val)
       return createStringError(Val.getError(), "--gap-fill: bad number: %s",
@@ -1008,10 +1010,11 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> ArgsArr,
   }
 
   if (const auto *A = InputArgs.getLastArg(OBJCOPY_pad_to)) {
-    if (Config.OutputFormat != FileFormat::Binary)
+    if (Config.OutputFormat != FileFormat::Binary &&
+        Config.OutputFormat != FileFormat::DOSCOM)
       return createStringError(
           errc::invalid_argument,
-          "'--pad-to' is only supported for binary output");
+          "'--pad-to' is only supported for binary or dos-com output");
     ErrorOr<uint64_t> Addr = getAsInteger<uint64_t>(A->getValue());
     if (!Addr)
       return createStringError(Addr.getError(), "--pad-to: bad number: %s",

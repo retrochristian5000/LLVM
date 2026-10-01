@@ -374,6 +374,14 @@ public:
       : Writer(Obj, Out), GapFill(Config.GapFill), PadTo(Config.PadTo) {}
 };
 
+class DOSCOMWriter : public BinaryWriter {
+public:
+  ~DOSCOMWriter() override = default;
+  Error finalize() override;
+  DOSCOMWriter(Object &Obj, raw_ostream &Out, const CommonConfig &Config)
+      : BinaryWriter(Obj, Out, Config) {}
+};
+
 // A base class for writing ascii hex formats such as srec and ihex.
 class ASCIIHexWriter : public Writer {
 public:

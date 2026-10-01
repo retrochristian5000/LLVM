@@ -114,6 +114,10 @@ static Error executeObjcopyOnRawBinary(ConfigManager &ConfigMgr,
                                        MemoryBuffer &In, raw_ostream &Out) {
   const CommonConfig &Config = ConfigMgr.getCommonConfig();
   switch (Config.OutputFormat) {
+  case FileFormat::DOSCOM:
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM output requires linked ELF32 i386 input");
   case FileFormat::ELF:
   // FIXME: Currently, we call elf::executeObjcopyOnRawBinary even if the
   // output format is binary/ihex or it's not given. This behavior differs from
@@ -139,6 +143,8 @@ static StringRef toFileFormatName(FileFormat Fmt) {
   switch (Fmt) {
   case FileFormat::Binary:
     return "binary";
+  case FileFormat::DOSCOM:
+    return "dos-com";
   case FileFormat::IHex:
     return "ihex";
   case FileFormat::SREC:

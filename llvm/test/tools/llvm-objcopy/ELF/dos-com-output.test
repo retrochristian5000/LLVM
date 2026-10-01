@@ -1,0 +1,108 @@
+## DOS COM is a headerless single-segment load image.  Keep it an explicit
+## output format; a .com filename alone is not enough to identify it.
+
+# RUN: yaml2obj --docnum=1 %s -o %t.good
+# RUN: llvm-objcopy -O dos-com %t.good %t.com
+# RUN: od -A n -t x1 %t.com | FileCheck %s --check-prefix=BYTES
+# BYTES: 90 c3
+
+# RUN: yaml2obj --docnum=2 %s -o %t.bad-entry
+# RUN: not llvm-objcopy -O dos-com %t.bad-entry %t.out 2>&1 | FileCheck %s --check-prefix=ENTRY
+# ENTRY: DOS COM entry point must be 0x100
+
+# RUN: yaml2obj --docnum=3 %s -o %t.bad-machine
+# RUN: not llvm-objcopy -O dos-com %t.bad-machine %t.out 2>&1 | FileCheck %s --check-prefix=MACHINE
+# MACHINE: DOS COM output requires a linked 32-bit i386 ELF executable
+
+# RUN: yaml2obj --docnum=4 %s -o %t.bss
+# RUN: not llvm-objcopy -O dos-com %t.bss %t.out 2>&1 | FileCheck %s --check-prefix=BSS
+# BSS: DOS COM output cannot represent allocated NOBITS section '.bss'
+
+# RUN: yaml2obj --docnum=5 %s -o %t.bad-origin
+# RUN: not llvm-objcopy -O dos-com %t.bad-origin %t.out 2>&1 | FileCheck %s --check-prefix=ORIGIN
+# ORIGIN: DOS COM load image must begin at 0x100 (starts at 0x101)
+
+# RUN: printf '\x90\xc3' > %t.raw
+# RUN: not llvm-objcopy -I binary -O dos-com %t.raw %t.out 2>&1 | FileCheck %s --check-prefix=RAW
+# RAW: DOS COM output requires linked ELF32 i386 input
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x101
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_ARM
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "00"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+  - Name:          .bss
+    Type:          SHT_NOBITS
+    Flags:         [ SHF_ALLOC, SHF_WRITE ]
+    Address:       0x102
+    AddressAlign:  1
+    Size:          1
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x101
+    AddressAlign:  1
+    Content:       "90c3"

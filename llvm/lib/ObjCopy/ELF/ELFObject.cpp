@@ -2771,6 +2771,52 @@ Error BinaryWriter::finalize() {
   return Error::success();
 }
 
+Error DOSCOMWriter::finalize() {
+  if (Obj.Is64Bits || Obj.Machine != EM_386 || Obj.Type != ET_EXEC)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM output requires a linked 32-bit i386 ELF executable");
+
+  if (Obj.Entry != 0x100)
+    return createStringError(errc::invalid_argument,
+                             "DOS COM entry point must be 0x100");
+
+  for (const SectionBase &Sec : Obj.allocSections())
+    if (Sec.Type == SHT_NOBITS && Sec.Size)
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM output cannot represent allocated NOBITS section '%s'",
+          Sec.Name.c_str());
+
+  if (Error E = BinaryWriter::finalize())
+    return E;
+
+  uint64_t MinAddr = UINT64_MAX;
+  for (const SectionBase &Sec : Obj.allocSections())
+    if (Sec.Type != SHT_NOBITS && Sec.Size)
+      MinAddr = std::min(MinAddr, Sec.Addr);
+
+  if (MinAddr == UINT64_MAX)
+    return createStringError(errc::invalid_argument,
+                             "DOS COM output contains no loadable data");
+
+  if (MinAddr != 0x100)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM load image must begin at 0x100 (starts at 0x%llx)",
+        static_cast<unsigned long long>(MinAddr));
+
+  constexpr uint64_t MaxCOMSize = 0xFEFE;
+  if (Buf->getBufferSize() > MaxCOMSize)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM image is too large: 0x%llx bytes (maximum 0x%llx)",
+        static_cast<unsigned long long>(Buf->getBufferSize()),
+        static_cast<unsigned long long>(MaxCOMSize));
+
+  return Error::success();
+}
+
 Error ASCIIHexWriter::checkSection(const SectionBase &S) const {
   if (addressOverflows32bit(S.Addr) ||
       addressOverflows32bit(S.Addr + S.Size - 1))
