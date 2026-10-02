@@ -145,6 +145,17 @@ static constexpr uint32_t objcStubsFastCode[] = {
     0xd4200020, // brk   #0x1
 };
 
+static constexpr uint32_t objcStubsFastAuthCode[] = {
+    0x90000001, // adrp  x1, __objc_selrefs@page
+    0xf9400021, // ldr   x1, [x1, @selector("foo")@pageoff]
+    0x90000011, // adrp  x17, __auth_got@page
+    0x91000231, // add   x17, x17, __auth_got@pageoff
+    0xf9400230, // ldr   x16, [x17]
+    0xd71f0a11, // braa  x16, x17
+    0xd4200020, // brk   #0x1
+    0xd4200020, // brk   #0x1
+};
+
 static constexpr uint32_t objcStubsSmallCode[] = {
     0x90000001, // adrp  x1, __objc_selrefs@page
     0xf9400021, // ldr   x1, [x1, @selector("foo")@pageoff]
@@ -160,11 +171,33 @@ void ARM64::writeObjCMsgSendStub(uint8_t *buf, Symbol *sym, uint64_t stubsAddr,
 
   if (config->objcStubsMode == ObjCStubsMode::fast) {
     objcStubSize = target->objcStubsFastSize;
-    objcMsgSendAddr = in.got->addr;
-    objcMsgSendIndex = objcMsgSend->gotIndex;
-    ::writeObjCMsgSendFastStub<LP64>(buf, objcStubsFastCode, sym, stubsAddr,
-                                     stubOffset, selrefVA, objcMsgSendAddr,
-                                     objcMsgSendIndex);
+    if (cpuSubtype == CPU_SUBTYPE_ARM64E && config->emitChainedFixups) {
+      objcMsgSendAddr = in.authGot->addr;
+      objcMsgSendIndex = objcMsgSend->authGotIndex;
+
+      SymbolDiagnostic d = {sym, sym->getName()};
+      auto *buf32 = reinterpret_cast<uint32_t *>(buf);
+      auto pcPageBits = [stubsAddr, stubOffset](int i) {
+        return pageBits(stubsAddr + stubOffset + i * sizeof(uint32_t));
+      };
+
+      encodePage21(&buf32[0], d, objcStubsFastAuthCode[0],
+                   pageBits(selrefVA) - pcPageBits(0));
+      encodePageOff12(&buf32[1], d, objcStubsFastAuthCode[1], selrefVA);
+      uint64_t authGotVA =
+          objcMsgSendAddr + objcMsgSendIndex * target->wordSize;
+      encodePage21(&buf32[2], d, objcStubsFastAuthCode[2],
+                   pageBits(authGotVA) - pcPageBits(2));
+      encodePageOff12(&buf32[3], d, objcStubsFastAuthCode[3], authGotVA);
+      for (size_t i = 4; i != std::size(objcStubsFastAuthCode); ++i)
+        buf32[i] = objcStubsFastAuthCode[i];
+    } else {
+      objcMsgSendAddr = in.got->addr;
+      objcMsgSendIndex = objcMsgSend->gotIndex;
+      ::writeObjCMsgSendFastStub<LP64>(buf, objcStubsFastCode, sym, stubsAddr,
+                                       stubOffset, selrefVA, objcMsgSendAddr,
+                                       objcMsgSendIndex);
+    }
   } else {
     assert(config->objcStubsMode == ObjCStubsMode::small);
     objcStubSize = target->objcStubsSmallSize;
