@@ -345,6 +345,38 @@ void NonLazyPointerSectionBase::addEntry(Symbol *sym) {
   }
 }
 
+AuthGotSection::AuthGotSection()
+    : NonLazyPointerSectionBase(segment_names::data, section_names::authGot) {
+  flags = S_NON_LAZY_SYMBOL_POINTERS;
+}
+
+void AuthGotSection::addEntry(Symbol *sym) {
+  assert(config->arch() == AK_arm64e && config->emitChainedFixups);
+  if (entries.insert(sym)) {
+    assert(!sym->isInAuthGot());
+    sym->authGotIndex = entries.size() - 1;
+    addNonLazyBindingEntries(sym, isec,
+                             sym->authGotIndex * target->wordSize,
+                             /*addend=*/0, /*authenticated=*/true);
+  }
+}
+
+void AuthGotSection::writeTo(uint8_t *buf) const {
+  assert(config->arch() == AK_arm64e && config->emitChainedFixups);
+
+  Relocation reloc;
+  reloc.type = ARM64_RELOC_AUTHENTICATED_POINTER;
+  reloc.length = 3;
+
+  for (const auto &[i, entry] : llvm::enumerate(entries)) {
+    uint8_t *loc = &buf[i * target->wordSize];
+    // Match ld64's non-lazy arm64e stubs: IA key, address diversity,
+    // discriminator zero. The chained-fixup encoder consumes these bits.
+    write64le(loc, 1ULL << 48);
+    writeChainedFixup(loc, entry, reloc);
+  }
+}
+
 static bool usesArm64eChainedFixups() {
   return config->arch() == AK_arm64e;
 }
@@ -856,7 +888,11 @@ void WeakBindingSection::writeTo(uint8_t *buf) const {
 }
 
 StubsSection::StubsSection()
-    : SyntheticSection(segment_names::text, section_names::stubs) {
+    : SyntheticSection(segment_names::text,
+                       config->arch() == AK_arm64e &&
+                               config->emitChainedFixups
+                           ? section_names::authStubs
+                           : section_names::stubs) {
   flags = static_cast<uint32_t>(S_SYMBOL_STUBS) |
           static_cast<uint32_t>(S_ATTR_SOME_INSTRUCTIONS) |
           static_cast<uint32_t>(S_ATTR_PURE_INSTRUCTIONS);
@@ -873,8 +909,13 @@ uint64_t StubsSection::getSize() const {
 void StubsSection::writeTo(uint8_t *buf) const {
   size_t off = 0;
   for (const Symbol *sym : entries) {
-    uint64_t pointerVA =
-        config->emitChainedFixups ? sym->getGotVA() : sym->getLazyPtrVA();
+    uint64_t pointerVA;
+    if (!config->emitChainedFixups)
+      pointerVA = sym->getLazyPtrVA();
+    else if (config->arch() == AK_arm64e)
+      pointerVA = sym->getAuthGotVA();
+    else
+      pointerVA = sym->getGotVA();
     target->writeStub(buf + off, *sym, pointerVA);
     off += target->stubSize;
   }
@@ -914,10 +955,14 @@ void StubsSection::addEntry(Symbol *sym) {
   if (inserted) {
     sym->stubsIndex = entries.size() - 1;
 
-    if (config->emitChainedFixups)
-      in.got->addEntry(sym);
-    else
+    if (config->emitChainedFixups) {
+      if (config->arch() == AK_arm64e)
+        in.authGot->addEntry(sym);
+      else
+        in.got->addEntry(sym);
+    } else {
       addBindingsForStub(sym);
+    }
   }
 }
 
@@ -1636,7 +1681,8 @@ IndirectSymtabSection::IndirectSymtabSection()
                       section_names::indirectSymbolTable) {}
 
 uint32_t IndirectSymtabSection::getNumSymbols() const {
-  uint32_t size = in.got->getEntries().size() +
+  uint32_t size = in.authGot->getEntries().size() +
+                  in.got->getEntries().size() +
                   in.tlvPointers->getEntries().size() +
                   in.stubs->getEntries().size();
   if (!config->emitChainedFixups)
@@ -1645,12 +1691,14 @@ uint32_t IndirectSymtabSection::getNumSymbols() const {
 }
 
 bool IndirectSymtabSection::isNeeded() const {
-  return in.got->isNeeded() || in.tlvPointers->isNeeded() ||
-         in.stubs->isNeeded();
+  return in.authGot->isNeeded() || in.got->isNeeded() ||
+         in.tlvPointers->isNeeded() || in.stubs->isNeeded();
 }
 
 void IndirectSymtabSection::finalizeContents() {
   uint32_t off = 0;
+  in.authGot->reserved1 = off;
+  off += in.authGot->getEntries().size();
   in.got->reserved1 = off;
   off += in.got->getEntries().size();
   in.tlvPointers->reserved1 = off;
@@ -1670,6 +1718,10 @@ static uint32_t indirectValue(const Symbol *sym) {
 
 void IndirectSymtabSection::writeTo(uint8_t *buf) const {
   uint32_t off = 0;
+  for (const Symbol *sym : in.authGot->getEntries()) {
+    write32le(buf + off * sizeof(uint32_t), indirectValue(sym));
+    ++off;
+  }
   for (const Symbol *sym : in.got->getEntries()) {
     write32le(buf + off * sizeof(uint32_t), indirectValue(sym));
     ++off;

@@ -124,8 +124,15 @@ public:
     return addr + gotIndex * target->wordSize;
   }
 
-private:
+protected:
   llvm::SetVector<const Symbol *> entries;
+};
+
+class AuthGotSection final : public NonLazyPointerSectionBase {
+public:
+  AuthGotSection();
+  void addEntry(Symbol *sym);
+  void writeTo(uint8_t *buf) const override;
 };
 
 class GotSection final : public NonLazyPointerSectionBase {
@@ -845,6 +852,7 @@ struct InStruct {
   WeakBindingSection *weakBinding = nullptr;
   LazyBindingSection *lazyBinding = nullptr;
   ExportSection *exports = nullptr;
+  AuthGotSection *authGot = nullptr;
   GotSection *got = nullptr;
   TlvPointerSection *tlvPointers = nullptr;
   LazyPointerSection *lazyPointers = nullptr;

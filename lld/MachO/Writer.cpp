@@ -1421,6 +1421,7 @@ void macho::createSyntheticSections() {
     in.stubHelper = make<StubHelperSection>();
   }
   in.exports = make<ExportSection>();
+  in.authGot = make<AuthGotSection>();
   in.got = make<GotSection>();
   in.tlvPointers = make<TlvPointerSection>();
   in.stubs = make<StubsSection>();

@@ -319,6 +319,7 @@ namespace section_names {
 
 constexpr const char authGot[] = "__auth_got";
 constexpr const char authPtr[] = "__auth_ptr";
+constexpr const char authStubs[] = "__auth_stubs";
 constexpr const char binding[] = "__binding";
 constexpr const char bitcodeBundle[] = "__bundle";
 constexpr const char cString[] = "__cstring";

@@ -77,9 +77,37 @@ static constexpr uint32_t stubCode[] = {
     0xd61f0200, // 08: br    x16
 };
 
+static constexpr uint32_t arm64eStubCode[] = {
+    0x90000011, // 00: adrp  x17, __auth_got@page
+    0x91000231, // 04: add   x17, x17, __auth_got@pageoff
+    0xf9400230, // 08: ldr   x16, [x17]
+    0xd71f0a11, // 0c: braa  x16, x17
+};
+
+static constexpr uint32_t arm64eLegacyStubCode[] = {
+    0x90000010, // 00: adrp  x16, __la_symbol_ptr@page
+    0xf9400210, // 04: ldr   x16, [x16, __la_symbol_ptr@pageoff]
+    0xd61f0200, // 08: br    x16
+    0xd503201f, // 0c: nop
+};
+
 void ARM64::writeStub(uint8_t *buf8, const Symbol &sym,
                       uint64_t pointerVA) const {
-  ::writeStub(buf8, stubCode, sym, pointerVA);
+  if (cpuSubtype != CPU_SUBTYPE_ARM64E) {
+    ::writeStub(buf8, stubCode, sym, pointerVA);
+    return;
+  }
+
+  const uint32_t *code =
+      config->emitChainedFixups ? arm64eStubCode : arm64eLegacyStubCode;
+  auto *buf32 = reinterpret_cast<uint32_t *>(buf8);
+  SymbolDiagnostic d = {&sym, "stub"};
+  uint64_t stubVA = in.stubs->addr + sym.stubsIndex * stubSize;
+  encodePage21(&buf32[0], d, code[0],
+               pageBits(pointerVA) - pageBits(stubVA));
+  encodePageOff12(&buf32[1], d, code[1], pointerVA);
+  buf32[2] = code[2];
+  buf32[3] = code[3];
 }
 
 static constexpr uint32_t stubHelperHeaderCode[] = {
@@ -210,7 +238,9 @@ ARM64::ARM64(uint32_t cpuSubtype) : ARM64Common(LP64()) {
   cpuType = CPU_TYPE_ARM64;
   this->cpuSubtype = cpuSubtype;
 
-  stubSize = sizeof(stubCode);
+  stubSize =
+      cpuSubtype == CPU_SUBTYPE_ARM64E ? sizeof(arm64eStubCode)
+                                      : sizeof(stubCode);
   thunkSize = sizeof(thunkCode);
 
   objcStubsFastSize = sizeof(objcStubsFastCode);

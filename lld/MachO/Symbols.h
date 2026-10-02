@@ -67,6 +67,7 @@ public:
 
   // Whether this symbol is in the GOT or TLVPointer sections.
   bool isInGot() const { return gotIndex != UINT32_MAX; }
+  bool isInAuthGot() const { return authGotIndex != UINT32_MAX; }
 
   // Whether this symbol is in the StubsSection.
   bool isInStubs() const { return stubsIndex != UINT32_MAX; }
@@ -74,6 +75,7 @@ public:
   uint64_t getStubVA() const;
   uint64_t getLazyPtrVA() const;
   uint64_t getGotVA() const;
+  uint64_t getAuthGotVA() const;
   uint64_t getTlvVA() const;
   uint64_t resolveBranchVA() const {
     assert(isa<Defined>(this) || isa<DylibSymbol>(this));
@@ -85,6 +87,7 @@ public:
   // The index of this symbol in the GOT or the TLVPointer section, depending
   // on whether it is a thread-local. A given symbol cannot be referenced by
   // both these sections at once.
+  uint32_t authGotIndex = UINT32_MAX;
   uint32_t gotIndex = UINT32_MAX;
   uint32_t lazyBindOffset = UINT32_MAX;
   uint32_t stubsHelperIndex = UINT32_MAX;
