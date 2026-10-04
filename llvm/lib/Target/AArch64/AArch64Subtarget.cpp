@@ -488,6 +488,18 @@ unsigned AArch64Subtarget::classifyGlobalFunctionReference(
       F->hasFnAttribute(Attribute::NonLazyBind) && !TM.shouldAssumeDSOLocal(GV))
     return AArch64II::MO_GOT;
 
+  // Match the direct-call handling used by other targets: a function that
+  // is explicitly DSO-local cannot resolve outside this linkage unit, so it
+  // does not need a GOT/COFFSTUB indirection. This is especially important
+  // for dso_local extern_weak functions on Windows, where treating the
+  // function symbol as a GOT slot produces a PAGEOFFSET_12L load against
+  // code and can fail with a misleading alignment error.
+  //
+  // Keep Arm64EC on its existing path because direct calls there may require
+  // MO_ARM64EC_CALLMANGLE.
+  if (TM.shouldAssumeDSOLocal(GV) && !isWindowsArm64EC())
+    return AArch64II::MO_NO_FLAG;
+
   if (getTargetTriple().isOSWindows()) {
     if (isWindowsArm64EC() && GV->getValueType()->isFunctionTy()) {
       if (GV->hasDLLImportStorageClass()) {

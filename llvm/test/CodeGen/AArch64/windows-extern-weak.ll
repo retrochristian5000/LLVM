@@ -41,3 +41,27 @@ define void @func() nounwind {
 }
 
 declare extern_weak void @weakfunc()
+
+
+; A dso_local extern_weak function is guaranteed to resolve within this
+; linkage unit. Do not lower the call through LOADgot; on AArch64/COFF that
+; would turn the function symbol itself into a scaled PAGEOFFSET_12L load.
+define ptr @call_dso_local_weak() {
+; CHECK-LABEL: call_dso_local_weak:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    str x30, [sp, #-16]! // 8-byte Folded Spill
+; CHECK-NEXT:    bl dso_local_weak
+; CHECK-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; CHECK-NEXT:    ret
+;
+; FISEL-LABEL: call_dso_local_weak:
+; FISEL:       // %bb.0:
+; FISEL-NEXT:    str x30, [sp, #-16]! // 8-byte Folded Spill
+; FISEL-NEXT:    bl dso_local_weak
+; FISEL-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; FISEL-NEXT:    ret
+  %ret = call ptr @dso_local_weak()
+  ret ptr %ret
+}
+
+declare extern_weak dso_local ptr @dso_local_weak()
