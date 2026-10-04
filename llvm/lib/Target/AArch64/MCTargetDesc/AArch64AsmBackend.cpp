@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/AArch64FixupKinds.h"
+#include "llvm/ADT/Twine.h"
 #include "MCTargetDesc/AArch64MCAsmInfo.h"
 #include "MCTargetDesc/AArch64MCTargetDesc.h"
 #include "Utils/AArch64BaseInfo.h"
@@ -137,20 +138,26 @@ static unsigned AdrImmBits(unsigned Value) {
 
 static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
                                  uint64_t Value, MCContext &Ctx,
-                                 const Triple &TheTriple, bool IsResolved) {
+                                 const Triple &TheTriple, bool IsResolved,
+                                 StringRef FixupName) {
   int64_t SignedValue = static_cast<int64_t>(Value);
+  auto reportRangeError = [&]() {
+    Ctx.reportError(Fixup.getLoc(),
+                    "fixup value out of range for " + Twine(FixupName) +
+                        ": " + Twine(SignedValue));
+  };
   switch (Fixup.getKind()) {
   default:
     llvm_unreachable("Unknown fixup kind!");
   case AArch64::fixup_aarch64_pcrel_adr_imm21:
     if (!isInt<21>(SignedValue))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     return AdrImmBits(Value & 0x1fffffULL);
   case AArch64::fixup_aarch64_pcrel_adrp_imm21:
     assert(!IsResolved);
     if (TheTriple.isOSBinFormatCOFF()) {
       if (!isInt<21>(SignedValue))
-        Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+        reportRangeError();
       return AdrImmBits(Value & 0x1fffffULL);
     }
     return AdrImmBits((Value & 0x1fffff000ULL) >> 12);
@@ -158,7 +165,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
   case AArch64::fixup_aarch64_pcrel_branch19:
     // Signed 19-bit immediate which gets multiplied by 4
     if (!isInt<21>(SignedValue))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
     // Low two bits are not encoded.
@@ -169,14 +176,14 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
       Value &= 0xfff;
     // Unsigned 12-bit immediate
     if (!isUInt<12>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     return Value;
   case AArch64::fixup_aarch64_ldst_imm12_scale2:
     if (TheTriple.isOSBinFormatCOFF() && !IsResolved)
       Value &= 0xfff;
     // Unsigned 12-bit immediate which gets multiplied by 2
     if (!isUInt<13>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     if (Value & 0x1)
       Ctx.reportError(Fixup.getLoc(), "fixup must be 2-byte aligned");
     return Value >> 1;
@@ -185,7 +192,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
       Value &= 0xfff;
     // Unsigned 12-bit immediate which gets multiplied by 4
     if (!isUInt<14>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup must be 4-byte aligned");
     return Value >> 2;
@@ -194,7 +201,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
       Value &= 0xfff;
     // Unsigned 12-bit immediate which gets multiplied by 8
     if (!isUInt<15>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     if (Value & 0x7)
       Ctx.reportError(Fixup.getLoc(), "fixup must be 8-byte aligned");
     return Value >> 3;
@@ -203,7 +210,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
       Value &= 0xfff;
     // Unsigned 12-bit immediate which gets multiplied by 16
     if (!isUInt<16>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     if (Value & 0xf)
       Ctx.reportError(Fixup.getLoc(), "fixup must be 16-byte aligned");
     return Value >> 4;
@@ -278,21 +285,21 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
       Value &= 0xFFFF;
     } else if (AArch64::getSymbolLoc(RefKind) == AArch64::S_SABS) {
       if (SignedValue > 0xFFFF || SignedValue < -0xFFFF)
-        Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+        reportRangeError();
 
       // Invert the negative immediate because it will feed into a MOVN.
       if (SignedValue < 0)
         SignedValue = ~SignedValue;
       Value = static_cast<uint64_t>(SignedValue);
     } else if (Value > 0xFFFF) {
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     }
     return Value;
   }
   case AArch64::fixup_aarch64_pcrel_branch9:
     // Signed 11-bit(9bits + 2 shifts) label
     if (!isInt<11>(SignedValue))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     // Low two bits are not encoded (4-byte alignment assumed).
     if (Value & 0b11)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
@@ -300,7 +307,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
   case AArch64::fixup_aarch64_pcrel_branch14:
     // Signed 16-bit immediate
     if (!isInt<16>(SignedValue))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     // Low two bits are not encoded (4-byte alignment assumed).
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
@@ -311,7 +318,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
     Value = static_cast<uint64_t>(SignedValue);
     // Check valid 18-bit unsigned range.
     if (SignedValue < 0 || SignedValue > ((1 << 18) - 1))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     // Low two bits are not encoded (4-byte alignment assumed).
     if (Value & 0b11)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
@@ -327,7 +334,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
     }
     // Signed 28-bit immediate
     if (!isInt<28>(SignedValue))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportRangeError();
     // Low two bits are not encoded (4-byte alignment assumed).
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
@@ -451,7 +458,8 @@ void AArch64AsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   MCContext &Ctx = getContext();
   int64_t SignedValue = static_cast<int64_t>(Value);
   // Apply any target-specific value adjustments.
-  Value = adjustFixupValue(Fixup, Target, Value, Ctx, TheTriple, IsResolved);
+  Value = adjustFixupValue(Fixup, Target, Value, Ctx, TheTriple, IsResolved,
+                           Info.Name);
 
   // Shift the value into position.
   Value <<= Info.TargetOffset;

@@ -70,7 +70,8 @@
 // CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: relocation for a thread-local variable points to an absolute symbol
   movz x0, #:tprel_g0:value1
 
-// CHECK-WIN: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
+// CHECK-WIN: :[[@LINE+2]]:{{[0-9]+}}: error: fixup value out of range
+// CHECK-WIN-SAME: for fixup_aarch64_pcrel_adrp_imm21: 16777216
   adrp x0, external+0x1000000
 
   .byte 0
