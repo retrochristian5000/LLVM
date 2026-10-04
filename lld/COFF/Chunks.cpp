@@ -342,7 +342,11 @@ static void applyArm64Branch14(uint8_t *off, int64_t v) {
 void SectionChunk::applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os,
                                  uint64_t s, uint64_t p, uint64_t imageBase,
                                  StringRef symbolName) const {
-  std::string location = (Twine(symbolName) + "@" + file->getName()).str();
+  std::string location =
+      (Twine(symbolName) + "@" + file->getName() + " [" + getSectionName() +
+       "+0x" + Twine::utohexstr(p - rva) + ", reloc 0x" +
+       Twine::utohexstr(type) + ", target RVA 0x" + Twine::utohexstr(s) + "]")
+          .str();
 
   switch (type) {
   case IMAGE_REL_ARM64_PAGEBASE_REL21: applyArm64Addr(off, s, p, 12); break;

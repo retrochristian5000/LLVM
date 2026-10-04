@@ -7,6 +7,7 @@
 # deliberately one byte into .rdata while the instruction is an eight-byte
 # load, so the low page offset cannot be represented by the scaled immediate.
 # CHECK: error: misaligned ldr/str offset: 0x1@f9400000 with align 2^3 from bad@
+# CHECK-SAME: [.text+0x4, reloc 0x7, target RVA 0x
 
     .text
     .globl main
