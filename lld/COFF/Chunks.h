@@ -282,7 +282,8 @@ public:
   void applyRelARM(uint8_t *off, uint16_t type, OutputSection *os, uint64_t s,
                    uint64_t p, uint64_t imageBase) const;
   void applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os, uint64_t s,
-                     uint64_t p, uint64_t imageBase) const;
+                     uint64_t p, uint64_t imageBase,
+                     StringRef symbolName) const;
 
   void getRuntimePseudoRelocs(std::vector<RuntimePseudoReloc> &res);
 

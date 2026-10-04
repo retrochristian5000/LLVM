@@ -278,7 +278,7 @@ void applyArm64Imm(uint8_t *off, uint64_t imm, uint32_t rangeLimit) {
 // Even if larger loads/stores have a larger range, limit the
 // effective offset to 12 bit, since it is intended to be a
 // page offset.
-static void applyArm64Ldr(uint8_t *off, uint64_t imm) {
+static void applyArm64Ldr(uint8_t *off, uint64_t imm, StringRef location) {
   uint32_t orig = read32le(off);
   uint32_t size = orig >> 30;
   // 0x04000000 indicates SIMD/FP registers
@@ -286,7 +286,9 @@ static void applyArm64Ldr(uint8_t *off, uint64_t imm) {
   if ((orig & 0x4800000) == 0x4800000)
     size += 4;
   if ((imm & ((1 << size) - 1)) != 0)
-    error("misaligned ldr/str offset");
+    error("misaligned ldr/str offset: 0x" + Twine::utohexstr(imm) + "@" +
+          Twine::utohexstr(orig) + " with align 2^" + Twine(size) + " from " +
+          location);
   applyArm64Imm(off, imm >> size, size);
 }
 
@@ -313,9 +315,10 @@ static void applySecRelHigh12A(const SectionChunk *sec, uint8_t *off,
 }
 
 static void applySecRelLdr(const SectionChunk *sec, uint8_t *off,
-                           OutputSection *os, uint64_t s) {
+                           OutputSection *os, uint64_t s,
+                           StringRef location) {
   if (checkSecRel(sec, os))
-    applyArm64Ldr(off, (s - os->getRVA()) & 0xfff);
+    applyArm64Ldr(off, (s - os->getRVA()) & 0xfff, location);
 }
 
 void applyArm64Branch26(uint8_t *off, int64_t v) {
@@ -337,13 +340,17 @@ static void applyArm64Branch14(uint8_t *off, int64_t v) {
 }
 
 void SectionChunk::applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os,
-                                 uint64_t s, uint64_t p,
-                                 uint64_t imageBase) const {
+                                 uint64_t s, uint64_t p, uint64_t imageBase,
+                                 StringRef symbolName) const {
+  std::string location = (Twine(symbolName) + "@" + file->getName()).str();
+
   switch (type) {
   case IMAGE_REL_ARM64_PAGEBASE_REL21: applyArm64Addr(off, s, p, 12); break;
   case IMAGE_REL_ARM64_REL21:          applyArm64Addr(off, s, p, 0); break;
   case IMAGE_REL_ARM64_PAGEOFFSET_12A: applyArm64Imm(off, s & 0xfff, 0); break;
-  case IMAGE_REL_ARM64_PAGEOFFSET_12L: applyArm64Ldr(off, s & 0xfff); break;
+  case IMAGE_REL_ARM64_PAGEOFFSET_12L:
+    applyArm64Ldr(off, s & 0xfff, location);
+    break;
   case IMAGE_REL_ARM64_BRANCH26:       applyArm64Branch26(off, s - p); break;
   case IMAGE_REL_ARM64_BRANCH19:       applyArm64Branch19(off, s - p); break;
   case IMAGE_REL_ARM64_BRANCH14:       applyArm64Branch14(off, s - p); break;
@@ -357,7 +364,9 @@ void SectionChunk::applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os,
   case IMAGE_REL_ARM64_SECREL:         applySecRel(this, off, os, s); break;
   case IMAGE_REL_ARM64_SECREL_LOW12A:  applySecRelLow12A(this, off, os, s); break;
   case IMAGE_REL_ARM64_SECREL_HIGH12A: applySecRelHigh12A(this, off, os, s); break;
-  case IMAGE_REL_ARM64_SECREL_LOW12L:  applySecRelLdr(this, off, os, s); break;
+  case IMAGE_REL_ARM64_SECREL_LOW12L:
+    applySecRelLdr(this, off, os, s, location);
+    break;
   case IMAGE_REL_ARM64_SECTION:
     applySecIdx(off, os, file->symtab.ctx.outputSections.size());
     break;
@@ -463,9 +472,11 @@ void SectionChunk::applyRelocation(uint8_t *off,
   case Triple::thumb:
     applyRelARM(off, rel.Type, os, s, p, imageBase);
     break;
-  case Triple::aarch64:
-    applyRelARM64(off, rel.Type, os, s, p, imageBase);
+  case Triple::aarch64: {
+    std::string symbolName = toString(ctx, *sym);
+    applyRelARM64(off, rel.Type, os, s, p, imageBase, symbolName);
     break;
+  }
   default:
     llvm_unreachable("unknown machine type");
   }
@@ -839,7 +850,7 @@ void ImportThunkChunkARM64::writeTo(uint8_t *buf) const {
   int64_t off = impSymbol->getRVA() & 0xfff;
   memcpy(buf, importThunkARM64, sizeof(importThunkARM64));
   applyArm64Addr(buf, impSymbol->getRVA(), rva, 12);
-  applyArm64Ldr(buf + 4, off);
+  applyArm64Ldr(buf + 4, off, impSymbol->getName());
 }
 
 // A Thumb2, PIC, non-interworking range extension thunk.
@@ -1159,7 +1170,8 @@ size_t ImportThunkChunkARM64EC::getSize() const {
 void ImportThunkChunkARM64EC::writeTo(uint8_t *buf) const {
   memcpy(buf, importThunkARM64EC, sizeof(importThunkARM64EC));
   applyArm64Addr(buf, file->impSym->getRVA(), rva, 12);
-  applyArm64Ldr(buf + 4, file->impSym->getRVA() & 0xfff);
+  applyArm64Ldr(buf + 4, file->impSym->getRVA() & 0xfff,
+                file->impSym->getName());
 
   // The exit thunk may be missing. This can happen if the application only
   // references a function by its address (in which case the thunk is never
