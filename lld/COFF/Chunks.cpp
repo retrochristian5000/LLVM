@@ -285,10 +285,12 @@ static void applyArm64Ldr(uint8_t *off, uint64_t imm, StringRef location) {
   // 0x00800000 indicates 128 bit
   if ((orig & 0x4800000) == 0x4800000)
     size += 4;
-  if ((imm & ((1 << size) - 1)) != 0)
+  if ((imm & ((1 << size) - 1)) != 0) {
     error("misaligned ldr/str offset: 0x" + Twine::utohexstr(imm) + "@" +
           Twine::utohexstr(orig) + " with align 2^" + Twine(size) + " from " +
           location);
+    return;
+  }
   applyArm64Imm(off, imm >> size, size);
 }
 
@@ -342,18 +344,20 @@ static void applyArm64Branch14(uint8_t *off, int64_t v) {
 void SectionChunk::applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os,
                                  uint64_t s, uint64_t p, uint64_t imageBase,
                                  StringRef symbolName) const {
-  std::string location =
-      (Twine(symbolName) + "@" + file->getName() + " [" + getSectionName() +
-       "+0x" + Twine::utohexstr(p - rva) + ", reloc 0x" +
-       Twine::utohexstr(type) + ", target RVA 0x" + Twine::utohexstr(s) + "]")
-          .str();
+  // Only build the diagnostic for relocations that may need it.
+  auto location = [&]() {
+    return (Twine(symbolName) + "@" + file->getName() + " [" + getSectionName() +
+            "+0x" + Twine::utohexstr(p - rva) + ", reloc 0x" +
+            Twine::utohexstr(type) + ", target RVA 0x" + Twine::utohexstr(s) +
+            "]").str();
+  };
 
   switch (type) {
   case IMAGE_REL_ARM64_PAGEBASE_REL21: applyArm64Addr(off, s, p, 12); break;
   case IMAGE_REL_ARM64_REL21:          applyArm64Addr(off, s, p, 0); break;
   case IMAGE_REL_ARM64_PAGEOFFSET_12A: applyArm64Imm(off, s & 0xfff, 0); break;
   case IMAGE_REL_ARM64_PAGEOFFSET_12L:
-    applyArm64Ldr(off, s & 0xfff, location);
+    applyArm64Ldr(off, s & 0xfff, location());
     break;
   case IMAGE_REL_ARM64_BRANCH26:       applyArm64Branch26(off, s - p); break;
   case IMAGE_REL_ARM64_BRANCH19:       applyArm64Branch19(off, s - p); break;
@@ -369,7 +373,7 @@ void SectionChunk::applyRelARM64(uint8_t *off, uint16_t type, OutputSection *os,
   case IMAGE_REL_ARM64_SECREL_LOW12A:  applySecRelLow12A(this, off, os, s); break;
   case IMAGE_REL_ARM64_SECREL_HIGH12A: applySecRelHigh12A(this, off, os, s); break;
   case IMAGE_REL_ARM64_SECREL_LOW12L:
-    applySecRelLdr(this, off, os, s, location);
+    applySecRelLdr(this, off, os, s, location());
     break;
   case IMAGE_REL_ARM64_SECTION:
     applySecIdx(off, os, file->symtab.ctx.outputSections.size());
