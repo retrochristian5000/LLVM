@@ -33,11 +33,14 @@ def color_diagnostics_eq: Joined<["--"], "color-diagnostics=">,
 def threads_eq : Joined<["--"], "threads=">,
     HelpText<"Number of threads. '1' disables multi-threading. By default all available hardware threads are used">,
     Group<grp_lld>;
-// WHP compatibility: bare -threads requests the already-enabled default
-// parallel linker policy. Keep the numeric variant tied to the canonical
-// --threads=N implementation so LTO job counts and validation do not diverge.
+// Both bare spellings select the normal default hardware-concurrency policy;
+// numeric spellings share the existing validated --threads=N implementation.
+def threads : Flag<["--"], "threads">,
+    HelpText<"Use the default number of linker threads">,
+    Group<grp_lld>;
 def compat_threads : Flag<["-"], "threads">,
-    HelpText<"Enable default parallel linking (compatibility spelling)">,
+    Alias<threads>,
+    HelpText<"Alias for --threads">,
     Group<grp_lld>;
 def compat_threads_eq : Joined<["-"], "threads=">,
     Alias<threads_eq>,

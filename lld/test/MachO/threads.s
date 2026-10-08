@@ -5,11 +5,16 @@
 # RUN: %lld --threads=1 %t.o -o /dev/null
 # RUN: %lld --threads=2 %t.o -o /dev/null
 
-## WHP compatibility: bare -threads preserves the default parallel behavior;
-## -threads=N forwards to the canonical --threads=N setting.
+## Bare --threads and its -threads alias both keep default parallelism;
+## -threads=N forwards to the validated --threads=N setting.
+# RUN: %lld --threads %t.o -o /dev/null
 # RUN: %lld -threads %t.o -o /dev/null
+# RUN: %lld --threads -threads %t.o -o /dev/null
+# RUN: %lld -threads --threads %t.o -o /dev/null
 # RUN: %lld -threads=1 %t.o -o /dev/null
 # RUN: %lld -threads=2 %t.o -o /dev/null
+# RUN: %lld --threads -threads=2 %t.o -o /dev/null
+# RUN: %lld -threads --threads=2 %t.o -o /dev/null
 # RUN: %lld --threads=0 -threads=2 %t.o -o /dev/null
 # RUN: %lld -threads=0 --threads=2 %t.o -o /dev/null
 
