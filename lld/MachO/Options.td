@@ -33,6 +33,16 @@ def color_diagnostics_eq: Joined<["--"], "color-diagnostics=">,
 def threads_eq : Joined<["--"], "threads=">,
     HelpText<"Number of threads. '1' disables multi-threading. By default all available hardware threads are used">,
     Group<grp_lld>;
+// WHP compatibility: bare -threads requests the already-enabled default
+// parallel linker policy. Keep the numeric variant tied to the canonical
+// --threads=N implementation so LTO job counts and validation do not diverge.
+def compat_threads : Flag<["-"], "threads">,
+    HelpText<"Enable default parallel linking (compatibility spelling)">,
+    Group<grp_lld>;
+def compat_threads_eq : Joined<["-"], "threads=">,
+    Alias<threads_eq>,
+    HelpText<"Alias for --threads=N">,
+    Group<grp_lld>;
 def thinlto_emit_imports_files: Flag<["--"], "thinlto-emit-imports-files">,
     Group<grp_lld>;
 def thinlto_emit_index_files: Flag<["--"], "thinlto-emit-index-files">,
