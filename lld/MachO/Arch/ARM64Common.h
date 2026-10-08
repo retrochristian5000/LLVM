@@ -94,8 +94,10 @@ inline void encodePageOff12(uint32_t *loc, Target t, uint32_t base,
       scale = 4;
   }
   const int size = 1 << scale;
-  if ((va & (size - 1)) != 0)
+  if ((va & (size - 1)) != 0) {
     reportUnalignedLdrStr(loc, t, va, size);
+    return;
+  }
 
   // TODO(gkm): extract embedded addend and warn if != 0
   // uint64_t addend = ((base & 0x003FFC00) >> 10);
