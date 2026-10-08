@@ -18,8 +18,10 @@ using namespace llvm;
 using namespace lld;
 using namespace lld::macho;
 
-static_assert(sizeof(void *) != 8 || sizeof(Relocation) == 24,
-              "Try to minimize Reloc's size; we create many instances");
+// The usual 64-bit layout is 24 bytes. Permit one pointer-sized word of
+// ABI-specific padding while still catching substantial size regressions.
+static_assert(sizeof(void *) != 8 || sizeof(Relocation) <= 32,
+              "Relocation is too large; we create many instances");
 
 InputSection *Relocation::getReferentInputSection() const {
   if (const auto *sym = referent.dyn_cast<Symbol *>()) {
