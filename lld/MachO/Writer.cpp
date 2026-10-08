@@ -1331,9 +1331,17 @@ void Writer::writeOutputFile() {
   reportPendingUndefinedSymbols();
   if (errorCount())
     return;
+  // Errors can also occur while writing sections, applying optimization hints,
+  // or building chained fixups. Never commit an invalid Mach-O image.
   writeSections();
+  if (errorCount())
+    return;
   applyOptimizationHints();
+  if (errorCount())
+    return;
   buildFixupChains();
+  if (errorCount())
+    return;
   if (config->generateUuid)
     writeUuid();
   writeCodeSignature();
