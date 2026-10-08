@@ -1091,6 +1091,16 @@ def Xlinker : Separate<["-"], "Xlinker">, Flags<[LinkerInput, RenderAsInput]>,
   Visibility<[ClangOption, CLOption, FlangOption]>,
   HelpText<"Pass <arg> to the linker">, MetaVarName<"<arg>">,
   Group<Link_Group>;
+// WHP Mach-O LLD compatibility: allow linker threads options directly
+// through the Darwin Clang driver, in addition to -Wl,--threads[=N].
+def darwin_threads : Flag<["-", "--"], "threads">,
+  Flags<[LinkOption]>, Visibility<[ClangOption]>,
+  HelpText<"Use default Mach-O LLD linker concurrency (Darwin, LLD only)">,
+  Group<Link_Group>;
+def darwin_threads_EQ : Joined<["-", "--"], "threads=">,
+  Flags<[LinkOption]>, Visibility<[ClangOption]>,
+  HelpText<"Set Mach-O LLD linker thread count (Darwin, LLD only)">,
+  MetaVarName<"<N>">, Group<Link_Group>;
 def Xthinlto_distributor_EQ : CommaJoined<["-"], "Xthinlto-distributor=">,
   Flags<[LinkOption]>,
   Visibility<[ClangOption, CLOption]>,

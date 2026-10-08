@@ -780,10 +780,35 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   StringRef Parallelism = getLTOParallelism(Args, getToolChain().getDriver());
   if (!Parallelism.empty()) {
-    CmdArgs.push_back("-mllvm");
     unsigned NumThreads =
         llvm::get_threadpool_strategy(Parallelism)->compute_thread_count();
-    CmdArgs.push_back(Args.MakeArgString("-threads=" + Twine(NumThreads)));
+    // Mach-O LLD owns --threads=N as a driver option. Routing it through
+    // -mllvm instead bypasses its parser and can produce "unknown argument"
+    // from LLVM's internal command-line parser. Keep the Apple ld64 LTO
+    // spelling unchanged.
+    if (LinkerIsLLD)
+      CmdArgs.push_back(Args.MakeArgString("--threads=" + Twine(NumThreads)));
+    else {
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back(Args.MakeArgString("-threads=" + Twine(NumThreads)));
+    }
+  }
+
+  // Accept the same spellings at the Clang driver boundary. Explicit linker
+  // thread options follow the -flto-jobs value and therefore take precedence.
+  for (const Arg *A : Args.filtered(options::OPT_darwin_threads,
+                                    options::OPT_darwin_threads_EQ)) {
+    A->claim();
+    if (!LinkerIsLLD) {
+      getToolChain().getDriver().Diag(diag::err_drv_unsupported_opt)
+          << A->getAsString(Args);
+      continue;
+    }
+    if (A->getOption().matches(options::OPT_darwin_threads))
+      CmdArgs.push_back("--threads");
+    else
+      CmdArgs.push_back(
+          Args.MakeArgString("--threads=" + Twine(A->getValue())));
   }
 
   if (getToolChain().ShouldLinkCXXStdlib(Args))
