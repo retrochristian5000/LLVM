@@ -2514,6 +2514,19 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     return;
   }
 
+  // AArch64 ADRP page relocations are fixed at link time relative to
+  // 4 KiB pages.  A PE loader may map an image at a different offset within
+  // a page when SectionAlignment is smaller, making those addresses wrong.
+  // Check this after machine inference so /machine:arm64 is not required,
+  // and after the import-library-only return (which emits no PE image).
+  // ARM64EC and ARM64X contain native ARM64 code and have the same constraint.
+  if (isAnyArm64(config->machine) && config->align < 4096) {
+    Err(ctx) << "/align:" << config->align << " is too small for "
+             << machineToStr(config->machine)
+             << " (AArch64 PE images require at least 4096-byte section alignment)";
+    return;
+  }
+
   // Windows specific -- if no /subsystem is given, we need to infer
   // that from entry point name.  Must happen before /entry handling,
   // and after the early return when just writing an import library.
