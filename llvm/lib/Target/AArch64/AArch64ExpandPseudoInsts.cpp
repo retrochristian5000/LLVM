@@ -29,6 +29,7 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CodeGen.h"
@@ -1490,6 +1491,31 @@ bool AArch64ExpandPseudoImpl::expandMI(MachineBasicBlock &MBB,
       DebugLoc DL = MI.getDebugLoc();
       MachineInstrBuilder MIB1 =
           BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(AArch64::ADRP), DstReg);
+
+      // COFF weak externals may resolve to definitions whose addresses are
+      // not pointer-aligned.  A scaled PAGEOFFSET_12L relocation against such
+      // a symbol may fail at link time.  Form the byte address with ADD
+      // instead, then load from offset zero.
+      if (MF.getSubtarget<AArch64Subtarget>().isTargetCOFF() &&
+          MO1.isGlobal() && MO1.getGlobal()->hasExternalWeakLinkage() &&
+          !(Flags & (AArch64II::MO_COFFSTUB | AArch64II::MO_DLLIMPORT))) {
+        MIB1.addGlobalAddress(MO1.getGlobal(), 0, Flags | AArch64II::MO_PAGE);
+        BuildMI(MBB, MBBI, DL, TII->get(AArch64::ADDXri), DstReg)
+            .addReg(DstReg)
+            .addGlobalAddress(MO1.getGlobal(), 0,
+                              Flags | AArch64II::MO_PAGEOFF | AArch64II::MO_NC)
+            .addImm(0);
+        MachineInstrBuilder Load =
+            BuildMI(MBB, MBBI, DL, TII->get(AArch64::LDRXui))
+                .add(MI.getOperand(0))
+                .addUse(DstReg, RegState::Kill)
+                .addImm(0);
+        if (MI.peekDebugInstrNum() != 0)
+          Load->setDebugInstrNum(MI.peekDebugInstrNum());
+        transferImpOps(MI, MIB1, Load);
+        MI.eraseFromParent();
+        return true;
+      }
 
       MachineInstrBuilder MIB2;
       if (MF.getSubtarget<AArch64Subtarget>().isTargetILP32()) {
