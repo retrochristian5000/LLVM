@@ -19,9 +19,26 @@
 # ARM64EC: error: /align:512 is too small for arm64ec (AArch64 PE images require at least 4096-byte section alignment)
 # ARM64X: error: /align:512 is too small for arm64x (AArch64 PE images require at least 4096-byte section alignment)
 
+# FileAlignment must never exceed SectionAlignment for ARM64 images.
+# A 4 KiB section size alone is not enough when /filealign is larger.
+# RUN: not lld-link /machine:arm64 /entry:main /subsystem:console /filealign:8192 /out:%t.exe %t.arm64.obj 2>&1 | FileCheck %s --check-prefix=ARM64-FILEALIGN
+# RUN: not lld-link /entry:main /subsystem:console /align:4096 /filealign:8192 /out:%t.exe %t.arm64.obj 2>&1 | FileCheck %s --check-prefix=INFERRED-FILEALIGN
+# RUN: not lld-link /machine:arm64ec /dll /noentry /filealign:8192 /out:%t.dll %t.arm64ec.obj 2>&1 | FileCheck %s --check-prefix=ARM64EC-FILEALIGN
+# RUN: not lld-link /machine:arm64x /dll /noentry /filealign:8192 /out:%t.dll %t.arm64.obj 2>&1 | FileCheck %s --check-prefix=ARM64X-FILEALIGN
+# ARM64-FILEALIGN: error: /filealign:8192 exceeds /align:4096 for arm64 (PE FileAlignment must not exceed SectionAlignment)
+# INFERRED-FILEALIGN: error: /filealign:8192 exceeds /align:4096 for arm64 (PE FileAlignment must not exceed SectionAlignment)
+# ARM64EC-FILEALIGN: error: /filealign:8192 exceeds /align:4096 for arm64ec (PE FileAlignment must not exceed SectionAlignment)
+# ARM64X-FILEALIGN: error: /filealign:8192 exceeds /align:4096 for arm64x (PE FileAlignment must not exceed SectionAlignment)
+
 # RUN: lld-link /machine:arm64 /entry:main /subsystem:console /align:4096 /out:%t.exe %t.arm64.obj
 # RUN: llvm-readobj --file-headers %t.exe | FileCheck %s --check-prefix=HEADER
 # HEADER: SectionAlignment: 4096
+
+# The equal-alignment case is valid and must continue to link.
+# RUN: lld-link /machine:arm64 /entry:main /subsystem:console /align:8192 /filealign:8192 /out:%t.exe %t.arm64.obj
+# RUN: llvm-readobj --file-headers %t.exe | FileCheck %s --check-prefix=EQUAL-ALIGN
+# EQUAL-ALIGN: SectionAlignment: 8192
+# EQUAL-ALIGN: FileAlignment: 8192
 
 # RUN: lld-link /entry:main /subsystem:console /out:%t.exe %t.arm64.obj
 

@@ -2515,16 +2515,27 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   }
 
   // AArch64 ADRP page relocations are fixed at link time relative to
-  // 4 KiB pages.  A PE loader may map an image at a different offset within
+  // 4 KiB pages. A PE loader may map an image at a different offset within
   // a page when SectionAlignment is smaller, making those addresses wrong.
-  // Check this after machine inference so /machine:arm64 is not required,
-  // and after the import-library-only return (which emits no PE image).
-  // ARM64EC and ARM64X contain native ARM64 code and have the same constraint.
-  if (isAnyArm64(config->machine) && config->align < 4096) {
-    Err(ctx) << "/align:" << config->align << " is too small for "
-             << machineToStr(config->machine)
-             << " (AArch64 PE images require at least 4096-byte section alignment)";
-    return;
+  // PE also requires SectionAlignment >= FileAlignment. Even with a valid
+  // 4 KiB section alignment, a larger /filealign would make the file layout
+  // incompatible with the loader's section addresses.
+  // Check after machine inference and the import-library-only early return.
+  // ARM64EC and ARM64X contain native ARM64 code and share these constraints.
+  if (isAnyArm64(config->machine)) {
+    if (config->align < 4096) {
+      Err(ctx) << "/align:" << config->align << " is too small for "
+               << machineToStr(config->machine)
+               << " (AArch64 PE images require at least 4096-byte section alignment)";
+      return;
+    }
+    if (config->fileAlign > config->align) {
+      Err(ctx) << "/filealign:" << config->fileAlign << " exceeds /align:"
+               << config->align << " for "
+               << machineToStr(config->machine)
+               << " (PE FileAlignment must not exceed SectionAlignment)";
+      return;
+    }
   }
 
   // Windows specific -- if no /subsystem is given, we need to infer
