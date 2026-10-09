@@ -135,3 +135,9 @@
 // C-LD-DLL-USER-X-NOT: "-x" "{{.*}}.x"
 // C-LD-DLL-USER-X-SAME: "-S" "//'{{.*}}.SCEEBND2'"
 
+
+// 8. Linker side-deck entries from _LD_SIDE_DECKS must survive command
+// construction; passing StringRef::str().c_str() leaves dangling pointers.
+// RUN: env _LD_SIDE_DECKS=first-side-deck.x:second-side-deck.x %clang -### --target=s390x-ibm-zos %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=LD-SIDE-DECKS %s
+// LD-SIDE-DECKS: "first-side-deck.x" "second-side-deck.x"

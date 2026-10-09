@@ -214,7 +214,9 @@ void zos::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       SmallVector<StringRef> ld_side_deck;
       ld_env_var.split(ld_side_deck, ":");
       for (StringRef ld_loc : ld_side_deck) {
-        CmdArgs.push_back((ld_loc.str()).c_str());
+        // The linker command outlives the temporary string returned by
+        // StringRef::str(). Intern the argument in the compilation's ArgList.
+        CmdArgs.push_back(Args.MakeArgString(ld_loc));
       }
     }
   }
