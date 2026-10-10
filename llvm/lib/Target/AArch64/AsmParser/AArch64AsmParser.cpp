@@ -7633,6 +7633,12 @@ bool AArch64AsmParser::parseDirectiveSEHAllocStack(SMLoc L) {
   int64_t Size;
   if (parseImmExpr(Size))
     return true;
+  // Windows ARM64 alloc_s/alloc_m/alloc_l encode byte counts in units of
+  // 16, with a maximum 24-bit count. Reject malformed operands before
+  // converting the signed parser value to the streamer's unsigned argument.
+  if (Size <= 0 || (Size & 15) || Size > 0xFFFFFF0)
+    return Error(L, ".seh_stackalloc size must be a positive multiple of 16 "
+                    "not exceeding 268435440 bytes");
   getTargetStreamer().emitARM64WinCFIAllocStack(Size);
   return false;
 }
@@ -7799,6 +7805,11 @@ bool AArch64AsmParser::parseDirectiveSEHAddFP(SMLoc L) {
   int64_t Size;
   if (parseImmExpr(Size))
     return true;
+  // add_fp has an 8-bit immediate scaled by 8. Keep invalid values from
+  // truncating in the unwind streamer (or asserting in debug builds).
+  if (Size < 0 || (Size & 7) || Size > 2040)
+    return Error(L, ".seh_add_fp offset must be a multiple of 8 in the "
+                    "range [0, 2040]");
   getTargetStreamer().emitARM64WinCFIAddFP(Size);
   return false;
 }
