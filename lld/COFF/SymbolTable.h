@@ -16,6 +16,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 
 namespace llvm {
 struct LTOCodeGenerator;
@@ -183,7 +184,7 @@ public:
   std::map<StringRef, StringRef> alternateNames;
 
   // Used for /aligncomm.
-  std::map<std::string, int> alignComm;
+  std::map<std::string, uint32_t> alignComm;
 
   void fixupExports();
   void assignExportOrdinals();

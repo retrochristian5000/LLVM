@@ -46,8 +46,13 @@ const uint32_t permMask = 0xFE000000;
 // Mask for section types (code, data, bss).
 const uint32_t typeMask = 0x000000E0;
 
-// The log base 2 of the largest section alignment, which is log2(8192), or 13.
-enum : unsigned { Log2MaxSectionAlignment = 13 };
+// COFF object section headers encode alignments up to 8192 bytes. Common
+// symbols are not sections, and /aligncomm may request stronger alignment.
+// Chunk alignment is represented as a uint32_t power of two.
+enum : unsigned {
+  Log2MaxSectionAlignment = 13,
+  Log2MaxChunkAlignment = 31
+};
 
 // A Chunk represents a chunk of data that will occupy space in the
 // output (if the resolver chose that). It may or may not be backed by
@@ -67,8 +72,8 @@ public:
   // Returns the size of this chunk (even if this is a common or BSS.)
   size_t getSize() const;
 
-  // Returns chunk alignment in power of two form. Value values are powers of
-  // two from 1 to 8192.
+  // Returns chunk alignment as a power of two, in bytes. Common symbols can
+  // require more than the COFF section-header maximum of 8192 bytes.
   uint32_t getAlignment() const { return 1U << p2Align; }
 
   // Update the chunk section alignment measured in bytes. Internally alignment
@@ -78,7 +83,7 @@ public:
     align = align ? align : 1;
     assert(llvm::isPowerOf2_32(align) && "alignment is not a power of 2");
     p2Align = llvm::Log2_32(align);
-    assert(p2Align <= Log2MaxSectionAlignment &&
+    assert(p2Align <= Log2MaxChunkAlignment &&
            "impossible requested alignment");
   }
 

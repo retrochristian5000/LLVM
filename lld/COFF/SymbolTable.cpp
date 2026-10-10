@@ -1451,11 +1451,15 @@ void SymbolTable::parseAligncomm(StringRef s) {
     return;
   }
   int v;
-  if (align.getAsInteger(0, v)) {
+  // The exponent must fit the uint32_t alignment used by Chunk. Shifting a
+  // signed int by a negative value or by 31 or more is undefined behavior.
+  if (align.getAsInteger(0, v) || v < 0 || v > Log2MaxChunkAlignment) {
     Err(ctx) << "/aligncomm: invalid argument: " << s;
     return;
   }
-  alignComm[std::string(name)] = std::max(alignComm[std::string(name)], 1 << v);
+  uint32_t requestedAlign = uint32_t{1} << v;
+  alignComm[std::string(name)] =
+      std::max(alignComm[std::string(name)], requestedAlign);
 }
 
 Symbol *SymbolTable::addUndefined(StringRef name) {
