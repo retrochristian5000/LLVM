@@ -261,6 +261,13 @@ void ConcatInputSection::writeTo(uint8_t *buf) {
         continue;
       }
       referentVA = resolveSymbolOffsetVA(referentSym, r.type, r.addend);
+      // Match the authenticated personality GOT slot allocated for arm64e
+      // DWARF CIE relocations, without changing ordinary GOT references.
+      if (config->arch() == AK_arm64e &&
+          getName() == section_names::ehFrame &&
+          r.type == ARM64_RELOC_POINTER_TO_GOT &&
+          referentSym->isInAuthGot())
+        referentVA = referentSym->getAuthGotVA() + r.addend;
 
       if (isThreadLocalVariables(getFlags()) && isa<Defined>(referentSym)) {
         // References from thread-local variable sections are treated as offsets

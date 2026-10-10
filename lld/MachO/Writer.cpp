@@ -682,8 +682,16 @@ static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
     if (needsBinding(sym))
       in.stubs->addEntry(sym);
   } else if (relocAttrs.hasAttr(RelocAttrBits::GOT)) {
-    if (relocAttrs.hasAttr(RelocAttrBits::POINTER) || needsBinding(sym))
-      in.got->addEntry(sym);
+    if (relocAttrs.hasAttr(RelocAttrBits::POINTER) || needsBinding(sym)) {
+      // An arm64e DWARF CIE personality pointer refers to a GOT slot that
+      // libunwind authenticates using the slot's address as discriminator.
+      if (config->arch() == AK_arm64e &&
+          isec->getName() == section_names::ehFrame &&
+          r.type == ARM64_RELOC_POINTER_TO_GOT)
+        in.authGot->addEntry(sym);
+      else
+        in.got->addEntry(sym);
+    }
   } else if (relocAttrs.hasAttr(RelocAttrBits::TLV)) {
     if (needsBinding(sym))
       in.tlvPointers->addEntry(sym);
