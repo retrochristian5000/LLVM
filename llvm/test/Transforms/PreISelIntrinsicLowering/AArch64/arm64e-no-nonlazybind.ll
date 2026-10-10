@@ -1,6 +1,6 @@
 ; Test the ObjC intrinsic lowering stage separately from Clang.
-// RUN: opt -mtriple=arm64e-apple-ios -passes=pre-isel-intrinsic-lowering -S -o - %s | FileCheck %s --check-prefix=AUTH
-// RUN: opt -mtriple=arm64-apple-ios -passes=pre-isel-intrinsic-lowering -S -o - %s | FileCheck %s --check-prefix=PLAIN
+; RUN: opt -mtriple=arm64e-apple-ios -passes=pre-isel-intrinsic-lowering -S -o - %s | FileCheck %s --check-prefix=AUTH
+; RUN: opt -mtriple=arm64-apple-ios -passes=pre-isel-intrinsic-lowering -S -o - %s | FileCheck %s --check-prefix=PLAIN
 
 define ptr @retain(ptr %arg) {
 entry:
