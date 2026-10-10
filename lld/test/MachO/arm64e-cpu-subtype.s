@@ -32,3 +32,9 @@ _foo:
 # RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib %t.o -o %t-wrong-arch.dylib 2>&1 | FileCheck %s --check-prefix=WRONG-ARCH
 # UNSUPPORTED: unsupported arm64e pointer-authentication ABI
 # WRONG-ARCH: arm64e object is incompatible with an arm64 output
+
+## Indexing an archive should not reject an incompatible *unused* member.
+## Extracting that same member must still fail when it is required.
+# RUN: llvm-ar rcs %t-v1.a %t-v1.o
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t.o %t-v1.a -o %t-unused.dylib
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib -u _foo %t-v1.a -o %t-used.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED

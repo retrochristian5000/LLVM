@@ -201,32 +201,35 @@ static bool compatWithTargetArch(const InputFile *file, const Header *hdr) {
     return false;
   }
 
-  // The arm64e ABI signs pointers according to the versioned Mach-O subtype.
-  // The object writer currently emits only versioned user ABI 0. Reject any
-  // other object ABI rather than emitting a misleading (and unsafe) image.
-  // Shared libraries are validated separately by dyld and are not merged
-  // into the output image, so this rule applies only to object files.
-  if (file->kind() == InputFile::ObjKind &&
-      hdr->cputype == CPU_TYPE_ARM64) {
-    const uint32_t baseSubtype = hdr->cpusubtype & ~CPU_SUBTYPE_MASK;
-    if (config->arch() == AK_arm64e) {
-      const uint32_t supportedSubtype =
-          CPU_SUBTYPE_ARM64E_WITH_PTRAUTH_VERSION(0, false);
-      if (hdr->cpusubtype != supportedSubtype) {
-        error(toString(file) +
-              ": unsupported arm64e pointer-authentication ABI; "
-              "expected versioned user ABI 0");
-        return false;
-      }
-    } else if (config->arch() == AK_arm64 &&
-               baseSubtype == CPU_SUBTYPE_ARM64E) {
+  return checkCompatibility(file);
+}
+
+// Check pointer-authentication ABI only when an object is actually linked.
+// Lazy archive indexing must not reject members that are never extracted.
+template <class Header>
+static bool checkArm64eObjectABI(const ObjFile *file, const Header *hdr) {
+  if (hdr->cputype != CPU_TYPE_ARM64)
+    return true;
+
+  const uint32_t baseSubtype = hdr->cpusubtype & ~CPU_SUBTYPE_MASK;
+  if (config->arch() == AK_arm64e) {
+    // The Mach-O object writer currently supports versioned user ABI 0.
+    // Reject mixed or unversioned input instead of mislabelling its pointers.
+    const uint32_t supportedSubtype =
+        CPU_SUBTYPE_ARM64E_WITH_PTRAUTH_VERSION(0, false);
+    if (hdr->cpusubtype != supportedSubtype) {
       error(toString(file) +
-            ": arm64e object is incompatible with an arm64 output");
+            ": unsupported arm64e pointer-authentication ABI; "
+            "expected versioned user ABI 0");
       return false;
     }
+  } else if (config->arch() == AK_arm64 &&
+             baseSubtype == CPU_SUBTYPE_ARM64E) {
+    error(toString(file) +
+          ": arm64e object is incompatible with an arm64 output");
+    return false;
   }
-
-  return checkCompatibility(file);
+  return true;
 }
 
 // This cache mostly exists to store system libraries (and .tbds) as they're
@@ -1053,6 +1056,8 @@ template <class LP> void ObjFile::parse() {
   if (!compatArch)
     return;
   if (!(compatArch = compatWithTargetArch(this, hdr)))
+    return;
+  if (!(compatArch = checkArm64eObjectABI(this, hdr)))
     return;
 
   // We will resolve LC linker options once all native objects are loaded after
