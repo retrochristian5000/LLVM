@@ -673,11 +673,19 @@ bool AArch64RegisterInfo::isArgumentRegister(const MachineFunction &MF,
                                              MCRegister Reg) const {
   CallingConv::ID CC = MF.getFunction().getCallingConv();
   const AArch64Subtarget &STI = MF.getSubtarget<AArch64Subtarget>();
-  bool IsVarArg = STI.isCallingConvWin64(MF.getFunction().getCallingConv(),
-                                         MF.getFunction().isVarArg());
+  // isCallingConvWin64() says whether the convention uses the Win64 PCS;
+  // it does not indicate that the function itself is variadic. Keep those
+  // properties separate, especially for native ARM64 versus ARM64EC.
+  const bool IsVarArg = MF.getFunction().isVarArg();
 
   auto HasReg = [](ArrayRef<MCRegister> RegList, MCRegister Reg) {
     return llvm::is_contained(RegList, Reg);
+  };
+
+  auto HasWin64VarArgReg = [&]() {
+    if (STI.isWindowsArm64EC())
+      return HasReg(CC_AArch64_Arm64EC_VarArg_ArgRegs, Reg);
+    return HasReg(CC_AArch64_Win64_VarArg_ArgRegs, Reg);
   };
 
   switch (CC) {
@@ -699,7 +707,7 @@ bool AArch64RegisterInfo::isArgumentRegister(const MachineFunction &MF,
   case CallingConv::Tail:
     if (STI.isTargetWindows()) {
       if (IsVarArg)
-        return HasReg(CC_AArch64_Win64_VarArg_ArgRegs, Reg);
+        return HasWin64VarArgReg();
       switch (CC) {
       default:
         return HasReg(CC_AArch64_Win64PCS_ArgRegs, Reg);
@@ -734,7 +742,7 @@ bool AArch64RegisterInfo::isArgumentRegister(const MachineFunction &MF,
     return HasReg(CC_AArch64_DarwinPCS_VarArg_ArgRegs, Reg);
   case CallingConv::Win64:
     if (IsVarArg)
-      HasReg(CC_AArch64_Win64_VarArg_ArgRegs, Reg);
+      return HasWin64VarArgReg();
     return HasReg(CC_AArch64_Win64PCS_ArgRegs, Reg);
   case CallingConv::CFGuard_Check:
     return HasReg(CC_AArch64_Win64_CFGuard_Check_ArgRegs, Reg);
