@@ -8,6 +8,23 @@
 
 ; RUN: lld-link -machine:arm64x aarch64.obj arm64ec.obj loadconfig-arm64.obj loadconfig-arm64ec.obj -out:out.exe -subsystem:console
 ; RUN: llvm-objdump -d out.exe | FileCheck %s
+;
+; The shared PE format must not cause ThinLTO to mix these ABIs. LLD keeps
+; independent native ARM64 and ARM64EC symbol tables/LTO backends.
+; RUN: opt -thinlto-bc aarch64.ll -o aarch64-thin.obj
+; RUN: opt -thinlto-bc arm64ec.ll -o arm64ec-thin.obj
+; RUN: lld-link -machine:arm64x aarch64-thin.obj arm64ec-thin.obj \
+; RUN:   loadconfig-arm64.obj loadconfig-arm64ec.obj -out:thin.exe -subsystem:console
+; RUN: llvm-objdump -d thin.exe | FileCheck %s --check-prefix=THIN
+;
+; THIN: <.text>:
+; THIN: mov w0, #0x1
+; THIN: ret
+; THIN: udf #0x9
+; THIN: mov w0, #0x2
+; THIN: ret
+; THIN: <.hexpthk>:
+; THIN: movq %rsp, %rax
 
 ; CHECK:      0000000140001000 <.text>:
 ; CHECK-NEXT: 140001000: 52800020     mov     w0, #0x1                // =1

@@ -831,6 +831,21 @@ Error LTO::add(std::unique_ptr<InputFile> InputPtr,
   llvm::TimeTraceScope timeScope("LTO add input", InputPtr->getName());
   assert(!CalledGetMaxTasks);
 
+  // Classic Windows ARM64 and ARM64EC have different binary interfaces,
+  // including varargs, register availability, and symbol/thunk handling.
+  // Do not let a common ThinLTO summary import or optimize IR across this
+  // boundary. An ARM64X link can still use both variants by compiling them
+  // in separate LTO instances (as the COFF linker already does).
+  const Triple ExistingTriple(RegularLTO.CombinedModule->getTargetTriple());
+  const Triple InputTriple(InputPtr->getTargetTriple());
+  if (ExistingTriple.getArch() == Triple::aarch64 &&
+      InputTriple.getArch() == Triple::aarch64 &&
+      ExistingTriple.isOSWindows() && InputTriple.isOSWindows() &&
+      ExistingTriple.isWindowsArm64EC() != InputTriple.isWindowsArm64EC())
+    return make_error<StringError>(
+        "cannot mix native Windows ARM64 and ARM64EC bitcode in one LTO link",
+        inconvertibleErrorCode());
+
   Expected<std::shared_ptr<InputFile>> InputOrErr =
       addInput(std::move(InputPtr));
   if (!InputOrErr)
