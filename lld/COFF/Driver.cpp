@@ -373,10 +373,12 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> mb,
       addFile(make<DLLFile>(ctx.getSymtab(machine), obj));
       break;
     }
-    // Control Panel applets are PE DLL images, despite their .cpl extension.
-    // Like regular DLLs, they cannot be used as object files or import libs.
+    // Control Panel applets (.cpl) and ActiveX controls (.ocx) are PE DLL
+    // images despite their extensions. Like regular DLLs, they cannot be
+    // used as object files or import libraries in the MSVC link mode.
     if (filename.ends_with_insensitive(".dll") ||
-        filename.ends_with_insensitive(".cpl")) {
+        filename.ends_with_insensitive(".cpl") ||
+        filename.ends_with_insensitive(".ocx")) {
       Err(ctx) << filename
                << ": bad file type. Did you specify a DLL instead of an "
                   "import library?";
