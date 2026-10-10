@@ -1497,8 +1497,12 @@ std::string lld::coff::replaceThinLTOSuffix(StringRef path, StringRef suffix,
 static bool isRVACode(COFFObjectFile *coffObj, uint64_t rva, InputFile *file) {
   for (size_t i = 1, e = coffObj->getNumberOfSections(); i <= e; i++) {
     const coff_section *sec = CHECK(coffObj->getSection(i), file);
+    // COFF section extents are half-open.  An export at the first RVA
+    // *after* a code section may be a data export in the next section;
+    // treating the end as inclusive creates an incorrect import thunk.
+    // Subtraction also avoids overflow when checking malformed PE bounds.
     if (rva >= sec->VirtualAddress &&
-        rva <= sec->VirtualAddress + sec->VirtualSize) {
+        rva - sec->VirtualAddress < sec->VirtualSize) {
       return (sec->Characteristics & COFF::IMAGE_SCN_CNT_CODE) != 0;
     }
   }
