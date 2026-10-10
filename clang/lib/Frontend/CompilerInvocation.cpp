@@ -4555,6 +4555,15 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
                    options::OPT_fno_experimental_relative_cxx_abi_vtables,
                    TargetCXXABI::usesRelativeVTables(T));
 
+  // Arm64e virtual function pointers are authenticated using the address
+  // of their 64-bit vtable slot. Relative vtables instead store 32-bit
+  // offsets. The current arm64e codegen cannot authenticate that layout,
+  // and crashes when lowering a virtual call. Diagnose this ABI mismatch
+  // before generating an object, rather than emitting incompatible code.
+  if (Opts.RelativeCXXABIVTables && T.isArm64e())
+    Diags.Report(diag::err_drv_unsupported_opt_for_target)
+        << "-fexperimental-relative-c++-abi-vtables" << T.str();
+
   // RTTI is on by default.
   bool HasRTTI = !Args.hasArg(options::OPT_fno_rtti);
   Opts.OmitVTableRTTI =
