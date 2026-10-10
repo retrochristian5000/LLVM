@@ -840,7 +840,12 @@ foreach(pat cas swp ldadd ldclr ldeor ldset)
   endforeach(size)
 endforeach(pat)
 
-if (MINGW)
+# Some Windows toolchains (including Water) provide their own CRT instead of
+# the MSVC runtime's stack-probe helper. Keep the normal MSVC selection intact,
+# but allow such toolchains to request the same AArch64 helper used by MinGW.
+option(COMPILER_RT_ENABLE_WINDOWS_AARCH64_CHKSTK
+       "Provide the AArch64 Windows __chkstk builtin without a system CRT" OFF)
+if(MINGW OR (WIN32 AND COMPILER_RT_ENABLE_WINDOWS_AARCH64_CHKSTK))
   set(aarch64_SOURCES
     ${aarch64_SOURCES}
     aarch64/chkstk.S
