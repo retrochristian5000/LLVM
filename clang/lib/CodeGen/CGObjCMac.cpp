@@ -33,6 +33,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -64,14 +65,16 @@ private:
   /// The default messenger, used for sends whose ABI is unchanged from
   /// the all-integer/pointer case.
   llvm::FunctionCallee getMessageSendFn() const {
-    // Add the non-lazy-bind attribute, since objc_msgSend is likely to
-    // be called a lot.
+    // NonLazyBind is profitable on arm64, but bypasses arm64e auth stubs.
     llvm::Type *params[] = {ObjectPtrTy, SelectorPtrTy};
+    llvm::AttributeList attrs;
+    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+      attrs = llvm::AttributeList::get(CGM.getLLVMContext(),
+                                       llvm::AttributeList::FunctionIndex,
+                                       llvm::Attribute::NonLazyBind);
     return CGM.CreateRuntimeFunction(
         llvm::FunctionType::get(ObjectPtrTy, params, true), "objc_msgSend",
-        llvm::AttributeList::get(CGM.getLLVMContext(),
-                                 llvm::AttributeList::FunctionIndex,
-                                 llvm::Attribute::NonLazyBind));
+        attrs);
   }
 
   /// void objc_msgSend_stret (id, SEL, ...)
@@ -554,11 +557,13 @@ public:
   llvm::FunctionCallee getSetJmpFn() {
     // This is specifically the prototype for x86.
     llvm::Type *params[] = {CGM.DefaultPtrTy};
+    llvm::AttributeList attrs;
+    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+      attrs = llvm::AttributeList::get(CGM.getLLVMContext(),
+                                       llvm::AttributeList::FunctionIndex,
+                                       llvm::Attribute::NonLazyBind);
     return CGM.CreateRuntimeFunction(
-        llvm::FunctionType::get(CGM.Int32Ty, params, false), "_setjmp",
-        llvm::AttributeList::get(CGM.getLLVMContext(),
-                                 llvm::AttributeList::FunctionIndex,
-                                 llvm::Attribute::NonLazyBind));
+        llvm::FunctionType::get(CGM.Int32Ty, params, false), "_setjmp", attrs);
   }
 
 public:
@@ -703,13 +708,13 @@ public:
     // classref except by calling this function.
     llvm::Type *params[] = {Int8PtrPtrTy};
     llvm::LLVMContext &C = CGM.getLLVMContext();
-    llvm::AttributeSet AS = llvm::AttributeSet::get(
-        C, {
-               llvm::Attribute::get(C, llvm::Attribute::NonLazyBind),
-               llvm::Attribute::getWithMemoryEffects(
-                   C, llvm::MemoryEffects::none()),
-               llvm::Attribute::get(C, llvm::Attribute::NoUnwind),
-           });
+    llvm::SmallVector<llvm::Attribute, 3> attrs;
+    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+      attrs.push_back(llvm::Attribute::get(C, llvm::Attribute::NonLazyBind));
+    attrs.push_back(llvm::Attribute::getWithMemoryEffects(
+        C, llvm::MemoryEffects::none()));
+    attrs.push_back(llvm::Attribute::get(C, llvm::Attribute::NoUnwind));
+    llvm::AttributeSet AS = llvm::AttributeSet::get(C, attrs);
     llvm::FunctionCallee F = CGM.CreateRuntimeFunction(
         llvm::FunctionType::get(ClassnfABIPtrTy, params, false),
         "objc_loadClassref",

@@ -2913,7 +2913,9 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     // is used.
     // FIXME: what if we just haven't processed the function definition
     // yet, or if it's an external definition like C99 inline?
-    if (CodeGenOpts.NoPLT) {
+    // Inline GOT calls bypass arm64e's authenticated function stubs.
+    if (CodeGenOpts.NoPLT &&
+        !CodeGenOpts.PointerAuth.FunctionPointers.isEnabled()) {
       if (auto *Fn = dyn_cast<FunctionDecl>(TargetDecl)) {
         if (!Fn->isDefined() && !AttrOnCallSite) {
           FuncAttrs.addAttribute(llvm::Attribute::NonLazyBind);
