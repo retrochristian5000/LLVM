@@ -157,6 +157,7 @@ public:
     ARMSubArch_v4t,
 
     AArch64SubArch_arm64e,
+    AArch64SubArch_arm64e_x1,
     AArch64SubArch_arm64ec,
     AArch64SubArch_lfi,
 
@@ -1217,6 +1218,12 @@ public:
   bool isArm64e() const {
     return getArch() == Triple::aarch64 &&
            getSubArch() == Triple::AArch64SubArch_arm64e;
+  }
+
+  // Identifies x1 Mach-O metadata, without enabling PAuth_LR code generation.
+  bool isArm64e_x1() const {
+    return getArch() == Triple::aarch64 &&
+           getSubArch() == Triple::AArch64SubArch_arm64e_x1;
   }
 
   // Tests whether the target is N32.

@@ -989,6 +989,13 @@ static TargetInfo *createTargetInfo(InputArgList &args) {
     error("must specify -arch");
     return nullptr;
   }
+  // A valid subtype does not imply that PAuth_LR code generation exists.
+  // Refuse a purported x1 dylib instead of emitting an ABI-incompatible file.
+  if (archName == "arm64e.x1") {
+    error("-arch arm64e.x1 requires PAuth_LR code generation and unwinding "
+          "support");
+    return nullptr;
+  }
 
   setPlatformVersions(archName, args);
   auto [cpuType, cpuSubtype] = getCPUTypeFromArchitecture(config->arch());

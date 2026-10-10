@@ -1833,6 +1833,16 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
     return;
   }
 
+  // An x1 dylib needs PAuth_LR-aware frames and compatible hardware. A
+  // shared CPU type alone does not make it safe to import into an older image.
+  if (hdr->cputype == CPU_TYPE_ARM64 &&
+      (hdr->cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E_X1) {
+    error(toString(this) +
+          ": arm64e.x1 dylib requires an arm64e.x1 output "
+          "(PAuth_LR output is not supported yet)");
+    return;
+  }
+
   // The current Mach-O writer emits only arm64e versioned user ptrauth ABI 0.
   // Preserve the existing arm64/arm64e dylib compatibility rules, but do not
   // silently accept a different pointer-authentication ABI from a binary.
@@ -1966,6 +1976,10 @@ static bool isArchABICompatible(ArchitectureSet archSet,
   std::tie(targetCpuType, std::ignore) = getCPUTypeFromArchitecture(targetArch);
 
   return llvm::any_of(archSet, [&](const auto &p) {
+    // Do not satisfy an older image with an x1-only stub. Mixed SDK stubs
+    // that also contain arm64 entries remain compatible on their own merits.
+    if (p == AK_arm64e_x1 && targetArch != AK_arm64e_x1)
+      return false;
     std::tie(cpuType, std::ignore) = getCPUTypeFromArchitecture(p);
     return cpuType == targetCpuType;
   });

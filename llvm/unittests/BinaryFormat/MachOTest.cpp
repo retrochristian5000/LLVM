@@ -130,6 +130,17 @@ TEST(MachOTest, CPUSubType) {
 #undef CHECK_CPUSUBTYPE
 }
 
+TEST(MachOTest, Arm64eX1MetadataOnly) {
+  const Triple X1("arm64e.x1-apple-darwin");
+  EXPECT_TRUE(X1.isArm64e_x1());
+  EXPECT_EQ(X1.getArchName(), "arm64e.x1");
+  auto Subtype = MachO::getCPUSubType(X1);
+  ASSERT_FALSE(static_cast<bool>(Subtype));
+  EXPECT_EQ(toString(Subtype.takeError()),
+            "arm64e.x1 object emission requires PAuth_LR code generation "
+            "and unwinding support");
+}
+
 TEST(MachOTest, CPUSubTypePtrAuthABI) {
   {
     Expected<uint32_t> Type = MachO::getCPUSubType(

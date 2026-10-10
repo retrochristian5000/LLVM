@@ -107,6 +107,13 @@ Expected<uint32_t> MachO::getCPUType(const Triple &T) {
 Expected<uint32_t> MachO::getCPUSubType(const Triple &T) {
   if (!T.isOSBinFormatMachO())
     return unsupported("subtype", T);
+  // x1 slices are recognized for inspection and TextAPI matching, but
+  // generating one requires PAuth_LR codegen and unwind support. Do not
+  // silently flatten this request to ordinary arm64 output.
+  if (T.isArm64e_x1())
+    return createStringError(std::errc::operation_not_supported,
+                             "arm64e.x1 object emission requires PAuth_LR "
+                             "code generation and unwinding support");
   if (T.isX86())
     return getX86SubType(T);
   if (T.isARM() || T.isThumb())

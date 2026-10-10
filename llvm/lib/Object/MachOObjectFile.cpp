@@ -2920,6 +2920,13 @@ Triple MachOObjectFile::getArchTriple(uint32_t CPUType, uint32_t CPUSubType,
       if (ArchFlag)
         *ArchFlag = "arm64e";
       return Triple("arm64e-apple-darwin");
+    case MachO::CPU_SUBTYPE_ARM64E_X1:
+      // Decode the slice without assuming support for the new PAuth_LR CPU.
+      if (McpuDefault)
+        *McpuDefault = "apple-a12";
+      if (ArchFlag)
+        *ArchFlag = "arm64e.x1";
+      return Triple("arm64e.x1-apple-darwin");
     default:
       return Triple();
     }
