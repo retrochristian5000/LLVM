@@ -373,7 +373,10 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> mb,
       addFile(make<DLLFile>(ctx.getSymtab(machine), obj));
       break;
     }
-    if (filename.ends_with_insensitive(".dll")) {
+    // Control Panel applets are PE DLL images, despite their .cpl extension.
+    // Like regular DLLs, they cannot be used as object files or import libs.
+    if (filename.ends_with_insensitive(".dll") ||
+        filename.ends_with_insensitive(".cpl")) {
       Err(ctx) << filename
                << ": bad file type. Did you specify a DLL instead of an "
                   "import library?";
