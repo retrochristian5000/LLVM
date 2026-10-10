@@ -1820,6 +1820,31 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
 
   deadStrippable = hdr->flags & MH_DEAD_STRIPPABLE_DYLIB;
 
+  // A matching platform does not imply a compatible Mach-O CPU family.
+  // In particular, a dylib with x86_64 exports cannot satisfy an arm64e
+  // import, even if its LC_BUILD_VERSION also names macOS.
+  if (hdr->cputype != static_cast<uint32_t>(target->cpuType)) {
+    Architecture dylibArch =
+        getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
+    error(toString(this) + ": dylib has architecture " +
+          getArchitectureName(dylibArch) +
+          " which is incompatible with target architecture " +
+          getArchitectureName(config->arch()));
+    return;
+  }
+
+  // The current Mach-O writer emits only arm64e versioned user ptrauth ABI 0.
+  // Preserve the existing arm64/arm64e dylib compatibility rules, but do not
+  // silently accept a different pointer-authentication ABI from a binary.
+  if (hdr->cputype == CPU_TYPE_ARM64 &&
+      (hdr->cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E &&
+      hdr->cpusubtype != CPU_SUBTYPE_ARM64E_WITH_PTRAUTH_VERSION(0, false)) {
+    error(toString(this) +
+          ": unsupported arm64e dylib pointer-authentication ABI; "
+          "expected versioned user ABI 0");
+    return;
+  }
+
   if (!checkCompatibility(this))
     return;
 
