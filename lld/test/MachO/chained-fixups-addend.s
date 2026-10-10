@@ -30,6 +30,13 @@
 # RUN:     FileCheck %s -D#OUTLINE=256 -D#ADDEND=256 -D#%x,REBASE=0x1100 \
 # RUN:     --check-prefixes=IMPORT-ADDEND,COMMON
 
+## The 23-bit field is the symbol-name offset, not the import addend.
+## An 8 MiB addend still fits in DYLD_CHAINED_IMPORT_ADDEND.
+# RUN: llvm-mc -filetype=obj -triple=x86_64-apple-darwin %t/main.s -o %t/main.o --defsym ADDEND=8388608
+# RUN: %lld -lSystem -dylib %t/main.o -L%t -ldylib -fixup_chains -o %t/out
+# RUN: llvm-objdump --macho --chained-fixups %t/out | \
+# RUN:     FileCheck %s --check-prefix=IMPORT-ADDEND
+
 ## Otherwise, DYLD_CHAINED_IMPORT_ADDEND64 is used.
 # RUN: llvm-mc -filetype=obj -triple=x86_64-apple-darwin %t/main.s -o %t/main.o --defsym ADDEND=0x100000000
 # RUN: %lld -lSystem -dylib %t/main.o -L%t -ldylib -fixup_chains -o %t/out

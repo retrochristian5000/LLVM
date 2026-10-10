@@ -2601,7 +2601,9 @@ void ChainedFixupsSection::addBinding(const Symbol *sym,
   if (inserted) {
     symtabSize += sym->getName().size() + 1;
     hasWeakBind = hasWeakBind || needsWeakBind(*sym);
-    if (!isInt<23>(outlineAddend))
+    // The 23-bit limit is for the symbol-name offset; an ADDEND import
+    // stores a signed 32-bit addend and does not require ADDEND64.
+    if (!isInt<32>(outlineAddend))
       needsLargeAddend = true;
     else if (outlineAddend != 0)
       needsAddend = true;
