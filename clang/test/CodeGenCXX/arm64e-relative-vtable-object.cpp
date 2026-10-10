@@ -11,11 +11,16 @@
 // RUN:   -o %t-invalid-cc1.o %s 2>&1 | FileCheck %s --check-prefix=REJECT
 // RUN: %clang -target arm64e-apple-macos13 -std=c++20 \
 // RUN:   -fno-experimental-relative-c++-abi-vtables -c %s -o %t-auth.o
+// RUN: llvm-readobj --file-headers %t-auth.o | FileCheck %s --check-prefix=ARM64E-ABI
 // RUN: llvm-objdump --macho --reloc %t-auth.o | FileCheck %s --check-prefix=AUTH
 // RUN: %clang -target arm64-apple-macos13 -std=c++20 -c %s -o %t-arm64.o
 // RUN: llvm-objdump --macho --reloc %t-arm64.o | FileCheck %s --check-prefix=PLAIN
 //
 // REJECT: error: unsupported option '-fexperimental-relative-c++-abi-vtables' for target '{{.*}}'
+// ARM64E-ABI:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+// ARM64E-ABI-NEXT: CpuSubTypeCapabilities: 0x80000000
+// ARM64E-ABI-NEXT: PointerAuthABI: Userland
+// ARM64E-ABI-NEXT: PointerAuthABIVersion: 0
 // AUTH: Relocation information (__DATA,__const)
 // AUTH: {{(11 \(\?\)|AUTHENTICATED_POINTER)}} {{.*}} __ZN6Widget6methodEv
 // PLAIN: Relocation information (__DATA,__const)

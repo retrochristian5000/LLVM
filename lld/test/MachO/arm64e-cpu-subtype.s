@@ -8,6 +8,14 @@
 # RUN:   -dylib %t.o -o %t.dylib
 # RUN: llvm-objdump --macho --private-header %t.dylib | FileCheck %s
 
+## Keep the versioned arm64e user ABI readable both before and after linking.
+# RUN: llvm-readobj --file-headers %t.o | FileCheck %s --check-prefix=ABI
+# RUN: llvm-readobj --file-headers %t.dylib | FileCheck %s --check-prefix=ABI
+# ABI:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# ABI-NEXT: CpuSubTypeCapabilities: 0x80000000
+# ABI-NEXT: PointerAuthABI: Userland
+# ABI-NEXT: PointerAuthABIVersion: 0
+
 # CHECK: ARM64          E
 
 .text
