@@ -95,6 +95,11 @@ uint64_t MachHeaderSection::getSize() const {
 static uint32_t cpuSubtype() {
   uint32_t subtype = target->cpuSubtype;
 
+  // Match the arm64e object writer's versioned user ptrauth ABI 0. Do not
+  // collapse the output back to the unversioned CPU_SUBTYPE_ARM64E value.
+  if (config->arch() == AK_arm64e)
+    return CPU_SUBTYPE_ARM64E_WITH_PTRAUTH_VERSION(0, false);
+
   if (config->outputType == MH_EXECUTE && !config->staticLink &&
       target->cpuSubtype == CPU_SUBTYPE_X86_64_ALL &&
       config->platform() == PLATFORM_MACOS &&
