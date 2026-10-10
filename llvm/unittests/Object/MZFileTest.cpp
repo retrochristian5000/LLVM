@@ -85,5 +85,11 @@ TEST(MZFileTest, ExtendedFormatsAreNotPlainMZ) {
   Data[0x42] = 0; Data[0x43] = 0;
   EXPECT_EQ(file_magic::pecoff_executable,
             identify_magic(StringRef(Data.data(), Data.size())));
+  Data[0x40] = 'L'; Data[0x41] = 'E';
+  EXPECT_EQ(file_magic::linear_executable_le,
+            identify_magic(StringRef(Data.data(), Data.size())));
+  Data[0x41] = 'X';
+  EXPECT_EQ(file_magic::linear_executable_lx,
+            identify_magic(StringRef(Data.data(), Data.size())));
 }
 } // namespace

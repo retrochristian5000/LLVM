@@ -240,6 +240,10 @@ file_magic llvm::identify_magic(StringRef Magic) {
       if (Magic.substr(off).starts_with(
               StringRef(NE::Magic, sizeof(NE::Magic))))
         return file_magic::windows_ne;
+      if (Magic.substr(off).starts_with("LE"))
+        return file_magic::linear_executable_le;
+      if (Magic.substr(off).starts_with("LX"))
+        return file_magic::linear_executable_lx;
     }
     if (startswith(Magic, "MZ"))
       return file_magic::dos_executable;

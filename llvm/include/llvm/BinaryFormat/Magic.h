@@ -50,6 +50,8 @@ struct file_magic {
     pecoff_executable,         ///< PECOFF executable file
     dos_executable,            ///< Real-mode DOS MZ executable
     windows_ne,                ///< Windows 16-bit New Executable file
+    linear_executable_le,      ///< Linear Executable (LE), e.g. Windows VxD
+    linear_executable_lx,      ///< Linear Executable (LX), e.g. OS/2
     windows_resource,          ///< Windows compiled resource file (.res)
     xcoff_object_32,           ///< 32-bit XCOFF object file
     xcoff_object_64,           ///< 64-bit XCOFF object file
