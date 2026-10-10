@@ -1,0 +1,7 @@
+# NE output is not a variation of the PE/COFF DLL writer. Until the
+# segmented Win16 linker exists, prevent an NE request from emitting a PE image.
+# RUN: not ld.lld -m i386ne -shared -o %t.dll %t.o 2>&1 | FileCheck %s
+# RUN: not ld.lld -m i386ne -o %t.exe %t.o 2>&1 | FileCheck %s
+# RUN: not ld.lld -### -m i386ne -shared %t.o 2>&1 | FileCheck %s
+# RUN: test ! -e %t.dll
+# CHECK: error: NE output (-m i386ne) requires a dedicated 16-bit linker; the PE/COFF backend cannot create Win16 modules

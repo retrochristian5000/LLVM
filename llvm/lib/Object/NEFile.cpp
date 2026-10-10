@@ -8,7 +8,9 @@
 
 #include "llvm/Object/NEFile.h"
 #include "llvm/Object/Error.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Endian.h"
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
@@ -62,4 +64,64 @@ Expected<std::unique_ptr<NEFile>> NEFile::create(MemoryBufferRef Source) {
     std::memcpy(Segments.data(), Buffer.data() + SegmentOffset, SegmentSize);
   return std::unique_ptr<NEFile>(
       new NEFile(Source, HeaderOffset, Hdr, std::move(Segments)));
+}
+
+namespace {
+
+// Names in both NE name tables are counted strings followed by a 16-bit
+// ordinal, terminated by a zero-length string. Never read across the table
+// boundary: malformed tables must not be treated as valid DLL exports.
+static Expected<std::vector<NEFile::NameEntry>>
+readNameTable(StringRef Data, uint64_t Offset, uint64_t End, StringRef Name) {
+  auto invalid = [&](StringRef Reason) -> Error {
+    return make_error<GenericBinaryError>(
+        Twine(Name) + ": malformed NE name table: " + Reason,
+        object_error::parse_failed);
+  };
+
+  if (Offset > End || End > Data.size())
+    return invalid("offset or size exceeds file");
+
+  std::vector<NEFile::NameEntry> Entries;
+  while (Offset < End) {
+    uint8_t Length = static_cast<uint8_t>(Data[Offset++]);
+    if (!Length)
+      return Entries;
+    if (uint64_t(Length) + 2 > End - Offset)
+      return invalid("truncated name or ordinal");
+    Entries.push_back({Data.substr(Offset, Length).str(),
+                       support::endian::read16le(Data.data() + Offset + Length)});
+    Offset += Length + 2;
+  }
+  return invalid("missing name-table terminator");
+}
+
+} // namespace
+
+Expected<std::vector<NEFile::NameEntry>> NEFile::residentNames() const {
+  uint64_t RelativeOffset = uint16_t(Hdr.ResidentNameTableOffset);
+  if (!RelativeOffset)
+    return std::vector<NameEntry>{};
+
+  uint64_t End = getData().size();
+  // Resident names precede the module references, imported names, and entry
+  // table. Use the first following table as an upper bound when available.
+  for (uint16_t Next : {uint16_t(Hdr.ModuleReferenceTableOffset),
+                        uint16_t(Hdr.ImportedNameTableOffset),
+                        uint16_t(Hdr.EntryTableOffset)}) {
+    if (Next > RelativeOffset)
+      End = std::min(End, uint64_t(HeaderOffset) + Next);
+  }
+  return readNameTable(getData(), uint64_t(HeaderOffset) + RelativeOffset,
+                       End, getFileName());
+}
+
+Expected<std::vector<NEFile::NameEntry>> NEFile::nonResidentNames() const {
+  uint64_t Size = uint16_t(Hdr.NonResidentNameTableSize);
+  if (!Size)
+    return std::vector<NameEntry>{};
+
+  // Unlike other NE offsets, the non-resident name table uses a file offset.
+  uint64_t Offset = uint32_t(Hdr.NonResidentNameTableOffset);
+  return readNameTable(getData(), Offset, Offset + Size, getFileName());
 }

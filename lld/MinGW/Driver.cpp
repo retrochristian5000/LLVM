@@ -221,6 +221,15 @@ bool link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
   if (args.hasArg(OPT_version))
     return true;
 
+  // NE is a 16-bit segmented format, not a PE/COFF machine variant.
+  // Do not send an explicit Win16 request to the COFF writer (even with
+  // -###), since that would silently select PE DLL/EXE conventions.
+  if (args.getLastArgValue(OPT_m) == "i386ne") {
+    error("NE output (-m i386ne) requires a dedicated 16-bit linker; "
+          "the PE/COFF backend cannot create Win16 modules");
+    return false;
+  }
+
   if (!args.hasArg(OPT_INPUT) && !args.hasArg(OPT_l)) {
     error("no input files");
     return false;

@@ -16,6 +16,7 @@
 #include "llvm/Support/Error.h"
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace llvm {
@@ -23,6 +24,13 @@ namespace object {
 
 class LLVM_ABI NEFile : public Binary {
 public:
+  // NE DLL exports and module names use length-prefixed strings followed
+  // by 16-bit ordinals. The module name itself has ordinal zero.
+  struct NameEntry {
+    std::string Name;
+    uint16_t Ordinal;
+  };
+
   static bool classof(const Binary *V) { return V->isNE(); }
 
   static Expected<std::unique_ptr<NEFile>> create(MemoryBufferRef Source);
@@ -30,6 +38,11 @@ public:
   const NE::Header &getHeader() const { return Hdr; }
   uint32_t getHeaderOffset() const { return HeaderOffset; }
   ArrayRef<NE::Segment> segments() const { return Segments; }
+
+  // Return the named ordinal tables for Win16 DLL export resolution.
+  // Errors are reported for malformed names, offsets, or unterminated tables.
+  Expected<std::vector<NameEntry>> residentNames() const;
+  Expected<std::vector<NameEntry>> nonResidentNames() const;
 
   uint32_t getSegmentAlignmentShift() const {
     return Hdr.SegmentAlignmentShift ? uint16_t(Hdr.SegmentAlignmentShift) : 9;
