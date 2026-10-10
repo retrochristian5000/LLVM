@@ -26,8 +26,8 @@
 # FIXUPS: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 # FIXUPS: _imported
 
-# LOADS: cmd LC_MAIN
 # LOADS: cmd LC_DYLD_CHAINED_FIXUPS
+# LOADS: cmd LC_MAIN
 # LOADS: cmd LC_CODE_SIGNATURE
 
 #--- lib.s
