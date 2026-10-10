@@ -902,9 +902,10 @@ bool SignalContext::IsTrueFaultingAddress() const {
 }
 
 #if defined(__aarch64__) && defined(arm_thread_state64_get_sp)
+  // Read the saved register value without applying code-pointer PAC stripping
+  // to the stack pointer or frame pointer. Only saved code addresses need it.
   #define AARCH64_GET_REG(r) \
-    (uptr)ptrauth_strip(     \
-        (void *)arm_thread_state64_get_##r(ucontext->uc_mcontext->__ss), 0)
+    (uptr)arm_thread_state64_get_##r(ucontext->uc_mcontext->__ss)
 #else
   #define AARCH64_GET_REG(r) (uptr)ucontext->uc_mcontext->__ss.__##r
 #endif
@@ -912,7 +913,9 @@ bool SignalContext::IsTrueFaultingAddress() const {
 static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
   ucontext_t *ucontext = (ucontext_t*)context;
 # if defined(__aarch64__)
-  *pc = AARCH64_GET_REG(pc);
+  // The PC is a code address and may carry a PAC. FP and SP are stack
+  // addresses, not signed return addresses.
+  *pc = STRIP_PAC_PC((void *)AARCH64_GET_REG(pc));
   *bp = AARCH64_GET_REG(fp);
   *sp = AARCH64_GET_REG(sp);
 # elif defined(__x86_64__)
@@ -933,7 +936,9 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
 }
 
 void SignalContext::InitPcSpBp() {
-  addr = (uptr)ptrauth_strip((void *)addr, 0);
+  // The fault address comes from siginfo and is not necessarily a code
+  // pointer. Preserve it, including evidence of failed data-pointer PAC
+  // authentication, instead of stripping it with the instruction key.
   GetPcSpBp(context, &pc, &sp, &bp);
 }
 
