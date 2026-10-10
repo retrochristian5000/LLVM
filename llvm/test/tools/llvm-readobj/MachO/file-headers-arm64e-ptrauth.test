@@ -1,0 +1,68 @@
+## ARM64e Mach-O files encode their pointer-authentication ABI in the
+## capability bits of the CPU subtype. Keep those bits visible without
+## mistaking a versioned user ABI for a kernel or legacy ABI.
+##
+## Test synthetic Mach-O images so inspection does not depend on the host
+## toolchain emitting any particular arm64e ABI revision.
+
+# RUN: yaml2obj %s -o %t-user0.o -DSUBTYPE=0x80000002
+# RUN: llvm-readobj --file-headers %t-user0.o | FileCheck %s --check-prefix=USER0
+# USER0:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# USER0-NEXT: CpuSubTypeCapabilities: 0x80000000
+# USER0-NEXT: PointerAuthABI: Userland
+# USER0-NEXT: PointerAuthABIVersion: 0
+
+# RUN: yaml2obj %s -o %t-user1.o -DSUBTYPE=0x81000002
+# RUN: llvm-readobj --file-headers %t-user1.o | FileCheck %s --check-prefix=USER1
+# USER1:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# USER1-NEXT: CpuSubTypeCapabilities: 0x81000000
+# USER1-NEXT: PointerAuthABI: Userland
+# USER1-NEXT: PointerAuthABIVersion: 1
+
+# RUN: yaml2obj %s -o %t-kernel.o -DSUBTYPE=0xC0000002
+# RUN: llvm-readobj --file-headers %t-kernel.o | FileCheck %s --check-prefix=KERNEL
+# KERNEL:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# KERNEL-NEXT: CpuSubTypeCapabilities: 0xC0000000
+# KERNEL-NEXT: PointerAuthABI: Kernel
+# KERNEL-NEXT: PointerAuthABIVersion: 0
+
+# RUN: yaml2obj %s -o %t-legacy.o -DSUBTYPE=0x00000002
+# RUN: llvm-readobj --file-headers %t-legacy.o | FileCheck %s --check-prefix=LEGACY
+# LEGACY:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# LEGACY-NEXT: CpuSubTypeCapabilities: 0x0
+# LEGACY-NEXT: PointerAuthABI: Unversioned
+# LEGACY-NEXT: FileType: Relocatable (0x1)
+
+## A kernel capability bit without the versioned marker isn't a versioned
+## kernel ABI. Preserve the raw bits and identify the header as unversioned.
+# RUN: yaml2obj %s -o %t-mixed.o -DSUBTYPE=0x40000002
+# RUN: llvm-readobj --file-headers %t-mixed.o | FileCheck %s --check-prefix=MIXED
+# MIXED:      CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+# MIXED-NEXT: CpuSubTypeCapabilities: 0x40000000
+# MIXED-NEXT: PointerAuthABI: Unversioned
+
+## PAuth_LR (arm64e.x1) is a distinct subtype, but still has ABI metadata.
+# RUN: yaml2obj %s -o %t-x1.o -DSUBTYPE=0x8000000C
+# RUN: llvm-readobj --file-headers %t-x1.o | FileCheck %s --check-prefix=X1
+# X1:      CpuSubType: CPU_SUBTYPE_ARM64E_X1 (0xC)
+# X1-NEXT: CpuSubTypeCapabilities: 0x80000000
+# X1-NEXT: PointerAuthABI: Userland
+# X1-NEXT: PointerAuthABIVersion: 0
+
+## Ordinary arm64 has no pointer-authentication ABI subtype metadata.
+# RUN: yaml2obj %s -o %t-arm64.o -DSUBTYPE=0x00000000
+# RUN: llvm-readobj --file-headers %t-arm64.o | FileCheck %s --check-prefix=PLAIN
+# PLAIN:      CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
+# PLAIN-NEXT: FileType: Relocatable (0x1)
+
+--- !mach-o
+FileHeader:
+  magic:           0xFEEDFACF
+  cputype:         0x0100000C
+  cpusubtype:      [[SUBTYPE]]
+  filetype:        0x00000001
+  ncmds:           0
+  sizeofcmds:      0
+  flags:           0x00000000
+  reserved:        0x00000000
+...

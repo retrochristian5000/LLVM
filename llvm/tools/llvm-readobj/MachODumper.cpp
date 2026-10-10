@@ -190,6 +190,7 @@ constexpr EnumStringDef<uint32_t> MachOHeaderCpuSubtypesARM64Defs[] = {
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64_ALL),
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64_V8),
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64E),
+    LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64E_X1),
 };
 constexpr auto MachOHeaderCpuSubtypesARM64 =
     BUILD_ENUM_STRINGS(MachOHeaderCpuSubtypesARM64Defs);
@@ -482,6 +483,28 @@ void MachODumper::printFileHeaders(const MachHeader &Header) {
   case MachO::CPU_TYPE_ARM64:
     W.printEnum("CpuSubType", subtype,
                 EnumStrings(MachOHeaderCpuSubtypesARM64));
+    // The high CPU-subtype bits encode the pointer-authentication ABI of
+    // arm64e images. Printing only the base subtype loses the information
+    // that differentiates modern versioned binaries from legacy and kernel
+    // ABIs. Do not reinterpret these bits for ordinary arm64 images.
+    if (subtype == MachO::CPU_SUBTYPE_ARM64E ||
+        subtype == MachO::CPU_SUBTYPE_ARM64E_X1) {
+      W.printHex("CpuSubTypeCapabilities",
+                 Header.cpusubtype & MachO::CPU_SUBTYPE_MASK);
+      if (MachO::CPU_SUBTYPE_ARM64E_IS_VERSIONED_PTRAUTH_ABI(
+              Header.cpusubtype)) {
+        W.printString("PointerAuthABI",
+                      MachO::CPU_SUBTYPE_ARM64E_IS_KERNEL_PTRAUTH_ABI(
+                          Header.cpusubtype)
+                          ? "Kernel"
+                          : "Userland");
+        W.printNumber("PointerAuthABIVersion",
+                      MachO::CPU_SUBTYPE_ARM64E_PTRAUTH_VERSION(
+                          Header.cpusubtype));
+      } else {
+        W.printString("PointerAuthABI", "Unversioned");
+      }
+    }
     break;
   case MachO::CPU_TYPE_ARM64_32:
     W.printEnum("CpuSubType", subtype,
