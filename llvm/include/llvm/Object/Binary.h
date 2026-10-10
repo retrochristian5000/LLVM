@@ -49,6 +49,7 @@ protected:
 
     ID_Minidump,
 
+    ID_MZ,     // Real-mode DOS MZ executable file.
     ID_NE,     // Windows 16-bit New Executable file.
     ID_WinRes, // Windows resource (.res) file.
 
@@ -160,6 +161,8 @@ public:
              TypeID == ID_MachO32B || TypeID == ID_MachO64B ||
              TypeID == ID_XCOFF32 || TypeID == ID_XCOFF64);
   }
+
+  bool isMZ() const { return TypeID == ID_MZ; }
 
   bool isNE() const { return TypeID == ID_NE; }
 

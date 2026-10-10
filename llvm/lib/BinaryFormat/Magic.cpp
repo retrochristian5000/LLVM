@@ -241,6 +241,8 @@ file_magic llvm::identify_magic(StringRef Magic) {
               StringRef(NE::Magic, sizeof(NE::Magic))))
         return file_magic::windows_ne;
     }
+    if (startswith(Magic, "MZ"))
+      return file_magic::dos_executable;
     if (Magic.starts_with("Microsoft C/C++ MSF 7.00\r\n"))
       return file_magic::pdb;
     if (startswith(Magic, "MDMP"))

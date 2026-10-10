@@ -155,6 +155,8 @@ ObjectFile::createObjectFile(MemoryBufferRef Object, file_magic Type,
 
   switch (Type) {
   case file_magic::unknown:
+  case file_magic::dos_executable:
+  case file_magic::windows_ne:
   case file_magic::bitcode:
   case file_magic::clang_ast:
   case file_magic::coff_cl_gl_object:

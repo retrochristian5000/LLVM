@@ -17,6 +17,8 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/Minidump.h"
+#include "llvm/Object/MZFile.h"
+#include "llvm/Object/NEFile.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/OffloadBinary.h"
 #include "llvm/Object/TapiUniversal.h"
@@ -81,11 +83,14 @@ Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
     return MachOUniversalBinary::create(Buffer);
   case file_magic::windows_resource:
     return WindowsResource::createWindowsResource(Buffer);
+  case file_magic::dos_executable:
+    return MZFile::create(Buffer);
+  case file_magic::windows_ne:
+    return NEFile::create(Buffer);
   case file_magic::pdb:
     // PDB does not support the Binary interface.
     return errorCodeToError(object_error::invalid_file_type);
   case file_magic::unknown:
-  case file_magic::windows_ne:
   case file_magic::clang_ast:
   case file_magic::cuda_fatbinary:
   case file_magic::coff_cl_gl_object:

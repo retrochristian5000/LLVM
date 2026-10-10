@@ -43,6 +43,13 @@ static std::array<char, 0x88> makeNEImage() {
   return Data;
 }
 
+TEST(NEFileTest, GenericBinaryReaderAcceptsNE) {
+  auto Data = makeNEImage();
+  MemoryBufferRef Buffer(StringRef(Data.data(), Data.size()), "test.ne");
+  auto Obj = cantFail(createBinary(Buffer));
+  EXPECT_TRUE(Obj->isNE());
+}
+
 TEST(NEFileTest, ParsesHeaderAndSegments) {
   auto Data = makeNEImage();
   MemoryBufferRef Buffer(StringRef(Data.data(), Data.size()), "test.ne");

@@ -19,6 +19,7 @@ add_llvm_component_library(LLVMObject
   MachOObjectFile.cpp
   MachOUniversal.cpp
   Minidump.cpp
+  MZFile.cpp
   ModuleSymbolTable.cpp
   NEFile.cpp
   Object.cpp
