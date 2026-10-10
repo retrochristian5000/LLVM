@@ -1808,7 +1808,9 @@ void Writer::assignAddresses() {
       // thunk.
       if (c->getEntryThunk())
         virtualSize += sizeof(uint32_t);
-      virtualSize = alignTo(virtualSize, c->getAlignment());
+      // The section RVA may not satisfy an input chunk's alignment.
+      // Align the complete RVA, not the chunk's section-relative offset.
+      virtualSize = alignTo(rva + virtualSize, c->getAlignment()) - rva;
       c->setRVA(rva + virtualSize);
       virtualSize += c->getSize();
       if (c->hasData)
