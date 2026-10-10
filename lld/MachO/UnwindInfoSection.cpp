@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "UnwindInfoSection.h"
+#include "Config.h"
 #include "InputSection.h"
 #include "Layout.h"
 #include "OutputSection.h"
@@ -314,7 +315,8 @@ void UnwindInfoSectionImpl::prepareRelocations(ConcatInputSection *isec) {
         Defined *const *gotEntry =
             llvm::find_if(referentIsec->symbols, [&](Defined const *d) {
               return d->value == static_cast<uint64_t>(r.addend) &&
-                     (config->arch() == AK_arm64e ? d->isInAuthGot() : d->isInGot());
+                     (config->arch() == AK_arm64e ? d->isInAuthGot()
+                                                  : d->isInGot());
             });
         if (gotEntry != referentIsec->symbols.end()) {
           s = *gotEntry;
