@@ -7660,12 +7660,21 @@ bool AArch64AsmParser::parseDirectiveSEHSaveR19R20X(SMLoc L) {
   return false;
 }
 
+// Windows ARM64 save_reg, save_freg and save_fplr record 8-byte units in
+// six bits. Validate in the parser before narrowing from int64_t.
+static bool isValidARM64SaveOffset(int64_t Offset) {
+  return Offset >= 0 && Offset <= 504 && (Offset & 7) == 0;
+}
+
 /// parseDirectiveSEHSaveFPLR
 /// ::= .seh_save_fplr
 bool AArch64AsmParser::parseDirectiveSEHSaveFPLR(SMLoc L) {
   int64_t Offset;
   if (parseImmExpr(Offset))
     return true;
+  if (!isValidARM64SaveOffset(Offset))
+    return Error(L, ".seh_save_fplr offset must be an 8-byte multiple "
+                    "between 0 and 504");
   getTargetStreamer().emitARM64WinCFISaveFPLR(Offset);
   return false;
 }
@@ -7688,6 +7697,9 @@ bool AArch64AsmParser::parseDirectiveSEHSaveReg(SMLoc L) {
   if (parseRegisterInRange(Reg, AArch64::X0, AArch64::X19, AArch64::LR) ||
       parseComma() || parseImmExpr(Offset))
     return true;
+  if (!isValidARM64SaveOffset(Offset))
+    return Error(L, ".seh_save_reg offset must be an 8-byte multiple "
+                    "between 0 and 504");
   getTargetStreamer().emitARM64WinCFISaveReg(Reg, Offset);
   return false;
 }
@@ -7752,6 +7764,9 @@ bool AArch64AsmParser::parseDirectiveSEHSaveFReg(SMLoc L) {
   if (parseRegisterInRange(Reg, AArch64::D0, AArch64::D8, AArch64::D15) ||
       parseComma() || parseImmExpr(Offset))
     return true;
+  if (!isValidARM64SaveOffset(Offset))
+    return Error(L, ".seh_save_freg offset must be an 8-byte multiple "
+                    "between 0 and 504");
   getTargetStreamer().emitARM64WinCFISaveFReg(Reg, Offset);
   return false;
 }

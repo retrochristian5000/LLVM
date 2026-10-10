@@ -35,6 +35,18 @@ legal_fp:
   .seh_endprologue
   ret
   .seh_endproc
+.globl legal_saves
+legal_saves:
+  .seh_proc legal_saves
+  stp x29, x30, [sp, #504]
+  .seh_save_fplr 504
+  str x19, [sp, #504]
+  .seh_save_reg x19, 504
+  str d8, [sp, #504]
+  .seh_save_freg d8, 504
+  .seh_endprologue
+  ret
+  .seh_endproc
 .endif
 
 .ifdef BAD
@@ -68,6 +80,24 @@ bad:
   nop
   .seh_add_fp 0x100000000
   // BAD: error: .seh_add_fp offset must be a multiple of 8
+  nop
+  .seh_save_fplr -8
+  // BAD: error: .seh_save_fplr offset must be an 8-byte multiple
+  nop
+  .seh_save_fplr 505
+  // BAD: error: .seh_save_fplr offset must be an 8-byte multiple
+  nop
+  .seh_save_reg x19, 3
+  // BAD: error: .seh_save_reg offset must be an 8-byte multiple
+  nop
+  .seh_save_reg x19, 512
+  // BAD: error: .seh_save_reg offset must be an 8-byte multiple
+  nop
+  .seh_save_freg d8, -8
+  // BAD: error: .seh_save_freg offset must be an 8-byte multiple
+  nop
+  .seh_save_freg d8, 0x100000000
+  // BAD: error: .seh_save_freg offset must be an 8-byte multiple
   .seh_endprologue
   ret
   .seh_endproc
