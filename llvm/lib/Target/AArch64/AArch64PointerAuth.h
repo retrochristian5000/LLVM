@@ -110,6 +110,10 @@ enum class AuthCheckMethod {
 /// Returns the number of bytes added by checkAuthenticatedRegister.
 unsigned getCheckerSizeInBytes(AuthCheckMethod Method);
 
+/// Whether PAuth_LR CFI uses absolute RA states instead of legacy toggles.
+/// Keep frame-state resets consistent with the selected emission mode.
+bool useSetRAStateForPAuthLR();
+
 } // end namespace AArch64PAuth
 } // end namespace llvm
 

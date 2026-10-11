@@ -93,6 +93,10 @@ FunctionPass *llvm::createAArch64PointerAuthPass() {
   return new AArch64PointerAuthLegacy();
 }
 
+bool llvm::AArch64PAuth::useSetRAStateForPAuthLR() {
+  return CFILLVMSetRASignStateMode != SetRAStateMode::Never;
+}
+
 char AArch64PointerAuthLegacy::ID = 0;
 
 static void emitEpiloguePACSymOffsetIntoReg(const TargetInstrInfo &TII,

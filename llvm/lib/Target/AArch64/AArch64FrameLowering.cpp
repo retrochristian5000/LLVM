@@ -216,6 +216,7 @@
 #include "AArch64FrameLowering.h"
 #include "AArch64InstrInfo.h"
 #include "AArch64MachineFunctionInfo.h"
+#include "AArch64PointerAuth.h"
 #include "AArch64PrologueEpilogue.h"
 #include "AArch64RegisterInfo.h"
 #include "AArch64SMEAttributes.h"
@@ -742,10 +743,15 @@ void AArch64FrameLowering::resetCFIToInitialState(
   // Reset the CFA to `SP + 0`.
   CFIBuilder.buildDefCFA(AArch64::SP, 0);
 
-  // Flip the RA sign state.
+  // Restore the entry RA state after a signed frame. The absolute PAuth_LR
+  // state must agree with the prologue/epilogue CFI so that shrink-wrapped
+  // blocks cannot accidentally toggle a PC-based authentication state.
   if (MFI.shouldSignReturnAddress(MF)) {
     if (MFI.branchProtectionPAuthLR()) {
-      CFIBuilder.buildNegateRAStateWithPC();
+      if (AArch64PAuth::useSetRAStateForPAuthLR())
+        CFIBuilder.buildSetRAState(0, nullptr);
+      else
+        CFIBuilder.buildNegateRAStateWithPC();
     } else if (!MF.getTarget().getTargetTriple().isOSBinFormatMachO()) {
       CFIBuilder.buildNegateRAState();
     }
