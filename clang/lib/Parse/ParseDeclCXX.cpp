@@ -4953,10 +4953,18 @@ void Parser::ParseMicrosoftAttributes(ParsedAttributes &Attrs) {
         IdentifierInfo *II = Tok.getIdentifierInfo();
         SourceLocation NameLoc = Tok.getLocation();
         ConsumeToken();
+        // Native and COM events require compiler-generated subscriptions,
+        // event storage and, for COM, connection point plumbing.  Ignoring
+        // these attributes would silently change the program's behavior.
+        if (!getLangOpts().HLSL && getLangOpts().CPlusPlus &&
+            (II->getName() == "event_source" ||
+             II->getName() == "event_receiver"))
+          Diag(NameLoc, diag::err_ms_event_attribute_unsupported) << II;
+
         ParsedAttr::Kind AttrKind =
             ParsedAttr::getParsedKind(II, nullptr, ParsedAttr::AS_Microsoft);
         // For HLSL we want to handle all attributes, but for MSVC compat, we
-        // silently ignore unknown Microsoft attributes.
+        // silently ignore other unknown Microsoft attributes.
         if (getLangOpts().HLSL || AttrKind != ParsedAttr::UnknownAttribute) {
           bool AttrParsed = false;
           if (Tok.is(tok::l_paren)) {

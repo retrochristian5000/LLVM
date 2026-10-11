@@ -838,6 +838,8 @@ def err_attribute_argument_parm_pack_not_supported : Error<
   "attribute %0 does not support argument pack expansion">;
 def err_ms_declspec_type : Error<
   "__declspec attributes must be an identifier or string literal">;
+def err_ms_event_attribute_unsupported : Error<
+  "Microsoft event attribute '%0' is unsupported (requires event code generation)">;
 def err_ms_property_no_getter_or_putter : Error<
   "property does not specify a getter or a putter">;
 def err_ms_property_unknown_accessor : Error<
