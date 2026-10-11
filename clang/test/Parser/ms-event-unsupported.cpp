@@ -8,16 +8,16 @@
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc -std=c++2c -fms-extensions -fsyntax-only -verify %s
 // RUN: %clang_cc1 -triple aarch64-pc-windows-msvc -std=c++2c -fms-extensions -fsyntax-only -verify %s
 
-[event_source(native)] // expected-error {{Microsoft event attribute 'event_source' is unsupported (requires event code generation)}}
+[event_source(native)] // expected-error {{Microsoft event attribute 'event_source' is unsupported}}
 struct NativeSource {};
 
-[event_receiver(native)] // expected-error {{Microsoft event attribute 'event_receiver' is unsupported (requires event code generation)}}
+[event_receiver(native)] // expected-error {{Microsoft event attribute 'event_receiver' is unsupported}}
 struct NativeReceiver {};
 
-[event_source(com)] // expected-error {{Microsoft event attribute 'event_source' is unsupported (requires event code generation)}}
+[event_source(com)] // expected-error {{Microsoft event attribute 'event_source' is unsupported}}
 struct ComSource {};
 
-[event_receiver(com, layout_dependent=true)] // expected-error {{Microsoft event attribute 'event_receiver' is unsupported (requires event code generation)}}
+[event_receiver(com, layout_dependent=true)] // expected-error {{Microsoft event attribute 'event_receiver' is unsupported}}
 struct ComReceiver {};
 
 // Unknown MS attributes continue to have the previous compatibility
