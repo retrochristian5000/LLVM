@@ -12,6 +12,11 @@
 # RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
 # RUN:   -dylib -fixup_chains %t/libfoo.dylib %t/test.o -o %t/libtest.dylib
 # RUN: llvm-otool -l %t/libtest.dylib | FileCheck %s --check-prefix=SECTIONS
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -fixup_chains -no_data_const %t/libfoo.dylib %t/test.o \
+# RUN:   -o %t/libtest-noconst.dylib
+# RUN: llvm-otool -l %t/libtest-noconst.dylib | \
+# RUN:   FileCheck %s --check-prefix=NO-CONST
 # RUN: llvm-objdump --no-print-imm-hex --macho -d --no-show-raw-insn \
 # RUN:   --section="__TEXT,__auth_stubs" %t/libtest.dylib | \
 # RUN:   FileCheck %s --check-prefix=STUB
@@ -20,6 +25,9 @@
 
 # SECTIONS: sectname __auth_stubs
 # SECTIONS: sectname __auth_got
+# SECTIONS-NEXT: segname __AUTH_CONST
+# NO-CONST: sectname __auth_got
+# NO-CONST-NEXT: segname __DATA
 
 # STUB-LABEL: Contents of (__TEXT,__auth_stubs) section
 # STUB:       adrp x17

@@ -351,7 +351,9 @@ void NonLazyPointerSectionBase::addEntry(Symbol *sym) {
 }
 
 AuthGotSection::AuthGotSection()
-    : NonLazyPointerSectionBase(segment_names::data, section_names::authGot) {
+    : NonLazyPointerSectionBase(config->dataConst ? segment_names::authConst
+                                           : segment_names::data,
+                                section_names::authGot) {
   flags = S_NON_LAZY_SYMBOL_POINTERS;
 }
 
