@@ -94,7 +94,7 @@ FunctionPass *llvm::createAArch64PointerAuthPass() {
 }
 
 bool llvm::AArch64PAuth::useSetRAStateForPAuthLR() {
-  return CFILLVMSetRASignStateMode != SetRAStateMode::Never;
+  return CFILLVMSetRASignStateMode.getValue() != SetRAStateMode::Never;
 }
 
 char AArch64PointerAuthLegacy::ID = 0;
