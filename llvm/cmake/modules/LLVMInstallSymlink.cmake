@@ -2,10 +2,9 @@
 # DESTDIR environment variable may be unset at configuration time.
 # See PR8397.
 
-# Set to an arbitrary directory to silence GNUInstallDirs warnings
-# regarding being unable to determine libdir.
-set(CMAKE_INSTALL_LIBDIR "lib")
-include(GNUInstallDirs)
+# This script runs at install time, without compiler or target-architecture
+# information. The caller already passes the resolved destination directory,
+# so GNUInstallDirs and a fabricated CMAKE_INSTALL_LIBDIR are not needed.
 
 function(install_symlink name target outdir link_or_copy)
   # link_or_copy is the "command" to pass to cmake -E.
