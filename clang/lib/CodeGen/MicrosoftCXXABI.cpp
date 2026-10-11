@@ -327,10 +327,11 @@ public:
   bool isVirtualOffsetNeededForVTableField(CodeGenFunction &CGF,
                                            CodeGenFunction::VPtr Vptr) override;
 
-  /// Don't initialize vptrs if dynamic class
-  /// is marked with the 'novtable' attribute.
+  /// Don't initialize vptrs for explicit novtable classes or MS __interface
+  /// types, which implicitly carry novtable semantics.
   bool doStructorsInitializeVPtrs(const CXXRecordDecl *VTableClass) override {
-    return !VTableClass->hasAttr<MSNoVTableAttr>();
+    return !VTableClass->hasAttr<MSNoVTableAttr>() &&
+           !VTableClass->isInterface();
   }
 
   llvm::Constant *
