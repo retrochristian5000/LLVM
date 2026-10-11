@@ -2514,6 +2514,59 @@ StringMap<bool> sys::getHostCPUFeatures() {
 
   return Features;
 }
+#elif defined(__APPLE__) && defined(__aarch64__)
+StringMap<bool> sys::getHostCPUFeatures() {
+  StringMap<bool> Features;
+
+  // Darwin exposes the available instruction extensions via sysctl, not the
+  // Linux HWCAP API. An absent key is not evidence of instruction support:
+  // leave the corresponding feature disabled.
+  auto Has = [](const char *Name) {
+    int Enabled = 0;
+    size_t Size = sizeof(Enabled);
+    return sysctlbyname(Name, &Enabled, &Size, nullptr, 0) == 0 &&
+           Size == sizeof(Enabled) && Enabled != 0;
+  };
+
+  bool AdvSIMD = Has("hw.optional.AdvSIMD");
+  Features["neon"] = AdvSIMD;
+  Features["fp-armv8"] = Has("hw.optional.floatingpoint");
+  Features["crc"] = Has("hw.optional.arm.FEAT_CRC32") ||
+                    Has("hw.optional.armv8_crc32");
+  Features["lse"] = Has("hw.optional.arm.FEAT_LSE");
+  Features["lse2"] = Has("hw.optional.arm.FEAT_LSE2");
+  Features["bti"] = Has("hw.optional.arm.FEAT_BTI");
+  Features["cssc"] = Has("hw.optional.arm.FEAT_CSSC");
+  Features["pauth"] = Has("hw.optional.arm.FEAT_PAuth");
+  Features["dotprod"] = Has("hw.optional.arm.FEAT_DotProd");
+  Features["i8mm"] = Has("hw.optional.arm.FEAT_I8MM");
+  Features["bf16"] = Has("hw.optional.arm.FEAT_BF16");
+  Features["fullfp16"] = Has("hw.optional.arm.FEAT_FP16");
+  Features["fp16fml"] = Has("hw.optional.arm.FEAT_FHM");
+  Features["jsconv"] = Has("hw.optional.arm.FEAT_JSCVT");
+  Features["rcpc"] = Has("hw.optional.arm.FEAT_LRCPC");
+  Features["rcpc2"] = Has("hw.optional.arm.FEAT_LRCPC2");
+  Features["rdm"] = Has("hw.optional.arm.FEAT_RDM");
+  Features["fcma"] = Has("hw.optional.arm.FEAT_FCMA");
+  Features["flagm"] = Has("hw.optional.arm.FEAT_FlagM");
+  Features["flagm2"] = Has("hw.optional.arm.FEAT_FlagM2");
+  Features["dit"] = Has("hw.optional.arm.FEAT_DIT");
+
+  // LLVM's AES and SHA feature names each represent multiple architectural
+  // extensions; only advertise them when all required instructions exist.
+  Features["aes"] = AdvSIMD && Has("hw.optional.arm.FEAT_AES") &&
+                    Has("hw.optional.arm.FEAT_PMULL");
+  Features["sha2"] = AdvSIMD && Has("hw.optional.arm.FEAT_SHA1") &&
+                     Has("hw.optional.arm.FEAT_SHA256");
+  Features["sha3"] = AdvSIMD && Has("hw.optional.arm.FEAT_SHA3") &&
+                     Has("hw.optional.arm.FEAT_SHA512");
+
+  Features["sme"] = Has("hw.optional.arm.FEAT_SME");
+  Features["sme2"] = Features["sme"] && Has("hw.optional.arm.FEAT_SME2");
+
+  // Do not infer PAuth_LR or arm64e.x1 from plain pointer authentication.
+  return Features;
+}
 #else
 StringMap<bool> sys::getHostCPUFeatures() { return {}; }
 #endif

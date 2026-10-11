@@ -17,6 +17,10 @@
 
 #include "gtest/gtest.h"
 
+#if defined(__APPLE__) && defined(__aarch64__)
+#include <sys/sysctl.h>
+#endif
+
 #define ASSERT_NO_ERROR(x)                                                     \
   if (std::error_code ASSERT_NO_ERROR_ec = x) {                                \
     SmallString<128> MessageStorage;                                           \
@@ -681,3 +685,38 @@ TEST(getDarwinHostCPUName, AppleARMFamilyMapping) {
   EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0), "generic");
   EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0xdeadbeef), "generic");
 }
+
+#if defined(__APPLE__) && defined(__aarch64__)
+TEST(getDarwinHostCPUFeatures, MatchesReportedInstructions) {
+  const StringMap<bool> Features = sys::getHostCPUFeatures();
+  auto Has = [](const char *Name) {
+    int Enabled = 0;
+    size_t Size = sizeof(Enabled);
+    return sysctlbyname(Name, &Enabled, &Size, nullptr, 0) == 0 &&
+           Size == sizeof(Enabled) && Enabled != 0;
+  };
+
+  EXPECT_EQ(Features.lookup("lse"), Has("hw.optional.arm.FEAT_LSE"));
+  EXPECT_EQ(Features.lookup("lse2"), Has("hw.optional.arm.FEAT_LSE2"));
+  EXPECT_EQ(Features.lookup("bti"), Has("hw.optional.arm.FEAT_BTI"));
+  EXPECT_EQ(Features.lookup("cssc"), Has("hw.optional.arm.FEAT_CSSC"));
+  EXPECT_EQ(Features.lookup("pauth"), Has("hw.optional.arm.FEAT_PAuth"));
+  EXPECT_EQ(Features.lookup("crc"),
+            Has("hw.optional.arm.FEAT_CRC32") ||
+                Has("hw.optional.armv8_crc32"));
+  bool AdvSIMD = Has("hw.optional.AdvSIMD");
+  EXPECT_EQ(Features.lookup("aes"),
+            AdvSIMD && Has("hw.optional.arm.FEAT_AES") &&
+                Has("hw.optional.arm.FEAT_PMULL"));
+  EXPECT_EQ(Features.lookup("sha2"),
+            AdvSIMD && Has("hw.optional.arm.FEAT_SHA1") &&
+                Has("hw.optional.arm.FEAT_SHA256"));
+  EXPECT_EQ(Features.lookup("sha3"),
+            AdvSIMD && Has("hw.optional.arm.FEAT_SHA3") &&
+                Has("hw.optional.arm.FEAT_SHA512"));
+  EXPECT_EQ(Features.lookup("dotprod"),
+            Has("hw.optional.arm.FEAT_DotProd"));
+  EXPECT_EQ(Features.lookup("i8mm"), Has("hw.optional.arm.FEAT_I8MM"));
+  EXPECT_EQ(Features.lookup("bf16"), Has("hw.optional.arm.FEAT_BF16"));
+}
+#endif
