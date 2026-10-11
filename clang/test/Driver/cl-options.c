@@ -133,11 +133,13 @@
 // RUN: %clang_cl /Gy /Gy- -### -- %s 2>&1 | FileCheck -check-prefix=Gy_ %s
 // Gy_-NOT: -ffunction-sections
 
-// RUN: %clang_cl /Gs -### -- %s 2>&1 | FileCheck -check-prefix=Gs %s
+// Check these MSVC switches with explicit target triples.  Bare /Gs
+// and /Gs0 have different defaults on x64 versus x86/ARM64.
+// RUN: %clang_cl --target=i686-pc-windows-msvc /Gs -### -- %s 2>&1 | FileCheck -check-prefix=Gs %s
 // Gs: "-mstack-probe-size=4096"
-// RUN: %clang_cl /Gs0 -### -- %s 2>&1 | FileCheck -check-prefix=Gs0 %s
+// RUN: %clang_cl --target=x86_64-pc-windows-msvc /Gs0 -### -- %s 2>&1 | FileCheck -check-prefix=Gs0 %s
 // Gs0: "-mstack-probe-size=0"
-// RUN: %clang_cl /Gs4096 -### -- %s 2>&1 | FileCheck -check-prefix=Gs4096 %s
+// RUN: %clang_cl --target=x86_64-pc-windows-msvc /Gs4096 -### -- %s 2>&1 | FileCheck -check-prefix=Gs4096 %s
 // Gs4096: "-mstack-probe-size=4096"
 
 // RUN: %clang_cl /Gw -### -- %s 2>&1 | FileCheck -check-prefix=Gw %s
