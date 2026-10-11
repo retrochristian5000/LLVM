@@ -291,6 +291,24 @@ void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(std::string("-lto-sample-profile:") +
                                            A->getValue()));
   }
+  // MSVC /F controls the executable stack reserve, not /GS security
+  // cookies or /Gs stack-probe thresholds.  The linker does not round the
+  // number on our behalf, so apply the documented four-byte rounding here.
+  // Let explicit /link /STACK take precedence by adding it first.
+  if (const Arg *A = Args.getLastArg(options::OPT__SLASH_F)) {
+    StringRef Value = A->getValue();
+    uint64_t Reserve = 0;
+    if (Value.getAsInteger(0, Reserve) || Reserve == 0 ||
+        Reserve > UINT64_MAX - 3 ||
+        (!TC.getTriple().isArch64Bit() && Reserve > UINT32_MAX - 3)) {
+      TC.getDriver().Diag(diag::err_drv_invalid_value)
+          << A->getAsString(Args) << Value;
+    } else if (!DLL) {
+      Reserve = (Reserve + 3) & ~uint64_t(3);
+      CmdArgs.push_back(Args.MakeArgString(Twine("-stack:") + Twine(Reserve)));
+    }
+  }
+
   Args.AddAllArgValues(CmdArgs, options::OPT__SLASH_link);
 
   // Control Flow Guard checks

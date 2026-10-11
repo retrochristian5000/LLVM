@@ -9765,7 +9765,8 @@ def _SLASH_external : CLJoined<"external:">;
 def _SLASH_favor : CLJoined<"favor">;
 def _SLASH_fsanitize_address_use_after_return : CLJoined<"fsanitize-address-use-after-return">;
 def _SLASH_fno_sanitize_address_vcasan_lib : CLJoined<"fno-sanitize-address-vcasan-lib">;
-def _SLASH_F : CLJoinedOrSeparate<"F">;
+def _SLASH_F : CLJoinedOrSeparate<"F">,
+  HelpText<"Set the executable stack reserve in bytes">;
 def _SLASH_Fm : CLJoined<"Fm">;
 def _SLASH_Fr : CLJoined<"Fr">;
 def _SLASH_FR : CLJoined<"FR">;

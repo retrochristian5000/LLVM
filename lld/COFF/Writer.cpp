@@ -775,6 +775,14 @@ void Writer::run() {
     llvm::TimeTraceScope timeScope("Write PE");
     ScopedTimer t1(ctx.codeLayoutTimer);
 
+    // PE32 optional headers have 32-bit stack fields.  Do not silently
+    // truncate oversized /STACK or STACKSIZE inputs to tiny reservations.
+    // Check after machine inference and .def processing, before opening output.
+    if (!ctx.config.is64() &&
+        (ctx.config.stackReserve > UINT32_MAX ||
+         ctx.config.stackCommit > UINT32_MAX))
+      Fatal(ctx) << "stack reserve or commit exceeds the PE32 header limit";
+
     calculateStubDependentSizes();
     if (ctx.config.machine == ARM64X)
       ctx.dynamicRelocs = make<DynamicRelocsChunk>();

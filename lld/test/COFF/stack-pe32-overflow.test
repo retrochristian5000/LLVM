@@ -1,0 +1,10 @@
+# Verify x86 PE32 rejects /stack values that do not fit the 32-bit
+# optional header.  Without this, 4294967297 silently becomes 1.
+# RUN: yaml2obj %p/Inputs/machine-x86.yaml -o %t.obj
+# RUN: not lld-link /out:%t.exe /entry:main /subsystem:console /stack:4294967297 %t.obj 2>&1 | FileCheck --check-prefix=RESERVE %s
+# RESERVE: stack reserve or commit exceeds the PE32 header limit
+# RUN: not lld-link /out:%t.exe /entry:main /subsystem:console /stack:4096,4294967297 %t.obj 2>&1 | FileCheck --check-prefix=COMMIT %s
+# COMMIT: stack reserve or commit exceeds the PE32 header limit
+# RUN: lld-link /out:%t.exe /entry:main /subsystem:console /stack:4294967292 %t.obj
+# RUN: llvm-readobj --file-headers %t.exe | FileCheck --check-prefix=VALID %s
+# VALID: SizeOfStackReserve: 4294967292
