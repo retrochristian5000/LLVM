@@ -2184,7 +2184,9 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     parseNumbers(arg->getValue(), &config->align);
     if (!isPowerOf2_64(config->align))
       Err(ctx) << "/align: not a power of two: " << StringRef(arg->getValue());
-    if (!args.hasArg(OPT_driver))
+    // Page-sized or larger section alignment is valid for user-mode PE.
+    // Do not require the kernel-mode /driver flag to suppress this warning.
+    if (!args.hasArg(OPT_driver) && config->align < 4096)
       Warn(ctx) << "/align specified without /driver; image may not run";
   }
 

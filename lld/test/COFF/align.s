@@ -9,6 +9,13 @@
 
 # WARN1: /align specified without /driver; image may not run
 
+# Page-sized user-mode section alignments must not require /driver.
+# RUN: lld-link /out:%t.exe /entry:main /align:4096 %t.obj 2>&1 \
+# RUN:   | FileCheck -check-prefix=NOWARN --allow-empty %s
+# RUN: lld-link /out:%t.exe /entry:main /align:65536 %t.obj 2>&1 \
+# RUN:   | FileCheck -check-prefix=NOWARN --allow-empty %s
+# NOWARN-NOT: /align specified without /driver
+
 # RUN: lld-link /out:%t.exe /entry:main /align:32 %t.obj /driver 2>&1 \
 # RUN:   | FileCheck -check-prefix=WARN2 --allow-empty %s
 
