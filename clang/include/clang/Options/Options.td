@@ -9327,10 +9327,12 @@ def _SLASH_GF_ : CLFlag<"GF-">, HelpText<"Disable string pooling">,
 def _SLASH_GS : CLFlag<"GS">,
   HelpText<"Enable buffer security check (default)">;
 def _SLASH_GS_ : CLFlag<"GS-">, HelpText<"Disable buffer security check">;
-def : CLFlag<"Gs">, HelpText<"Use stack probes (default)">,
-  Alias<mstack_probe_size>, AliasArgs<["4096"]>;
+// /Gs is not a direct alias of -mstack-probe-size: MSVC gives the bare
+// option and values below 10 different meanings on x64 and other targets.
+def _SLASH_Gs_default : CLFlag<"Gs">,
+  HelpText<"Use MSVC default stack probe size (target-dependent)">;
 def _SLASH_Gs : CLJoined<"Gs">,
-  HelpText<"Set stack probe size (default 4096)">, Alias<mstack_probe_size>;
+  HelpText<"Set the MSVC stack probe threshold in bytes">;
 def _SLASH_Gy : CLFlag<"Gy">, HelpText<"Put each function in its own section">,
   Alias<ffunction_sections>;
 def _SLASH_Gy_ : CLFlag<"Gy-">,

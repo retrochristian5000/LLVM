@@ -7352,13 +7352,37 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString("-mstack-alignment=" + Value));
   }
 
-  if (Args.hasArg(options::OPT_mstack_probe_size)) {
-    StringRef Size = Args.getLastArgValue(options::OPT_mstack_probe_size);
+  // /GS inserts security cookies; /Gs is a distinct MSVC option that
+  // controls stack growth probes.  Unlike -mstack-probe-size, /Gs has
+  // target-specific defaults (and special treatment for values 0..9).
+  if (Arg *A = Args.getLastArg(options::OPT_mstack_probe_size,
+                                options::OPT__SLASH_Gs_default,
+                                options::OPT__SLASH_Gs)) {
+    if (A->getOption().matches(options::OPT__SLASH_Gs_default)) {
+      CmdArgs.push_back(TC.getArch() == llvm::Triple::x86_64
+                            ? "-mstack-probe-size=0"
+                            : "-mstack-probe-size=4096");
+    } else if (A->getOption().matches(options::OPT__SLASH_Gs)) {
+      StringRef Size = A->getValue();
+      uint64_t Value;
 
-    if (!Size.empty())
-      CmdArgs.push_back(Args.MakeArgString("-mstack-probe-size=" + Size));
-    else
-      CmdArgs.push_back("-mstack-probe-size=0");
+      if (Size.getAsInteger(10, Value) || Value > 2147483647ULL) {
+        D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Size;
+      } else {
+        if (Value < 10) {
+          Value = TC.getArch() == llvm::Triple::x86_64 ? 0 : 4096;
+          if (!Size.empty() && Size != "0")
+            D.Diag(diag::warn_drv_clang_cl_gs_small) << Size << Value;
+        }
+        CmdArgs.push_back(
+            Args.MakeArgString("-mstack-probe-size=" + Twine(Value)));
+      }
+    } else {
+      StringRef Size = A->getValue();
+      CmdArgs.push_back(
+          Args.MakeArgString("-mstack-probe-size=" +
+                             (Size.empty() ? StringRef("0") : Size)));
+    }
   }
 
   Args.addOptOutFlag(CmdArgs, options::OPT_mstack_arg_probe,

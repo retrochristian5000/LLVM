@@ -356,6 +356,8 @@ def warn_drv_potentially_misspelled_joined_argument : Warning<
 def err_drv_too_many_actions: Error<
     "only one action option is allowed. Got %0">;
 def err_drv_invalid_value : Error<"invalid value '%1' in '%0'">;
+def warn_drv_clang_cl_gs_small : Warning<
+  "/Gs%0 is too small; using stack probe threshold %1 for this target">;
 def err_drv_invalid_int_value : Error<"invalid integral value '%1' in '%0'">;
 def err_drv_invalid_escaped_command_line
     : Error<"invalid escaped command line: %0">;
