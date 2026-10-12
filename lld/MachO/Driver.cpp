@@ -1047,8 +1047,11 @@ static ICFLevel getICFLevel(const ArgList &args) {
                       .Case("all", ICFLevel::all)
                       .Default(ICFLevel::unknown);
 
-  if ((icfLevel == ICFLevel::safe_thunks) && (config->arch() != AK_arm64)) {
-    error("--icf=safe_thunks is only supported on arm64 targets");
+  // ARM64e uses the same direct-branch ICF thunks as ARM64. Keep the
+  // architecture check narrow: x86 and arm64_32 have no safe-thunk support.
+  if (icfLevel == ICFLevel::safe_thunks &&
+      !is_contained({AK_arm64, AK_arm64e}, config->arch())) {
+    error("--icf=safe_thunks is only supported on arm64 and arm64e targets");
   }
 
   if (icfLevel == ICFLevel::unknown) {
