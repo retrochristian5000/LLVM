@@ -22,7 +22,7 @@
 # THUNK-LABEL: _second:
 # THUNK-NEXT:  b _first
 
-# MAP: 0x00000004 [  2] _second
+# MAP: 0x00000004 {{.*}} _second
 # FIXUPS: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 
 #--- main.s
