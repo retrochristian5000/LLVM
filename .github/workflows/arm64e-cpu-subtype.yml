@@ -8,7 +8,10 @@ on:
       - 'clang/test/Driver/arch-arm64e.c'
       - 'clang/test/CodeGen/arm64e-c-driver-abi.c'
       - 'lld/MachO/Arch/ARM64.cpp'
+      - 'lld/MachO/Driver.cpp'
+      - 'lld/MachO/ICF.cpp'
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
+      - 'lld/test/MachO/arm64e-icf-safe-thunks.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
 
 permissions:
@@ -40,4 +43,5 @@ jobs:
           build-arm64e-subtype/bin/llvm-lit -sv \
             clang/test/Driver/arch-arm64e.c \
             clang/test/CodeGen/arm64e-c-driver-abi.c \
-            lld/test/MachO/arm64e-cpu-subtype.s
+            lld/test/MachO/arm64e-cpu-subtype.s \
+            lld/test/MachO/arm64e-icf-safe-thunks.s
