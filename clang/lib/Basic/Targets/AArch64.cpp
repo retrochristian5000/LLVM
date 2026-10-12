@@ -989,14 +989,14 @@ void AArch64TargetInfo::setFeatureEnabled(llvm::StringMap<bool> &Features,
     if (ArchInfo->implies(OtherArch))
       Features[OtherArch.getSubArch()] = true;
 
-  // Set any features implied by the architecture
-  std::vector<StringRef> CPUFeats;
-  if (llvm::AArch64::getExtensionFeatures(ArchInfo->DefaultExts, CPUFeats)) {
-    for (auto F : CPUFeats) {
-      assert(F[0] == '+' && "Expected + in target feature!");
-      Features[F.drop_front(1)] = true;
-    }
-  }
+  // Do not re-apply ArchInfo->DefaultExts here. These are optional
+  // -march defaults, not requirements of this architecture version.
+  // The driver already expands them for -march through addArchDefaults(),
+  // while -mcpu uses the CPU's own extensions through addCPUDefaults().
+  // Adding them again here would silently enable SVE/SVE2 (and other
+  // optional features) for CPUs such as Apple M4/A18 which implement
+  // Armv9.2-A without those extensions.
+
 }
 
 bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
