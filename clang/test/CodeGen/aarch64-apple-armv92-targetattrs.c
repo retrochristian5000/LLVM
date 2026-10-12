@@ -15,3 +15,5 @@ int whp_m4_v92_no_sve(void) { return 1; }
 
 __attribute__((target("cpu=apple-a18")))
 int whp_a18_v92_no_sve(void) { return 2; }
+
+int whp_generic_v92(void) { return 3; }
