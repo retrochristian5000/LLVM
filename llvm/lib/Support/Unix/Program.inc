@@ -18,6 +18,7 @@
 #include "llvm/Support/Program.h"
 
 #include "Unix.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Config/config.h"
 #include "llvm/Support/AutoConvert.h"
@@ -189,6 +190,12 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
   if (MemoryLimit == 0 && !DetachProcess) {
     posix_spawn_file_actions_t FileActionsStore;
     posix_spawn_file_actions_t *FileActions = nullptr;
+    // posix_spawn_file_actions_init may allocate native resources on Darwin.
+    // Release them on *all* paths, including failed redirection setup.
+    auto CleanupFileActions = scope_exit([&] {
+      if (FileActions)
+        posix_spawn_file_actions_destroy(FileActions);
+    });
 
     // If we call posix_spawn_file_actions_addopen we have to make sure the
     // c strings we pass to it stay alive until the call to posix_spawn,
@@ -205,8 +212,10 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
         }
       }
 
+      if (int Err = posix_spawn_file_actions_init(&FileActionsStore))
+        return !MakeErrMsg(ErrMsg, "Cannot posix_spawn_file_actions_init",
+                           Err);
       FileActions = &FileActionsStore;
-      posix_spawn_file_actions_init(FileActions);
 
       // Redirect stdin/stdout.
       if (RedirectIO_PS(RedirectsStr[0], 0, ErrMsg, FileActions) ||
@@ -242,9 +251,6 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
                         /*attrp*/ nullptr, const_cast<char **>(Argv),
                         const_cast<char **>(Envp));
     } while (Err == EINTR && ++retries < maxRetries);
-
-    if (FileActions)
-      posix_spawn_file_actions_destroy(FileActions);
 
     if (Err)
       return !MakeErrMsg(ErrMsg, "posix_spawn failed", Err);

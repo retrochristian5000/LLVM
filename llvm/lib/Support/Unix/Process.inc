@@ -159,7 +159,14 @@ void Process::PreventCoreFiles() {
 #endif
   setrlimit(RLIMIT_CORE, &rlim);
 
-#if defined(HAVE_MACH_MACH_H) && !defined(__GNU__)
+#if defined(HAVE_MACH_MACH_H) && !defined(__GNU__) &&                       \
+    !(defined(__APPLE__) &&                                                \
+      defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) &&            \
+      __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1060)
+  // These crash-reporting workarounds apply only to Mac OS X 10.0-10.5.
+  // Modern Darwin uses the RLIMIT_CORE limit above; overriding Mach
+  // exception ports and crash signals also interferes with LLVM crash
+  // diagnostics and debugger handlers.
   // Disable crash reporting on Mac OS X 10.0-10.4
 
   // get information about the original set of exception ports for the task

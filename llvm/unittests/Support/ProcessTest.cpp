@@ -17,6 +17,13 @@
 #include <windows.h>
 #endif
 
+#if defined(__APPLE__)
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace {
 
 using namespace llvm;
@@ -31,6 +38,38 @@ TEST(ProcessTest, GetProcessIdTest) {
   EXPECT_EQ(pid, ::getpid());
 #endif
 }
+
+
+#if defined(__APPLE__) &&                                                     \
+    defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) &&                \
+    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1060
+TEST(ProcessTest, PreventCoreFilesPreservesCrashHandlersOnModernDarwin) {
+  // Limit and signal changes must not leak into the Google Test runner.
+  pid_t Child = fork();
+  ASSERT_GE(Child, 0);
+  if (Child == 0) {
+    if (signal(SIGABRT, SIG_IGN) == SIG_ERR)
+      _exit(1);
+    Process::PreventCoreFiles();
+
+    struct sigaction Action = {};
+    if (sigaction(SIGABRT, nullptr, &Action) != 0 ||
+        Action.sa_handler != SIG_IGN)
+      _exit(2);
+
+    struct rlimit CoreLimit;
+    if (getrlimit(RLIMIT_CORE, &CoreLimit) != 0 ||
+        CoreLimit.rlim_cur != 0)
+      _exit(3);
+    _exit(Process::AreCoreFilesPrevented() ? 0 : 4);
+  }
+
+  int Status = 0;
+  ASSERT_EQ(waitpid(Child, &Status, 0), Child);
+  ASSERT_TRUE(WIFEXITED(Status));
+  EXPECT_EQ(0, WEXITSTATUS(Status));
+}
+#endif
 
 TEST(ProcessTest, GetRandomNumberTest) {
   const unsigned r1 = Process::GetRandomNumber();
