@@ -73,7 +73,7 @@ jobs:
           fi
 
   abi-dump:
-    if: github.repository_owner == 'llvm'
+    if: github.repository_owner == 'llvm' && (github.event_name != 'pull_request' || matrix.name == 'build-baseline')
     needs: abi-dump-setup
     runs-on: ubuntu-24.04
     container:
