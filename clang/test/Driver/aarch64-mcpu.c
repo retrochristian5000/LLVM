@@ -17,6 +17,13 @@
 // RUN: %clang --target=aarch64_be -mbig-endian -### -c %s 2>&1 | FileCheck -check-prefix=GENERIC-BE %s
 // GENERIC-BE: "-cc1"{{.*}} "-triple" "aarch64_be{{.*}}" "-target-cpu" "generic"
 
+// Apple A18 Pro (Darwin TAHITI) is identified as apple-a18. It shares the
+// M4 instruction model, but tuning should preserve the requested A18 name.
+// RUN: %clang --target=arm64-apple-macosx -mcpu=apple-a18 -### -c %s 2>&1 | FileCheck %s --check-prefix=APPLE-A18-CPU
+// APPLE-A18-CPU: "-target-cpu" "apple-m4"
+// RUN: %clang --target=arm64-apple-macosx -mtune=apple-a18 -### -c %s 2>&1 | FileCheck %s --check-prefix=APPLE-A18-TUNE
+// APPLE-A18-TUNE: "-tune-cpu" "apple-a18"
+
 // We cannot check much for -mcpu=native, but it should be replaced by either generic or a valid
 // Arm cpu string, depending on the host.
 // RUN: %clang --target=arm64 -mcpu=native -### -c %s 2> %t.err || true

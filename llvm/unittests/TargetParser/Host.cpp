@@ -13,6 +13,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Threading.h"
+#include "llvm/TargetParser/AArch64TargetParser.h"
 #include "llvm/TargetParser/Triple.h"
 
 #include "gtest/gtest.h"
@@ -665,6 +666,23 @@ TEST(HostTest, AIXHostCPUDetect) {
     HostCPU = HostCPU.rtrim('x');
 
   EXPECT_EQ(HostCPU, MCPU);
+}
+
+TEST(getDarwinHostCPUName, AppleA18ProfileResolves) {
+  // Both Darwin A18 families must reach a real backend CPU. Keep the
+  // identification distinct from the M4 implementation used for codegen.
+  const auto M4 = AArch64::parseCpu("apple-m4");
+  ASSERT_TRUE(M4);
+  EXPECT_EQ(AArch64::resolveCPUAlias("apple-a18"), "apple-m4");
+
+  for (uint32_t Family : {0x75d4acb9U, 0x204526d0U}) {
+    StringRef CPU = sys::detail::getHostCPUNameForAppleARM(Family);
+    ASSERT_EQ(CPU, "apple-a18");
+    auto Parsed = AArch64::parseCpu(CPU);
+    ASSERT_TRUE(Parsed);
+    EXPECT_EQ(Parsed->ArchIdx, M4->ArchIdx);
+    EXPECT_EQ(Parsed->DefaultExtensions, M4->DefaultExtensions);
+  }
 }
 
 TEST(getDarwinHostCPUName, AppleARMFamilyMapping) {
