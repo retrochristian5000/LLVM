@@ -62,6 +62,7 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/LTO/LTO.h"
+#include "llvm/Object/MachOUniversal.h"
 #include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -256,60 +257,83 @@ std::optional<MemoryBufferRef> macho::readFile(StringRef path) {
   MemoryBufferRef mbref = mb->getMemBufferRef();
   make<std::unique_ptr<MemoryBuffer>>(std::move(mb)); // take mb ownership
 
-  // If this is a regular non-fat file, return it.
+  // A universal file can use either the classic 32-bit FAT header or
+  // FAT_MAGIC_64 (with 64-bit slice offsets). Let LLVM's shared Mach-O
+  // reader validate the table, alignment, duplicate slices and bounds.
   const char *buf = mbref.getBufferStart();
-  const auto *hdr = reinterpret_cast<const fat_header *>(buf);
-  if (mbref.getBufferSize() < sizeof(uint32_t) ||
-      read32be(&hdr->magic) != FAT_MAGIC) {
+  const uint32_t magic =
+      mbref.getBufferSize() >= sizeof(uint32_t) ? read32be(buf) : 0;
+  if (magic != FAT_MAGIC && magic != FAT_MAGIC_64) {
     if (tar)
       tar->append(relativeToRoot(path), mbref.getBuffer());
     return cachedReads[key] = mbref;
   }
 
-  llvm::BumpPtrAllocator &bAlloc = lld::bAlloc();
+  Expected<std::unique_ptr<object::MachOUniversalBinary>> universalOrErr =
+      object::MachOUniversalBinary::create(mbref);
+  if (!universalOrErr) {
+    error(path + ": " + toString(universalOrErr.takeError()));
+    return std::nullopt;
+  }
 
-  // Object files and archive files may be fat files, which contain multiple
-  // real files for different CPU ISAs. Here, we search for a file that matches
-  // with the current link target and returns it as a MemoryBufferRef.
-  const auto *arch = reinterpret_cast<const fat_arch *>(buf + sizeof(*hdr));
-  auto getArchName = [](uint32_t cpuType, uint32_t cpuSubtype) {
-    return getArchitectureName(getArchitectureFromCpuType(cpuType, cpuSubtype));
-  };
-
+  const object::MachOUniversalBinary &universal = **universalOrErr;
+  using Slice = object::MachOUniversalBinary::ObjectForArch;
+  std::optional<Slice> exactSlice;
+  std::optional<Slice> fallbackSlice;
   std::vector<StringRef> archs;
-  for (uint32_t i = 0, n = read32be(&hdr->nfat_arch); i < n; ++i) {
-    if (reinterpret_cast<const char *>(arch + i + 1) >
-        buf + mbref.getBufferSize()) {
-      error(path + ": fat_arch struct extends beyond end of file");
-      return std::nullopt;
-    }
 
-    uint32_t cpuType = read32be(&arch[i].cputype);
-    uint32_t cpuSubtype =
-        read32be(&arch[i].cpusubtype) & ~MachO::CPU_SUBTYPE_MASK;
+  for (const Slice &slice : universal.objects()) {
+    const uint32_t cpuType = slice.getCPUType();
+    const uint32_t subtype = slice.getCPUSubType() & ~CPU_SUBTYPE_MASK;
+    archs.push_back(getArchitectureName(
+        getArchitectureFromCpuType(cpuType, slice.getCPUSubType())));
 
-    // FIXME: LD64 has a more complex fallback logic here.
-    // Consider implementing that as well?
-    if (cpuType != static_cast<uint32_t>(target->cpuType) ||
-        cpuSubtype != target->cpuSubtype) {
-      archs.emplace_back(getArchName(cpuType, cpuSubtype));
+    // Select an exact architecture first, regardless of slice order. The
+    // object and dylib parsers will subsequently verify the full arm64e ABI
+    // version, rather than silently choosing a different ABI from the fat file.
+    if (cpuType == static_cast<uint32_t>(target->cpuType) &&
+        subtype == target->cpuSubtype) {
+      exactSlice = slice;
       continue;
     }
 
-    uint32_t offset = read32be(&arch[i].offset);
-    uint32_t size = read32be(&arch[i].size);
-    if (offset + size > mbref.getBufferSize())
-      error(path + ": slice extends beyond end of file");
-    if (tar)
-      tar->append(relativeToRoot(path), mbref.getBuffer());
-    return cachedReads[key] = MemoryBufferRef(StringRef(buf + offset, size),
-                                              path.copy(bAlloc));
+    // An arm64e image may import an ordinary arm64 dylib (or use an arm64
+    // executable with -bundle_loader), but it cannot link an ordinary arm64
+    // object or archive as arm64e: their relocation and PAC ABIs differ.
+    // Only consider this fallback when there is no exact arm64e slice.
+    if (config->arch() != AK_arm64e || cpuType != CPU_TYPE_ARM64 ||
+        subtype != CPU_SUBTYPE_ARM64_ALL ||
+        slice.getSize() < sizeof(mach_header_64))
+      continue;
+
+    const char *sliceBuf = buf + slice.getOffset();
+    if (read32le(sliceBuf) != MH_MAGIC_64 ||
+        read32le(sliceBuf + 4) != CPU_TYPE_ARM64 ||
+        (read32le(sliceBuf + 8) & ~CPU_SUBTYPE_MASK) !=
+            CPU_SUBTYPE_ARM64_ALL)
+      continue;
+
+    const uint32_t fileType = read32le(sliceBuf + 12);
+    if (fileType == MH_DYLIB || fileType == MH_EXECUTE)
+      fallbackSlice = slice;
   }
 
-  auto targetArchName = getArchName(target->cpuType, target->cpuSubtype);
-  warn(path + ": ignoring file because it is universal (" + join(archs, ",") +
-       ") but does not contain the " + targetArchName + " architecture");
-  return std::nullopt;
+  const std::optional<Slice> &chosen =
+      exactSlice ? exactSlice : fallbackSlice;
+  if (!chosen) {
+    warn(path + ": ignoring file because it is universal (" +
+         join(archs, ",") + ") but does not contain the " +
+         getArchitectureName(config->arch()) + " architecture");
+    return std::nullopt;
+  }
+
+  if (tar)
+    tar->append(relativeToRoot(path), mbref.getBuffer());
+  llvm::BumpPtrAllocator &bAlloc = lld::bAlloc();
+  return cachedReads[key] =
+             MemoryBufferRef(StringRef(buf + chosen->getOffset(),
+                                       chosen->getSize()),
+                             path.copy(bAlloc));
 }
 
 InputFile::InputFile(Kind kind, const InterfaceFile &interface)
