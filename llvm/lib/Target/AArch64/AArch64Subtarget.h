@@ -180,6 +180,7 @@ public:
     case AppleA15:
     case AppleA16:
     case AppleA17:
+    case AppleA18:
     case AppleM4:
     case AppleM5:
       return true;
