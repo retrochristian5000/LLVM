@@ -74,6 +74,18 @@ bool macho::validateSymbolRelocation(const Symbol *sym,
     error(message(Twine("requires that symbol ") + sym->getName() + " " +
                   (sym->isTlv() ? "not " : "") + "be thread-local"));
 
+  // ARM64e calls through authenticated stubs when the target is imported
+  // from a dylib or resolved by dyld's dynamic lookup. An addend on a branch
+  // would enter the middle of the stub rather than the intended function.
+  // Only a definition in this image has a known address for an interior
+  // branch target; never treat a dyld-bound symbol as such a definition.
+  if (config->arch() == AK_arm64e &&
+      relocAttrs.hasAttr(RelocAttrBits::BRANCH) && r.addend != 0 &&
+      isa<DylibSymbol>(sym))
+    error(message(Twine("cannot target an offset within dynamically bound "
+                        "symbol ") +
+                  sym->getName()));
+
   return valid;
 }
 
