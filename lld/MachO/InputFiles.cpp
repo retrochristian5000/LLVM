@@ -599,10 +599,25 @@ void ObjFile::parseRelocations(ArrayRef<SectionHeader> sectionHeaders,
         target->hasAttr(relInfo.r_type, RelocAttrBits::SUBTRAHEND);
     int64_t pairedAddend = 0;
     if (target->hasAttr(relInfo.r_type, RelocAttrBits::ADDEND)) {
+      if (i + 1 >= relInfos.size()) {
+        error(toString(this) +
+              ": ARM64_RELOC_ADDEND missing its paired relocation");
+        return;
+      }
+      const relocation_info next = relInfos[i + 1];
+      // Authenticated pointers encode their signed addend and PAC metadata
+      // in the pointer word, not in a preceding ARM64_RELOC_ADDEND record.
+      // Never reinterpret another pair prefix as the relocation target.
+      if (next.r_type == ARM64_RELOC_AUTHENTICATED_POINTER ||
+          target->hasAttr(next.r_type, RelocAttrBits::ADDEND) ||
+          target->hasAttr(next.r_type, RelocAttrBits::SUBTRAHEND)) {
+        error(toString(this) +
+              ": invalid ARM64_RELOC_ADDEND relocation pair");
+        return;
+      }
       pairedAddend = SignExtend64<24>(relInfo.r_symbolnum);
       relInfo = relInfos[++i];
     }
-    assert(i < relInfos.size());
     if (!validateRelocationInfo(this, sec, relInfo))
       continue;
     if (relInfo.r_address & R_SCATTERED)
@@ -661,14 +676,24 @@ void ObjFile::parseRelocations(ArrayRef<SectionHeader> sectionHeaders,
       subsec = subsecIt->isec;
       r.offset -= subsecIt->offset;
     }
+    if (isSubtrahend) {
+      if (i + 1 >= relInfos.size()) {
+        error(toString(this) + ": SUBTRACTOR missing its paired relocation");
+        return;
+      }
+      const relocation_info next = relInfos[i + 1];
+      // AUTHENTICATED_POINTER also has the UNSIGNED attribute; that does
+      // not make it a valid minuend in a SUBTRACTOR/UNSIGNED relocation pair.
+      if (next.r_type != ARM64_RELOC_UNSIGNED ||
+          next.r_address != relInfo.r_address) {
+        error(toString(this) + ": invalid SUBTRACTOR relocation pair");
+        return;
+      }
+    }
     subsec->relocs.push_back(r);
 
     if (isSubtrahend) {
       relocation_info minuendInfo = relInfos[++i];
-      // SUBTRACTOR relocations should always be followed by an UNSIGNED one
-      // attached to the same address.
-      assert(target->hasAttr(minuendInfo.r_type, RelocAttrBits::UNSIGNED) &&
-             relInfo.r_address == minuendInfo.r_address);
       Relocation p;
       p.type = minuendInfo.r_type;
       if (minuendInfo.r_extern) {
