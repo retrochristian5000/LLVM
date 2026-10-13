@@ -39,6 +39,20 @@
 
 # BADSUBMINOR: error: -compatibility_version 8.8.300: malformed version
 
+## Explicit versions must have a nonzero major and nonempty components;
+## absence of the flag still retains the legal default value of zero.
+# RUN: not %lld -dylib -o %t/zero.dylib %t.o \
+# RUN:     -compatibility_version 0 -current_version 0.2.3 2>&1 | \
+# RUN:     FileCheck --check-prefix=BADZERO %s
+# BADZERO-DAG: error: -compatibility_version 0: malformed version
+# BADZERO-DAG: error: -current_version 0.2.3: malformed version
+
+# RUN: not %lld -dylib -o %t/dots.dylib %t.o \
+# RUN:     -compatibility_version 1..2 -current_version 1.2. 2>&1 | \
+# RUN:     FileCheck --check-prefix=BADDOTS %s
+# BADDOTS-DAG: error: -compatibility_version 1..2: malformed version
+# BADDOTS-DAG: error: -current_version 1.2.: malformed version
+
 # RUN: %lld -dylib -o %t/executable %t.o -o %t.dylib \
 # RUN:     -compatibility_version 1.2.3 -current_version 2.5.6
 # RUN: llvm-objdump --macho --all-headers %t.dylib | FileCheck %s
