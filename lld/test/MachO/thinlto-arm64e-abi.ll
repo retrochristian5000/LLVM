@@ -11,7 +11,10 @@
 ; RUN:   %t/auth.o %t/impl.o -o %t/libauth.dylib
 ; RUN: llvm-readobj --file-headers %t/lto-objects/1.arm64e.lto.o | FileCheck %s --check-prefix=EOBJ
 ; RUN: llvm-objdump --macho --chained-fixups %t/libauth.dylib | FileCheck %s --check-prefix=EAUTH
-; EOBJ: Format: Mach-O arm64e
+; EOBJ: CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+; EOBJ-NEXT: CpuSubTypeCapabilities: 0x80000000
+; EOBJ-NEXT: PointerAuthABI: Userland
+; EOBJ-NEXT: PointerAuthABIVersion: 0
 ; EAUTH: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 ;
 ;; The public LTO entrypoint must not treat ordinary ARM64 IR as ARM64e,
@@ -29,7 +32,7 @@
 ; RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
 ; RUN:   -dylib %t/arm64.o -o %t/libarm64.dylib
 ; RUN: llvm-readobj --file-headers %t/libarm64.dylib | FileCheck %s --check-prefix=AOBJ
-; AOBJ: Format: Mach-O arm64
+; AOBJ: CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
 ;
 ;--- auth.ll
 target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128-Fn32"
