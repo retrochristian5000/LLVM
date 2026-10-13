@@ -1162,7 +1162,14 @@ static uint32_t parseDylibVersion(const ArgList &args, unsigned id) {
   }
 
   PackedVersion version;
-  if (!version.parse32(arg->getValue())) {
+  StringRef versionStr = arg->getValue();
+  // The default is zero, but an explicitly provided dylib version must
+  // contain a nonzero major version and 1-3 nonempty numeric components.
+  // PackedVersion::parse32() intentionally splits on delimiters and does not
+  // reject empty components (such as "1..2" or "1.2.").
+  if (versionStr.empty() || versionStr.starts_with(".") ||
+      versionStr.ends_with(".") || versionStr.contains("..") ||
+      !version.parse32(versionStr) || version.getMajor() == 0) {
     error(arg->getAsString(args) + ": malformed version");
     return 0;
   }
