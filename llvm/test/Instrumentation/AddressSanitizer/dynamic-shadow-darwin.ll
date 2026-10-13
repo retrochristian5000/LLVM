@@ -10,8 +10,9 @@
 ;
 ; // macOS does not use dynamic shadow placement on x86_64
 ; RUN: opt -passes=asan -mtriple=x86_64-apple-macosx --data-layout="e-m:o-i64:64-f80:128-n8:16:32:64-S128" -S < %s | FileCheck %s --check-prefixes=CHECK,CHECK-NONDYNAMIC -DPTR_SIZE=64
-; // macOS does use dynamic shadow placement on arm64
+; // macOS uses dynamic shadow placement on both ordinary arm64 and arm64e.
 ; RUN: opt -passes=asan -mtriple=arm64-apple-macosx --data-layout="e-m:o-i64:64-i128:128-n32:64-S128" -S < %s | FileCheck %s --check-prefixes=CHECK,CHECK-DYNAMIC -DPTR_SIZE=64
+; RUN: opt -passes=asan -mtriple=arm64e-apple-macosx13.0 --data-layout="e-m:o-i64:64-i128:128-n32:64-S128" -S < %s | FileCheck %s --check-prefixes=CHECK,CHECK-DYNAMIC -DPTR_SIZE=64
 
 define i32 @test_load(ptr %a) sanitize_address {
 ; First instrumentation in the function must be to load the dynamic shadow
