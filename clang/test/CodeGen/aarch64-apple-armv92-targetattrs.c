@@ -1,10 +1,10 @@
-// RUN: %clang --target=arm64-apple-macosx11.0 -S -emit-llvm -O0 %s -o - | FileCheck %s --check-prefix=CPU --implicit-check-not=+sve
+// RUN: %clang --target=arm64-apple-macosx11.0 -S -emit-llvm -O0 %s -o - | FileCheck %s --check-prefix=CPU --implicit-check-not=+sve --implicit-check-not=+mec
 // RUN: %clang --target=arm64-apple-macosx11.0 -march=armv9.2-a -S -emit-llvm -O0 %s -o - | FileCheck %s --check-prefix=ARCH
 //
 // Keep the Armv9.2-A architecture version distinct from its optional
 // extension defaults.  The architecture-wide -march baseline enables its
 // existing compatibility defaults; CPU-specific target attributes must not
-// silently re-enable SVE/SVE2 on the Apple M4/A18 processor model.
+// silently re-enable SVE/SVE2 or MEC on Apple M4/A18.
 //
 // CPU-DAG: "target-features"="{{[^"]*}}+v9.2a{{[^"]*}}"
 // CPU-DAG: "target-features"="{{[^"]*}}+v9.2a{{[^"]*}}"
