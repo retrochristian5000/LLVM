@@ -1297,13 +1297,18 @@ static bool dataConstDefault(const InputArgList &args) {
 }
 
 static bool shouldEmitChainedFixups(const InputArgList &args) {
-  const Arg *arg = args.getLastArg(OPT_fixup_chains, OPT_no_fixup_chains);
+  // Apple's ld64 records the force-on and force-off flags separately and
+  // gives -fixup_chains precedence when both appear, regardless of order.
+  // A getLastArg() check would silently interpret a valid Apple ld command
+  // differently, including for PAC-authenticated arm64e images.
+  bool requested = args.hasArg(OPT_fixup_chains);
+  bool disabled = args.hasArg(OPT_no_fixup_chains);
 
   // Versioned arm64e outputs use pointer authentication, which cannot be
   // represented by the legacy dyld rebase/bind opcodes. Do not silently
   // generate unauthenticated legacy stubs when fixups are disabled.
   if (config->arch() == AK_arm64e && config->isPic) {
-    if (arg && arg->getOption().matches(OPT_no_fixup_chains)) {
+    if (disabled && !requested) {
       error("-no_fixup_chains is incompatible with arm64e: "
             "authenticated pointers require chained fixups");
       return false;
@@ -1311,10 +1316,9 @@ static bool shouldEmitChainedFixups(const InputArgList &args) {
     return true;
   }
 
-  if (arg && arg->getOption().matches(OPT_no_fixup_chains))
+  if (disabled && !requested)
     return false;
 
-  bool requested = arg && arg->getOption().matches(OPT_fixup_chains);
   if (!config->isPic) {
     if (requested)
       error("-fixup_chains is incompatible with -no_pie");
