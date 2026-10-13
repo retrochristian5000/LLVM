@@ -383,6 +383,17 @@ void AArch64MachObjectWriter::recordRelocation(
 
   if (Target.getSpecifier() == AArch64::S_AUTH ||
       Target.getSpecifier() == AArch64::S_AUTHADDR) {
+    // A type-11 authenticated pointer requires an arm64e Mach-O object.
+    // Otherwise the assembler could label the file as plain arm64 while
+    // emitting pointers that the arm64 ABI and dyld cannot authenticate.
+    if (getCPUType() != MachO::CPU_TYPE_ARM64 ||
+        (getCPUSubtype() & ~MachO::CPU_SUBTYPE_MASK) !=
+            MachO::CPU_SUBTYPE_ARM64E) {
+      reportError(Fixup.getLoc(),
+                  "authenticated pointer relocation requires arm64e Mach-O");
+      return;
+    }
+
     auto *Expr = cast<AArch64AuthMCExpr>(Fixup.getValue());
 
     assert(Type == MachO::ARM64_RELOC_UNSIGNED);
