@@ -8,6 +8,7 @@
 //
 // CPU-DAG: "target-features"="{{[^"]*}}+v9.2a{{[^"]*}}"
 // CPU-DAG: "target-features"="{{[^"]*}}+v9.2a{{[^"]*}}"
+// CPU-DAG: "target-features"="{{[^"]*}}+v9.2a{{[^"]*}}"
 // ARCH: "target-features"="{{[^"]*}}+sve2{{[^"]*}}"
 
 __attribute__((target("cpu=apple-m4")))
@@ -15,5 +16,8 @@ int whp_m4_v92_no_sve(void) { return 1; }
 
 __attribute__((target("cpu=apple-a18")))
 int whp_a18_v92_no_sve(void) { return 2; }
+
+__attribute__((target("cpu=apple-a18-pro")))
+int whp_a18_pro_v92_no_sve(void) { return 4; }
 
 int whp_generic_v92(void) { return 3; }

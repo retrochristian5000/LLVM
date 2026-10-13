@@ -181,6 +181,7 @@ public:
     case AppleA16:
     case AppleA17:
     case AppleA18:
+    case AppleA18Pro:
     case AppleM4:
     case AppleM5:
       return true;

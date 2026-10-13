@@ -452,12 +452,13 @@ def TuneAppleM4 : SubtargetFeature<"apple-m4", "ARMProcFamily", "AppleM4",
                                     [FeatureStorePairSuppress]),
                                     [FeatureFuseAppleSMECompute])>;
 
-// A18/A18 Pro have their own tuning identity.  Until measured throughput and
-// latency data justify different scheduling decisions, inherit the known M4
-// tuning knobs rather than inventing chip-specific latency numbers.
+// A18 (TUPAI) and A18 Pro (TAHITI) have distinct processor identities.
+// Retain conservative M4-derived scheduling until latency measurements exist.
 def TuneAppleA18 : SubtargetFeature<"apple-a18", "ARMProcFamily", "AppleA18",
-                                    "Apple A18 / A18 Pro",
-                                    TuneAppleM4.Implies>;
+                                    "Apple A18", TuneAppleM4.Implies>;
+def TuneAppleA18Pro : SubtargetFeature<"apple-a18-pro", "ARMProcFamily",
+                                       "AppleA18Pro", "Apple A18 Pro",
+                                       TuneAppleA18.Implies>;
 
 def TuneAppleM5 : SubtargetFeature<"apple-m5", "ARMProcFamily", "AppleM5",
                                     "Apple M5",
@@ -1105,10 +1106,10 @@ def ProcessorFeatures {
                                     FeatureRAS, FeatureRCPC, FeatureRDM,
                                     FeatureDotProd, FeatureMatMulInt8];
 
-  // Same currently verified ISA set, but a separate named profile allows
-  // A18/A18 Pro instruction capabilities to diverge from M4 as validated
-  // chip-specific evidence becomes available.
+  // Distinct CPU identities; do not infer instruction differences from GPU
+  // configurations. Profiles may diverge on proven ISA features later.
   list<SubtargetFeature> AppleA18 = AppleM4;
+  list<SubtargetFeature> AppleA18Pro = AppleA18;
 
   list<SubtargetFeature> AppleM5 = [HasV8_7aOps, FeatureSHA2, FeatureFPARMv8,
                                     FeatureNEON, FeaturePerfMon, FeatureSHA3,
@@ -1482,6 +1483,8 @@ def : ProcessorModel<"apple-m4", CycloneModel, ProcessorFeatures.AppleM4,
                      [TuneAppleM4]>;
 def : ProcessorModel<"apple-a18", CycloneModel, ProcessorFeatures.AppleA18,
                      [TuneAppleA18]>;
+def : ProcessorModel<"apple-a18-pro", CycloneModel,
+                     ProcessorFeatures.AppleA18Pro, [TuneAppleA18Pro]>;
 
 def : ProcessorModel<"apple-m5", CycloneModel, ProcessorFeatures.AppleM5,
                      [TuneAppleM5]>;

@@ -669,30 +669,30 @@ TEST(HostTest, AIXHostCPUDetect) {
 }
 
 TEST(getDarwinHostCPUName, AppleA18ProfileResolves) {
-  // The A18 and M4 currently share verified ISA extensions, but they are
-  // distinct processors. A18 must not silently inherit M4's CPU identity.
+  // Darwin distinguishes TUPAI from TAHITI. CPU models retain distinct
+  // names while conservatively sharing verified instruction extensions.
   const auto M4 = AArch64::parseCpu("apple-m4");
   const auto A18 = AArch64::parseCpu("apple-a18");
+  const auto A18Pro = AArch64::parseCpu("apple-a18-pro");
   ASSERT_TRUE(M4);
   ASSERT_TRUE(A18);
+  ASSERT_TRUE(A18Pro);
   EXPECT_EQ(AArch64::resolveCPUAlias("apple-a18"), "apple-a18");
+  EXPECT_EQ(AArch64::resolveCPUAlias("apple-a18-pro"), "apple-a18-pro");
   EXPECT_NE(A18->Name, M4->Name);
-  EXPECT_EQ(A18->ArchIdx, M4->ArchIdx);
-  EXPECT_EQ(A18->DefaultExtensions, M4->DefaultExtensions);
-
-  for (uint32_t Family : {0x75d4acb9U, 0x204526d0U}) {
-    StringRef CPU = sys::detail::getHostCPUNameForAppleARM(Family);
-    ASSERT_EQ(CPU, "apple-a18");
-    auto Parsed = AArch64::parseCpu(CPU);
-    ASSERT_TRUE(Parsed);
-    EXPECT_EQ(Parsed->Name, A18->Name);
-  }
+  EXPECT_NE(A18Pro->Name, M4->Name);
+  EXPECT_NE(A18Pro->Name, A18->Name);
+  EXPECT_EQ(A18Pro->ArchIdx, A18->ArchIdx);
+  EXPECT_EQ(A18Pro->DefaultExtensions, A18->DefaultExtensions);
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x75d4acb9),
+            "apple-a18-pro");
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x204526d0), "apple-a18");
 }
 
 TEST(getDarwinHostCPUName, AppleARMFamilyMapping) {
-  // Mac17,5 / A18 Pro: preserve the A-series identity in CPU selection.
-  // Instruction compatibility alone does not justify sharing tuning IDs.
-  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x75d4acb9), "apple-a18");
+  // A18 Pro and A18 have different Darwin CPU-family identifiers.
+  EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x75d4acb9),
+            "apple-a18-pro");
   EXPECT_EQ(sys::detail::getHostCPUNameForAppleARM(0x204526d0), "apple-a18");
 
   // Do not collapse distinct A- and M-series families when Darwin gives us

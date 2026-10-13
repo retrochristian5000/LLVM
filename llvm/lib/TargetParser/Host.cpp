@@ -2680,6 +2680,7 @@ StringRef sys::detail::getHostCPUNameForAppleARM(uint32_t Family) {
   case 0x17d5b93a: // BRAVA: M4 Pro / Max
     return "apple-m4";
   case 0x75d4acb9: // TAHITI: A18 Pro
+    return "apple-a18-pro";
   case 0x204526d0: // TUPAI: A18
     return "apple-a18";
   case 0x1d5a87e8: // HIDRA: M5
