@@ -8,6 +8,7 @@
 
 #include "Relocations.h"
 #include "ConcatOutputSection.h"
+#include "Config.h"
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
@@ -79,7 +80,7 @@ bool macho::validateSymbolRelocation(const Symbol *sym,
   // would enter the middle of the stub rather than the intended function.
   // Only a definition in this image has a known address for an interior
   // branch target; never treat a dyld-bound symbol as such a definition.
-  if (config->arch() == AK_arm64e &&
+  if (config->arch() == llvm::MachO::AK_arm64e &&
       relocAttrs.hasAttr(RelocAttrBits::BRANCH) && r.addend != 0 &&
       isa<DylibSymbol>(sym))
     error(message(Twine("cannot target an offset within dynamically bound "
