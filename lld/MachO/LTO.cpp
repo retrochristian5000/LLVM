@@ -24,6 +24,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace lld;
 using namespace lld::macho;
@@ -126,6 +127,22 @@ BitcodeCompiler::BitcodeCompiler() {
 
 void BitcodeCompiler::add(BitcodeFile &f) {
   lto::InputFile &obj = *f.obj;
+
+  // A native arm64 dylib is a valid arm64e dependency, but an arm64 bitcode
+  // module is not: its IR lacks arm64e pointer-authentication semantics.
+  // Check before ThinLTO imports symbols or replaces the prevailing symbol.
+  const Triple bitcodeTriple(obj.getTargetTriple());
+  if (config->arch() == AK_arm64e && !bitcodeTriple.isArm64e()) {
+    error(toString(&f) +
+          ": arm64e output requires arm64e bitcode (found " +
+          obj.getTargetTriple() + ")");
+    return;
+  }
+  if (config->arch() == AK_arm64 && bitcodeTriple.isArm64e()) {
+    error(toString(&f) +
+          ": arm64e bitcode is incompatible with an arm64 output");
+    return;
+  }
 
   if (config->thinLTOEmitIndexFiles)
     thinIndices.insert(obj.getName());
