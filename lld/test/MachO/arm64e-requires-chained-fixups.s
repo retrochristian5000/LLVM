@@ -17,9 +17,15 @@
 # RUN:   FileCheck %s --check-prefix=DISABLED
 # DISABLED: -no_fixup_chains is incompatible with arm64e
 
-## The last explicit fixup option controls the outcome.
+## Apple ld gives -fixup_chains precedence in either argument order.
 # RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
-# RUN:   -dylib -no_fixup_chains -fixup_chains %t-arm64e.o -o %t-last.dylib
+# RUN:   -dylib -no_fixup_chains -fixup_chains %t-arm64e.o -o %t-force-on.dylib
+# RUN: llvm-objdump --macho --chained-fixups %t-force-on.dylib | \
+# RUN:   FileCheck %s --check-prefix=CHAINED
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -fixup_chains -no_fixup_chains %t-arm64e.o -o %t-force-on-last.dylib
+# RUN: llvm-objdump --macho --chained-fixups %t-force-on-last.dylib | \
+# RUN:   FileCheck %s --check-prefix=CHAINED
 
 # RUN: llvm-mc -filetype=obj -triple=arm64-apple-macos -o %t-arm64.o %s
 # RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
