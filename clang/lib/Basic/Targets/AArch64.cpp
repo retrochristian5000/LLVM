@@ -327,11 +327,11 @@ void AArch64TargetInfo::getTargetDefinesARMV85A(const LangOptions &Opts,
 
 void AArch64TargetInfo::getTargetDefinesARMV86A(const LangOptions &Opts,
                                                 MacroBuilder &Builder) const {
-  // Also include the Armv8.5 defines
-  // FIXME: Armv8.6 makes the following extensions mandatory:
-  // - __ARM_FEATURE_BF16
-  // - __ARM_FEATURE_MATMUL_INT8
-  // Handle them here.
+  // Armv8.6-A makes BF16 and I8MM mandatory; Armv9.1-A inherits both.
+  // The driver includes +bf16 and +i8mm in the effective feature set, and
+  // getTargetDefines() emits their macros from HasBFloat16 and HasMatMul.
+  // Do not set these macros solely from the architecture version: named CPU
+  // features and explicit feature overrides must remain authoritative.
   getTargetDefinesARMV85A(Opts, Builder);
 }
 
