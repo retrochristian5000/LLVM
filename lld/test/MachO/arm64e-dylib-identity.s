@@ -55,6 +55,19 @@
 # BAD-TYPE-DAG: -current_version 2.3: only valid with -dylib
 # BAD-TYPE-DAG: -compatibility_version 1.0: only valid with -dylib
 #
+## The default version zero is valid; writing zero explicitly is not.
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -current_version 0.1 -compatibility_version 0 \
+# RUN:   %t/provider.o -o %t/bad-zero.dylib 2>&1 | FileCheck %s --check-prefix=BAD-ZERO
+# BAD-ZERO-DAG: -current_version 0.1: malformed version
+# BAD-ZERO-DAG: -compatibility_version 0: malformed version
+#
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -current_version 2..3 -compatibility_version 1.2. \
+# RUN:   %t/provider.o -o %t/bad-dots.dylib 2>&1 | FileCheck %s --check-prefix=BAD-DOTS
+# BAD-DOTS-DAG: -current_version 2..3: malformed version
+# BAD-DOTS-DAG: -compatibility_version 1.2.: malformed version
+#
 #--- provider.s
 .text
 .globl _whp_version_provider
