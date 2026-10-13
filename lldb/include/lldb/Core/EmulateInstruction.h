@@ -41,9 +41,11 @@ using BreakpointLocations = std::vector<lldb::addr_t>;
 
 class SingleStepBreakpointLocationsPredictor {
 public:
+  // EmulateInstruction is only forward declared here. Keep construction and
+  // destruction out of line so C++23's constexpr unique_ptr cleanup does not
+  // instantiate default_delete<EmulateInstruction> while it is incomplete.
   SingleStepBreakpointLocationsPredictor(
-      std::unique_ptr<EmulateInstruction> emulator_up)
-      : m_emulator_up{std::move(emulator_up)} {}
+      std::unique_ptr<EmulateInstruction> emulator_up);
 
   virtual llvm::Expected<BreakpointLocations> GetBreakpointLocations();
 
@@ -52,7 +54,7 @@ public:
     return 4;
   }
 
-  virtual ~SingleStepBreakpointLocationsPredictor() = default;
+  virtual ~SingleStepBreakpointLocationsPredictor();
 
 protected:
   // This function retrieves the address of the next instruction as it appears
