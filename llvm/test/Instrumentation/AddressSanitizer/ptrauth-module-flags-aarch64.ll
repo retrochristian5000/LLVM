@@ -2,6 +2,7 @@
 ; RUN: rm -rf %t && split-file %s %t && cd %t
 
 ; RUN: opt -mtriple=aarch64-linux-gnu < all.ll -passes=asan -S | FileCheck %s --check-prefix=ALL
+; RUN: opt -mtriple=arm64e-apple-macosx13.0 < all.ll -passes=asan -S | FileCheck %s --check-prefix=ALL
 
 ; RUN: opt -mtriple=aarch64-linux-gnu < returns.ll -passes=asan -S | FileCheck %s --check-prefix=RET \
 ; RUN:   --implicit-check-not=ptrauth-auth-traps --implicit-check-not=ptrauth-indirect-gotos --implicit-check-not=aarch64-jump-table-hardening
