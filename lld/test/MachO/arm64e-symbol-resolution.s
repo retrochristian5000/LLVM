@@ -21,6 +21,7 @@
 # RUN:   %t/libtargets.dylib -o %t/valid.bundle
 # RUN: llvm-objdump --macho --chained-fixups %t/valid.bundle \
 # RUN:   | FileCheck %s --check-prefix=VALID
+# RUN: %python %S/Inputs/arm64e-symbol-resolution.py %t/valid.bundle
 # VALID: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 # VALID-DAG: _external
 # VALID-DAG: _weak
