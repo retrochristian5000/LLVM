@@ -1483,7 +1483,9 @@ def : ProcessorModel<"apple-m4", CycloneModel, ProcessorFeatures.AppleM4,
                      [TuneAppleM4]>;
 def : ProcessorModel<"apple-a18", CycloneModel, ProcessorFeatures.AppleA18,
                      [TuneAppleA18]>;
-def : ProcessorModel<"apple-a18-pro", CycloneModel,
+// Use a deliberately incomplete A18 Pro-specific scheduler rather than
+// assigning Cyclone's A7-era execution ports and instruction latencies.
+def : ProcessorModel<"apple-a18-pro", AppleA18ProModel,
                      ProcessorFeatures.AppleA18Pro, [TuneAppleA18Pro]>;
 
 def : ProcessorModel<"apple-m5", CycloneModel, ProcessorFeatures.AppleM5,
