@@ -99,6 +99,14 @@ function(darwin_get_toolchain_supported_archs output_var)
     message(WARNING "Detecting supported architectures from 'ld -v' failed. Returning default set.")
     set(ARCHES "i386;x86_64;armv7;armv7s;arm64")
   endif()
+  # Apple ld's -v output is not a reliable enumeration for every SDK.
+  # When the build explicitly targets arm64e, let darwin_test_archs() probe
+  # compilation and linking rather than eliminating that ABI here. Failed
+  # probes are still excluded from the resulting runtime architecture list.
+  if("arm64e" IN_LIST CMAKE_OSX_ARCHITECTURES)
+    list(APPEND ARCHES arm64e)
+    list(REMOVE_DUPLICATES ARCHES)
+  endif()
   set(${output_var} ${ARCHES} PARENT_SCOPE)
 endfunction()
 
