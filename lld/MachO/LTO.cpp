@@ -135,7 +135,7 @@ void BitcodeCompiler::add(BitcodeFile &f) {
   if (config->arch() == AK_arm64e && !bitcodeTriple.isArm64e()) {
     error(toString(&f) +
           ": arm64e output requires arm64e bitcode (found " +
-          obj.getTargetTriple() + ")");
+          obj.getTargetTriple().str() + ")");
     return;
   }
   if (config->arch() == AK_arm64 && bitcodeTriple.isArm64e()) {
