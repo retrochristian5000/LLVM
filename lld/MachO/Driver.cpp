@@ -1343,7 +1343,9 @@ static bool shouldEmitChainedFixups(const InputArgList &args) {
   static const MinVersions<9> minVersion = {{
       {PLATFORM_IOS, VersionTuple(13, 4)},
       {PLATFORM_IOSSIMULATOR, VersionTuple(16, 0)},
-      {PLATFORM_MACOS, VersionTuple(13, 0)},
+      // Apple's ld64 enables chained fixups for macOS 12 and newer.
+      // Preserve the separate, mandatory arm64e PAC fixup path above.
+      {PLATFORM_MACOS, VersionTuple(12, 0)},
       {PLATFORM_TVOS, VersionTuple(14, 0)},
       {PLATFORM_TVOSSIMULATOR, VersionTuple(15, 0)},
       {PLATFORM_WATCHOS, VersionTuple(7, 0)},
