@@ -55,6 +55,18 @@ unsigned __int64 __shiftright128(unsigned __int64 _LowPart,
                                  unsigned char _Shift);
 #endif
 
+/* ARM64EC exposes x64 intrinsics but uses AArch64 code generation.
+ * Do not leave a reference to the x64-only _umul128 builtin at link time. */
+#if defined(__arm64ec__)
+static __inline__ unsigned __int64
+_umul128(unsigned __int64 _A, unsigned __int64 _B, unsigned __int64 *_High)
+{
+  unsigned __int128 _Product = (unsigned __int128)_A * _B;
+  *_High = (unsigned __int64)(_Product >> 64);
+  return (unsigned __int64)_Product;
+}
+#endif
+
 #if defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
 void _mm_pause(void);
 #endif
