@@ -67,6 +67,28 @@ _umul128(unsigned __int64 _A, unsigned __int64 _B, unsigned __int64 *_High)
 }
 #endif
 
+/* ARM64EC uses the x64 intrinsic interface but AArch64 instructions.
+ * Keep the modulo-64 count semantics and avoid unresolved x64 symbols. */
+#if defined(__arm64ec__) && !defined(__shiftright128)
+static __inline__ unsigned __int64
+__shiftright128(unsigned __int64 _Low, unsigned __int64 _High,
+                unsigned char _Count)
+{
+  unsigned __int128 _Bits = ((unsigned __int128)_High << 64) | _Low;
+  return (unsigned __int64)(_Bits >> (_Count & 63));
+}
+#endif
+
+#if defined(__arm64ec__) && !defined(__shiftleft128)
+static __inline__ unsigned __int64
+__shiftleft128(unsigned __int64 _Low, unsigned __int64 _High,
+               unsigned char _Count)
+{
+  unsigned __int128 _Bits = ((unsigned __int128)_High << 64) | _Low;
+  return (unsigned __int64)((_Bits << (_Count & 63)) >> 64);
+}
+#endif
+
 #if defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
 void _mm_pause(void);
 #endif
