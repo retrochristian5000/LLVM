@@ -96,3 +96,37 @@ void zero_callbacks(struct Callbacks *dst) {
 int call_stored_callback(const struct Callbacks *src, int value) {
   return src->first(value);
 }
+
+#if defined(__arm64e__)
+// Explicit address-discriminated fields have different copy semantics.
+// Aggregate assignment must re-sign against the destination field address,
+// including a null-preserving path, rather than using raw llvm.memcpy.
+struct AddressSigned {
+  int * __ptrauth(1,1,50) ptr;
+};
+struct UniformSigned {
+  int * __ptrauth(1,0,50) ptr;
+};
+
+// CHECK-LABEL: define{{.*}} void @copy_address_signed(
+// CHECK: call void @__copy_assignment_
+// CHECK-LABEL: define{{.*}} void @__copy_assignment_
+// CHECK: call i64 @llvm.ptrauth.blend(i64
+// CHECK: call i64 @llvm.ptrauth.blend(i64
+// CHECK: icmp ne ptr {{%.*}}, null
+// CHECK: call i64 @llvm.ptrauth.resign(i64
+// CHECK: phi ptr [ null,
+void copy_address_signed(struct AddressSigned *dst,
+                         const struct AddressSigned *src) {
+  *dst = *src;
+}
+
+// Unlike address-diverse fields, explicitly non-address-discriminated
+// pointers should still use a normal aggregate memory copy.
+// CHECK-LABEL: define{{.*}} void @copy_uniform_signed(
+// CHECK: call void @llvm.memcpy.p0.p0.i64({{.*}}i64 8, i1 false)
+void copy_uniform_signed(struct UniformSigned *dst,
+                         const struct UniformSigned *src) {
+  *dst = *src;
+}
+#endif
