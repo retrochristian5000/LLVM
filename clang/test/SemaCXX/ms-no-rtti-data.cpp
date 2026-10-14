@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 %s -triple x86_64-windows-msvc -fdiagnostics-format msvc -fno-rtti-data -fsyntax-only -verify
+// RUN: %clang_cc1 %s -triple aarch64-pc-windows-msvc -fdiagnostics-format msvc -fno-rtti-data -fsyntax-only -verify
 
 namespace std {
 struct type_info {};
