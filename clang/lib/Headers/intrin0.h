@@ -57,7 +57,7 @@ unsigned __int64 __shiftright128(unsigned __int64 _LowPart,
 
 /* ARM64EC exposes x64 intrinsics but uses AArch64 code generation.
  * Do not leave a reference to the x64-only _umul128 builtin at link time. */
-#if defined(__arm64ec__)
+#if defined(__arm64ec__) && !defined(_umul128)
 static __inline__ unsigned __int64
 _umul128(unsigned __int64 _A, unsigned __int64 _B, unsigned __int64 *_High)
 {
