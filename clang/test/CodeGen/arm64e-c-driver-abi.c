@@ -46,3 +46,53 @@ int call_direct(int value) {
 int call_global(int value) {
   return global_fp(value);
 }
+
+// The standard arm64e C function-pointer schema is storage-address independent.
+// Raw byte copies (including overlapping memmove) must remain valid: introducing
+// address-based signing or a PAC-specific memcpy ABI would break C interop.
+typedef int (*Callback)(int);
+struct Callbacks {
+  Callback first;
+  Callback second;
+};
+
+// CHECK-LABEL: define{{.*}} void @copy_callbacks(
+// CHECK: call void @llvm.memcpy.p0.p0.i64({{.*}}i64 16, i1 false)
+// CHECK-NOT: @llvm.ptrauth.resign
+// CHECK: ret void
+// ARM64-LABEL: define{{.*}} void @copy_callbacks(
+// ARM64: call void @llvm.memcpy.p0.p0.i64({{.*}}i64 16, i1 false)
+void copy_callbacks(struct Callbacks *dst, const struct Callbacks *src) {
+  __builtin_memcpy(dst, src, sizeof(*dst));
+}
+
+// CHECK-LABEL: define{{.*}} void @move_callbacks(
+// CHECK: call void @llvm.memmove.p0.p0.i64({{.*}}i64 16, i1 false)
+// CHECK-NOT: @llvm.ptrauth.resign
+// CHECK: ret void
+// ARM64-LABEL: define{{.*}} void @move_callbacks(
+// ARM64: call void @llvm.memmove.p0.p0.i64({{.*}}i64 16, i1 false)
+void move_callbacks(struct Callbacks *dst, const struct Callbacks *src) {
+  __builtin_memmove(dst, src, sizeof(*dst));
+}
+
+// Clearing callback storage must keep the ordinary null representation.
+// CHECK-LABEL: define{{.*}} void @zero_callbacks(
+// CHECK: call void @llvm.memset.p0.i64({{.*}}i8 0, i64 16, i1 false)
+// CHECK: ret void
+// ARM64-LABEL: define{{.*}} void @zero_callbacks(
+// ARM64: call void @llvm.memset.p0.i64({{.*}}i8 0, i64 16, i1 false)
+void zero_callbacks(struct Callbacks *dst) {
+  __builtin_memset(dst, 0, sizeof(*dst));
+}
+
+// The eventual call must still authenticate a pointer loaded from memory.
+// CHECK-LABEL: define{{.*}} i32 @call_stored_callback(
+// CHECK: call i32 %{{.*}}(i32 noundef %{{.*}}) [ "ptrauth"(i32 0, i64 0) ]
+// ARM64-LABEL: define{{.*}} i32 @call_stored_callback(
+// ARM64: call i32 %{{.*}}(i32 noundef %{{.*}})
+// ARM64-NOT: "ptrauth"
+// ARM64: ret i32
+int call_stored_callback(const struct Callbacks *src, int value) {
+  return src->first(value);
+}
