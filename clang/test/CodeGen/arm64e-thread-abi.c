@@ -69,3 +69,40 @@ int read_tls(void) { return tls_counter; }
 unsigned long bump_shared(void) {
   return __c11_atomic_fetch_add(&shared_counter, 1, __ATOMIC_ACQ_REL);
 }
+
+// A start callback may be published between threads with release/acquire
+// ordering. Atomic memory operations must not strip the function signature;
+// the eventual call must authenticate the loaded callback.
+// EIR-LABEL: define void @publish_start(
+// EIR: store atomic i64 {{.*}}, ptr @published_start release
+// AIR-LABEL: define void @publish_start(
+// AIR: store atomic i64 {{.*}}, ptr @published_start release
+// EASM-LABEL: _publish_start:
+// EASM: paciza x{{[0-9]+}}
+// EASM: stlr x{{[0-9]+}}, [x{{[0-9]+}}]
+// AASM-LABEL: _publish_start:
+// AASM-NOT: paciza
+// AASM: stlr x{{[0-9]+}}, [x{{[0-9]+}}]
+_Atomic(ThreadStart) published_start;
+void publish_start(void) {
+  __c11_atomic_store(&published_start, thread_entry, __ATOMIC_RELEASE);
+}
+
+// EIR-LABEL: define{{.*}} ptr @invoke_start(
+// EIR: load atomic i64, ptr @published_start acquire
+// EIR: call ptr %{{.*}}(ptr noundef %{{.*}}) [ "ptrauth"(i32 0, i64 0) ]
+// AIR-LABEL: define{{.*}} ptr @invoke_start(
+// AIR: load atomic i64, ptr @published_start acquire
+// AIR: call ptr %{{.*}}(ptr noundef %{{.*}})
+// AIR-NOT: "ptrauth"
+// AIR: ret ptr
+// EASM-LABEL: _invoke_start:
+// EASM: ldar x{{[0-9]+}}, [x{{[0-9]+}}]
+// EASM: blraaz x{{[0-9]+}}
+// AASM-LABEL: _invoke_start:
+// AASM: ldar x{{[0-9]+}}, [x{{[0-9]+}}]
+// AASM: blr x{{[0-9]+}}
+void *invoke_start(void *payload) {
+  ThreadStart fn = __c11_atomic_load(&published_start, __ATOMIC_ACQUIRE);
+  return fn(payload);
+}
