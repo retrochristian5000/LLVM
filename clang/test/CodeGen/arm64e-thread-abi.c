@@ -97,10 +97,10 @@ void publish_start(void) {
 // AIR-NOT: "ptrauth"
 // AIR: ret ptr
 // EASM-LABEL: _invoke_start:
-// EASM: ldar x{{[0-9]+}}, [x{{[0-9]+}}]
+// EASM: {{ldar|ldapr}} x{{[0-9]+}}, [x{{[0-9]+}}]
 // EASM: blraaz x{{[0-9]+}}
 // AASM-LABEL: _invoke_start:
-// AASM: ldar x{{[0-9]+}}, [x{{[0-9]+}}]
+// AASM: {{ldar|ldapr}} x{{[0-9]+}}, [x{{[0-9]+}}]
 // AASM: blr x{{[0-9]+}}
 void *invoke_start(void *payload) {
   ThreadStart fn = __c11_atomic_load(&published_start, __ATOMIC_ACQUIRE);
