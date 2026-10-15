@@ -476,8 +476,10 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   if (Opts.UnsafeFPMath)
     Builder.defineMacro("__ARM_FP_FAST", "1");
 
-  Builder.defineMacro("__ARM_SIZEOF_WCHAR_T",
-                      Twine(Opts.WCharSize ? Opts.WCharSize : 4));
+  // Use the actual target wchar_t width, including Windows LLP64 and
+  // explicit -fshort-wchar overrides.  A hard-coded AAPCS default of 4
+  // disagrees with __SIZEOF_WCHAR_T__ on Windows ARM64 and ARM64EC.
+  Builder.defineMacro("__ARM_SIZEOF_WCHAR_T", Twine(getWCharWidth() / 8));
 
   Builder.defineMacro("__ARM_SIZEOF_MINIMAL_ENUM", Opts.ShortEnums ? "1" : "4");
 
