@@ -60,6 +60,11 @@ void markLive(COFFLinkerContext &ctx) {
     } else if (auto *sym = dyn_cast<DefinedImportThunk>(b)) {
       addImportFile(sym->wrappedSym->file);
       sym->getChunk()->live = true;
+    } else if (auto *sym = dyn_cast<DefinedLocalImport>(b)) {
+      // A live __imp_ (or ARM64EC __imp_aux_) slot must keep its in-image
+      // definition. Otherwise /OPT:REF can discard the target COMDAT and
+      // leave its import pointer pointing to the image base.
+      addSym(sym->getTarget());
     }
   };
 
