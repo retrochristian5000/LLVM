@@ -20,6 +20,7 @@
 #include "lldb/ValueObject/ValueObjectVariable.h"
 #include "llvm/Support/ErrorExtras.h"
 #include "llvm/Support/FormatAdapters.h"
+#include <limits>
 #include <memory>
 
 namespace lldb_private::dil {
@@ -466,10 +467,21 @@ Interpreter::Visit(const IdentifierNode &node) {
         GetTypeSystemFromCU(m_stack_frame);
     if (!type_system)
       return type_system.takeError();
-    type_system.get()->GetPointerByteSize();
-    llvm::APInt value(type_system.get()->GetPointerByteSize() * CHAR_BIT, 0);
-    Scalar scalar(value);
     CompilerType type = GetBasicType(*type_system, lldb::eBasicTypeNullPtr);
+    if (!type)
+      return llvm::make_error<DILDiagnosticError>(
+          m_expr, "unable to determine nullptr type", node.GetLocation());
+
+    // Use the debugged target's pointer size, never sizeof(void *) on the
+    // debugger host.  A failed type-system query must not create a zero-width
+    // APInt (which asserts in debug builds).
+    uint32_t pointer_byte_size = type_system.get()->GetPointerByteSize();
+    if (pointer_byte_size == 0)
+      return llvm::make_error<DILDiagnosticError>(
+          m_expr, "unable to determine target pointer size", node.GetLocation());
+
+    llvm::APInt value(pointer_byte_size * CHAR_BIT, 0);
+    Scalar scalar(value);
     return ValueObject::CreateValueObjectFromScalar(m_stack_frame, scalar, type,
                                                     "result");
   }
@@ -637,6 +649,9 @@ Interpreter::PointerOffset(lldb::ValueObjectSP ptr, lldb::ValueObjectSP offset,
       ptr->GetCompilerType().GetPointeeType().GetByteSize(&m_stack_frame);
   if (!byte_size)
     return byte_size.takeError();
+  if (*byte_size == 0)
+    return llvm::make_error<DILDiagnosticError>(
+        m_expr, "invalid pointee size in pointer arithmetic", location);
   uint64_t ptr_addr = ptr->GetValueAsUnsigned(0);
   if (operation == BinaryOpKind::Sub)
     ptr_addr -= offset_int * (*byte_size);
@@ -782,10 +797,16 @@ llvm::Expected<lldb::ValueObjectSP> Interpreter::EvaluateBinarySubtraction(
     if (!lhs_byte_size)
       return lhs_byte_size.takeError();
     // Since pointers have compatible types, both have the same pointee size.
-    int64_t item_size = *lhs_byte_size;
+    // Reject zero-sized or unrepresentably large element types before division,
+    // including in optimized builds where assertions are disabled.
+    if (*lhs_byte_size == 0 ||
+        *lhs_byte_size >
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+      return llvm::make_error<DILDiagnosticError>(
+          m_expr, "invalid pointee size in pointer subtraction", location);
+    int64_t item_size = static_cast<int64_t>(*lhs_byte_size);
     int64_t diff = static_cast<int64_t>(lhs->GetValueAsUnsigned(0) -
                                         rhs->GetValueAsUnsigned(0));
-    assert(item_size > 0 && "Pointee size cannot be 0");
     if (diff % item_size != 0) {
       // If address difference isn't divisible by pointee size then performing
       // the operation is undefined behaviour.
