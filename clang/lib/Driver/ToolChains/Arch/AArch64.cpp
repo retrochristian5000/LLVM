@@ -286,6 +286,30 @@ void aarch64::getAArch64TargetFeatures(const Driver &D,
   else if ((A = Args.getLastArg(options::OPT_mcpu_EQ)))
     success = getAArch64ArchFeaturesFromMcpu(D, A->getValue(), Args, Extensions,
                                              InvalidArg);
+  else if (Triple.isOSWindows() &&
+           (A = Args.getLastArg(options::OPT__SLASH_arch))) {
+    // cl.exe uses /arch:armv8.2+lse while Clang's target parser expects
+    // armv8.2-a+lse. Preserve /arch as an ISA choice, not an ABI switch:
+    // ARM64EC keeps its distinct calling convention, symbol mangling,
+    // reserved registers and hybrid import/export thunks.
+    std::string ClArch = StringRef(A->getValue()).lower();
+    StringRef Version = StringRef(ClArch).split('+').first;
+    std::string March;
+    if (Version.size() == 7 && Version.starts_with("armv8.") &&
+        Version[6] >= '0' && Version[6] <= '9')
+      March = Version == "armv8.0" ? "armv8-a" : Version.str() + "-a";
+    else if (Version.size() == 7 && Version.starts_with("armv9.") &&
+             Version[6] >= '0' && Version[6] <= '4')
+      March = Version == "armv9.0" ? "armv9-a" : Version.str() + "-a";
+
+    if (March.empty())
+      success = false;
+    else {
+      March += StringRef(ClArch).drop_front(Version.size()).str();
+      success = getAArch64ArchFeaturesFromMarch(D, March, Args, Extensions,
+                                                InvalidArg);
+    }
+  }
   else if (isCPUDeterminedByTriple(Triple))
     success = getAArch64ArchFeaturesFromMcpu(
         D, getAArch64TargetCPUByTriple(Triple), Args, Extensions, InvalidArg);
