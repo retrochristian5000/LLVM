@@ -1752,6 +1752,20 @@ MCSection *TargetLoweringObjectFileCOFF::getExplicitSectionGlobal(
                                       /*AddSegmentInfo=*/false) ||
       Name == ".llvmbc" || Name == ".llvmcmd")
     Kind = SectionKind::getMetadata();
+  // An explicit section selected by MS #pragma bss_seg must retain COFF's
+  // UNINITIALIZED_DATA characteristic.  A section name on its own is not
+  // sufficient: the generic explicit-section path otherwise emits raw zeros.
+  // Honor the marker only for truly zero-initialized globals, never for data
+  // with actual contents.
+  if (const auto *GV = dyn_cast<GlobalVariable>(GO)) {
+    Attribute BSS = GV->getAttribute("bss-section");
+    if (BSS.isValid() && GV->hasInitializer() &&
+        GV->getInitializer()->isNullValue()) {
+      Kind = SectionKind::getBSS();
+      if (Name.empty())
+        Name = BSS.getValueAsString();
+    }
+  }
   int Selection = 0;
   unsigned Characteristics = getCOFFSectionFlags(Kind, TM);
   StringRef COMDATSymName = "";

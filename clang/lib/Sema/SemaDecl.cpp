@@ -14720,6 +14720,24 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
         }
       }
 
+      // C tentative definitions skip CheckCompleteVariableDeclaration(), but
+      // #pragma bss_seg applies to them just as it does to C++ definitions.
+      // Retain the BSS identity in IR so the COFF writer does not turn the
+      // explicitly named, zero-initialized section into initialized data.
+      if (!Var->isInvalidDecl() && BSSSegStack.CurrentValue &&
+          !Var->hasAttr<SectionAttr>()) {
+        auto Name = BSSSegStack.CurrentValue->getString();
+        Var->addAttr(SectionAttr::CreateImplicit(
+            Context, Name, BSSSegStack.CurrentPragmaLocation,
+            SectionAttr::Declspec_allocate));
+        if (UnifySection(Name, ASTContext::PSF_Read | ASTContext::PSF_Write |
+                                    ASTContext::PSF_Implicit, Var))
+          Var->dropAttr<SectionAttr>();
+        else
+          Var->addAttr(PragmaClangBSSSectionAttr::CreateImplicit(
+              Context, Name, BSSSegStack.CurrentPragmaLocation));
+      }
+
       // Record the tentative definition; we're done.
       if (!Var->isInvalidDecl())
         TentativeDefinitions.push_back(Var);
@@ -15261,6 +15279,9 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
                                                SectionAttr::Declspec_allocate));
       if (UnifySection(SectionName, SectionFlags, var))
         var->dropAttr<SectionAttr>();
+      else if (Stack == &BSSSegStack)
+        var->addAttr(PragmaClangBSSSectionAttr::CreateImplicit(
+            Context, SectionName, Stack->CurrentPragmaLocation));
     }
 
     // Apply the init_seg attribute if this has an initializer.  If the
