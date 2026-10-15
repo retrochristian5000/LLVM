@@ -30,6 +30,10 @@ class TestFrameVarDILLiterals(TestBase):
         self.assertEqual(nullptr.GetValue(), nullptr_value)
         nullptr_type = nullptr.GetType().GetName()
         self.assertRegex(nullptr_type, "nullptr_t")
+        # Use the debug target's ABI, not the Python/LLDB host pointer size.
+        self.assertEqual(
+            nullptr.GetType().GetByteSize(), self.target().GetAddressByteSize()
+        )
 
         # Check number literals parsing
         self.expect_var_path("1.0", value="1", type="double")
