@@ -711,6 +711,7 @@ private:
 class LocalImportChunk : public NonSectionChunk {
 public:
   explicit LocalImportChunk(COFFLinkerContext &ctx, Defined *s);
+  Defined *getTarget() const { return sym; }
   size_t getSize() const override;
   void getBaserels(std::vector<Baserel> *res) override;
   void writeTo(uint8_t *buf) const override;
