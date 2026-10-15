@@ -699,6 +699,13 @@ def warn_pragma_final_macro :
           "%select{undefined|redefined}1">,
   InGroup<FinalMacro>,  ShowInSystemHeader;
 
+// - #pragma setlocale(...)
+// MSVC uses this directive to reinterpret wide literals using a named
+// locale/code page. Clang does not implement that conversion; silently
+// ignoring it for ARM64EC would emit different bytes than MSVC.
+def err_pragma_setlocale_unsupported_arm64ec :
+  Error<"#pragma setlocale is unsupported for ARM64EC; wide-character literal encoding may differ from MSVC">;
+
 // - #pragma execution_character_set(...)
 def warn_pragma_exec_charset_expected :
   ExtWarn<"#pragma execution_character_set expected '%0'">,
