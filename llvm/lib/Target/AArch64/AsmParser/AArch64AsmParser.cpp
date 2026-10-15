@@ -5493,9 +5493,11 @@ bool AArch64AsmParser::validateInstruction(MCInst &Inst, SMLoc &IDLoc,
     }
   }
 
-  // On ARM64EC, only valid registers may be used. Warn against using
-  // explicitly disallowed registers.
+  // ARM64EC register state must fit the x64-compatible context. Warnings
+  // still allow an ABI-invalid object, even when compiling with -Werror.
+  // Normal Windows ARM64 assembly does not have these restrictions.
   if (IsWindowsArm64EC) {
+    bool InvalidRegister = false;
     for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
       if (Inst.getOperand(i).isReg()) {
         MCRegister Reg = Inst.getOperand(i).getReg();
@@ -5511,11 +5513,14 @@ bool AArch64AsmParser::validateInstruction(MCInst &Inst, SMLoc &IDLoc,
             (Reg >= AArch64::S16 && Reg <= AArch64::S31) ||
             (Reg >= AArch64::H16 && Reg <= AArch64::H31) ||
             (Reg >= AArch64::B16 && Reg <= AArch64::B31)) {
-          Warning(IDLoc, "register " + Twine(RI->getName(Reg)) +
-                             " is disallowed on ARM64EC.");
+          Error(IDLoc, "register " + Twine(RI->getName(Reg)) +
+                           " is disallowed on ARM64EC.");
+          InvalidRegister = true;
         }
       }
     }
+    if (InvalidRegister)
+      return true;
   }
 
   // Check for indexed addressing modes w/ the base register being the
