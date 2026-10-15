@@ -76,6 +76,19 @@ class TestFrameVarDILExprPointerArithmetic(TestBase):
         self.expect_var_path("array - array_ref", value="0", type="__ptrdiff_t")
         self.expect_var_path("array_ref - array_ref", value="0", type="__ptrdiff_t")
 
+        # Error out on zero-sized pointee types before computing offsets or
+        # dividing by the element size, even when compiled with NDEBUG.
+        self.expect(
+            "frame var -- 'p_zero_length + 1'",
+            error=True,
+            substrs=["invalid pointee size in pointer arithmetic"],
+        )
+        self.expect(
+            "frame var -- 'p_zero_length - p_zero_length'",
+            error=True,
+            substrs=["invalid pointee size in pointer subtraction"],
+        )
+
         # Errors
         self.expect(
             "frame var -- '-p_int0'",
