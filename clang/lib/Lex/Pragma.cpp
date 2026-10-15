@@ -20,6 +20,7 @@
 #include "clang/Basic/Module.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/LexDiagnostic.h"
@@ -1586,6 +1587,19 @@ struct PragmaWarningHandler : public PragmaHandler {
   }
 };
 
+/// MSVC's #pragma setlocale changes wide-literal conversion using a locale.
+/// Clang does not currently implement that conversion. Reject the pragma
+/// for ARM64EC rather than silently emit different literal data than MSVC.
+/// Preserve the existing unknown-pragma behavior on other architectures.
+struct PragmaSetLocaleARM64ECHandler : public PragmaHandler {
+  PragmaSetLocaleARM64ECHandler() : PragmaHandler("setlocale") {}
+
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer,
+                    Token &Tok) override {
+    PP.Diag(Tok, diag::err_pragma_setlocale_unsupported_arm64ec);
+  }
+};
+
 /// "\#pragma execution_character_set(...)". MSVC supports this pragma only
 /// for "UTF-8". We parse it and ignore it if UTF-8 is provided and warn
 /// otherwise to avoid -Wunknown-pragma warnings.
@@ -2261,6 +2275,8 @@ void Preprocessor::RegisterBuiltinPragmas() {
   if (LangOpts.MicrosoftExt) {
     AddPragmaHandler(new PragmaWarningHandler());
     AddPragmaHandler(new PragmaExecCharsetHandler());
+    if (getTargetInfo().getTriple().isWindowsArm64EC())
+      AddPragmaHandler(new PragmaSetLocaleARM64ECHandler());
     AddPragmaHandler(new PragmaIncludeAliasHandler());
     AddPragmaHandler(new PragmaHdrstopHandler());
     AddPragmaHandler(new PragmaSystemHeaderHandler());
