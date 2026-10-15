@@ -45,6 +45,7 @@
 #include "llvm/Support/CRC.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -1479,9 +1480,13 @@ static void addLinkerModuleCoffGroup(PartialSection *sec,
 }
 
 static void addLinkerModuleSectionSymbol(pdb::DbiModuleDescriptorBuilder &mod,
-                                         OutputSection &os, bool isMinGW) {
+                                         OutputSection &os, bool isMinGW,
+                                         uint64_t sectionAlignment) {
   SectionSym sym(SymbolRecordKind::SectionSym);
-  sym.Alignment = 12; // 2^12 = 4KB
+  // CodeView records the log2 alignment of the output section. Keep it in
+  // sync with the PE header instead of assuming 4 KiB for ARM64EC/ARM64X
+  // and other images linked with an explicit /align value.
+  sym.Alignment = Log2_64(sectionAlignment);
   sym.Characteristics = os.header.Characteristics;
   sym.Length = os.getVirtualSize();
   sym.Name = os.name;
@@ -1677,7 +1682,8 @@ void PDBLinker::addSections(ArrayRef<uint8_t> sectionTable) {
 
   // Add section contributions. They must be ordered by ascending RVA.
   for (OutputSection *os : ctx.outputSections) {
-    addLinkerModuleSectionSymbol(linkerModule, *os, ctx.config.mingw);
+    addLinkerModuleSectionSymbol(linkerModule, *os, ctx.config.mingw,
+                                 ctx.config.align);
     for (Chunk *c : os->chunks) {
       pdb::SectionContrib sc =
           createSectionContrib(ctx, c, linkerModule.getModuleIndex());
