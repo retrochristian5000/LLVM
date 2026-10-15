@@ -619,10 +619,6 @@ Interpreter::PointerOffset(lldb::ValueObjectSP ptr, lldb::ValueObjectSP offset,
   if (ptr->GetCompilerType().IsPointerToVoid())
     return llvm::make_error<DILDiagnosticError>(
         m_expr, "arithmetic on a pointer to void", location);
-  if (ptr->GetValueAsUnsigned(0) == 0 && offset != 0)
-    return llvm::make_error<DILDiagnosticError>(
-        m_expr, "arithmetic on a nullptr is undefined", location);
-
   bool success;
   int64_t offset_int = offset->GetValueAsSigned(0, &success);
   if (!success) {
@@ -631,6 +627,11 @@ Interpreter::PointerOffset(lldb::ValueObjectSP ptr, lldb::ValueObjectSP offset,
     return llvm::make_error<DILDiagnosticError>(m_expr, std::move(errMsg),
                                                 location);
   }
+  // Test the integer offset, not whether its ValueObjectSP is non-null.
+  // Adding or subtracting zero from a null pointer preserves the null value.
+  if (ptr->GetValueAsUnsigned(0) == 0 && offset_int != 0)
+    return llvm::make_error<DILDiagnosticError>(
+        m_expr, "arithmetic on a nullptr is undefined", location);
 
   llvm::Expected<uint64_t> byte_size =
       ptr->GetCompilerType().GetPointeeType().GetByteSize(&m_stack_frame);
