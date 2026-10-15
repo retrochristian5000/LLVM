@@ -8,6 +8,15 @@ RUN: llvm-lib -out:test.lib -def:test.def -machine:arm64ec
 
 RUN: lld-link -out:out.dll -debug -machine:arm64ec -dll -noentry test-arm64ec.obj test-x86_64.obj loadconfig-arm64ec.obj test.lib
 RUN: llvm-pdbutil dump out.pdb -all | FileCheck %s
+RUN: lld-link -out:aligned.dll -pdb:aligned.pdb -debug -machine:arm64ec -dll -noentry /align:65536 test-arm64ec.obj test-x86_64.obj loadconfig-arm64ec.obj test.lib
+RUN: llvm-readobj --file-headers aligned.dll | FileCheck %s --check-prefix=ALIGNED-PE
+RUN: llvm-pdbutil dump aligned.pdb -symbols | FileCheck %s --check-prefix=ALIGNED-PDB
+
+# Verify the PDB section symbols describe the real image alignment, not a
+# hardcoded 4 KiB default. An ARM64EC image can use 64 KiB SectionAlignment.
+ALIGNED-PE: SectionAlignment: 65536
+ALIGNED-PDB: S_SECTION [size = 28] `.text`
+ALIGNED-PDB-NEXT: length = {{[0-9]+}}, alignment = 16, rva = 65536, section # = 1
 
 CHECK:                             Streams
 CHECK-NEXT: ============================================================
