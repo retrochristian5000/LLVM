@@ -8941,49 +8941,49 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
   // ARM64 and ARM64EC cc1 invocations even when supplied accidentally.
   const auto VLenArch = getToolChain().getArch();
   if (VLenArch == llvm::Triple::x86 || VLenArch == llvm::Triple::x86_64) {
-  if (const Arg *A = Args.getLastArg(options::OPT__SLASH_vlen,
-                                     options::OPT__SLASH_vlen_EQ_256,
-                                     options::OPT__SLASH_vlen_EQ_512)) {
-    llvm::Triple::ArchType AT = getToolChain().getArch();
-    StringRef Default = AT == llvm::Triple::x86 ? "IA32" : "SSE2";
-    StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch, Default);
-    llvm::SmallSet<StringRef, 4> Arch512 = {"AVX512F", "AVX512", "AVX10.1",
-                                            "AVX10.2"};
+    if (const Arg *A = Args.getLastArg(options::OPT__SLASH_vlen,
+                                       options::OPT__SLASH_vlen_EQ_256,
+                                       options::OPT__SLASH_vlen_EQ_512)) {
+      llvm::Triple::ArchType AT = getToolChain().getArch();
+      StringRef Default = AT == llvm::Triple::x86 ? "IA32" : "SSE2";
+      StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch, Default);
+      llvm::SmallSet<StringRef, 4> Arch512 = {"AVX512F", "AVX512", "AVX10.1",
+                                              "AVX10.2"};
 
-    if (A->getOption().matches(options::OPT__SLASH_vlen_EQ_512)) {
-      if (Arch512.contains(Arch))
-        CmdArgs.push_back("-mprefer-vector-width=512");
-      else
-        D.Diag(diag::warn_drv_argument_not_allowed_with)
-            << "/vlen=512" << std::string("/arch:").append(Arch);
-    } else if (A->getOption().matches(options::OPT__SLASH_vlen_EQ_256)) {
-      if (Arch512.contains(Arch))
-        CmdArgs.push_back("-mprefer-vector-width=256");
-      else if (Arch != "AVX" && Arch != "AVX2")
-        D.Diag(diag::warn_drv_argument_not_allowed_with)
-            << "/vlen=256" << std::string("/arch:").append(Arch);
+      if (A->getOption().matches(options::OPT__SLASH_vlen_EQ_512)) {
+        if (Arch512.contains(Arch))
+          CmdArgs.push_back("-mprefer-vector-width=512");
+        else
+          D.Diag(diag::warn_drv_argument_not_allowed_with)
+              << "/vlen=512" << std::string("/arch:").append(Arch);
+      } else if (A->getOption().matches(options::OPT__SLASH_vlen_EQ_256)) {
+        if (Arch512.contains(Arch))
+          CmdArgs.push_back("-mprefer-vector-width=256");
+        else if (Arch != "AVX" && Arch != "AVX2")
+          D.Diag(diag::warn_drv_argument_not_allowed_with)
+              << "/vlen=256" << std::string("/arch:").append(Arch);
+      } else {
+        if (Arch == "AVX10.1" || Arch == "AVX10.2")
+          CmdArgs.push_back("-mprefer-vector-width=256");
+      }
     } else {
+      StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch);
       if (Arch == "AVX10.1" || Arch == "AVX10.2")
         CmdArgs.push_back("-mprefer-vector-width=256");
     }
-  } else {
-    StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch);
-    if (Arch == "AVX10.1" || Arch == "AVX10.2")
-      CmdArgs.push_back("-mprefer-vector-width=256");
-  }
 
-  // /vlen selects only the preferred vector width.  It must not discard
-  // features from /arch:AVX10.x: without +avx10.2 the AVX10.2 selection
-  // silently falls back to the Sapphire Rapids feature set.
-  StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch);
-  if (Arch == "AVX10.1" || Arch == "AVX10.2") {
-    CmdArgs.push_back("-target-feature");
-    CmdArgs.push_back("-amx-tile");
-  }
-  if (Arch == "AVX10.2") {
-    CmdArgs.push_back("-target-feature");
-    CmdArgs.push_back("+avx10.2");
-  }
+    // /vlen selects only the preferred vector width.  It must not discard
+    // features from /arch:AVX10.x: without +avx10.2 the AVX10.2 selection
+    // silently falls back to the Sapphire Rapids feature set.
+    StringRef Arch = Args.getLastArgValue(options::OPT__SLASH_arch);
+    if (Arch == "AVX10.1" || Arch == "AVX10.2") {
+      CmdArgs.push_back("-target-feature");
+      CmdArgs.push_back("-amx-tile");
+    }
+    if (Arch == "AVX10.2") {
+      CmdArgs.push_back("-target-feature");
+      CmdArgs.push_back("+avx10.2");
+    }
 
   }
 
