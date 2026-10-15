@@ -1,0 +1,54 @@
+# A live local import pointer keeps the corresponding COMDAT alive.
+# With /OPT:REF, LLD must not emit a __imp_ slot pointing to ImageBase.
+# ARM64EC's __imp_aux_ variant follows the same reachability rule.
+# REQUIRES: aarch64
+# RUN: split-file %s %t.dir
+#
+# RUN: llvm-mc -filetype=obj -triple=x86_64-windows %t.dir/x64.s -o %t.dir/x64.obj
+# RUN: lld-link /nologo /machine:x64 /dll /noentry /opt:ref /include:keep \
+# RUN:   /map:%t.dir/x64.map /out:%t.dir/x64.dll %t.dir/x64.obj
+# RUN: FileCheck --check-prefix=X64 --input-file=%t.dir/x64.map %s
+#
+# RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %t.dir/arm64ec.s -o %t.dir/arm64ec.obj
+# RUN: lld-link /nologo /machine:arm64ec /dll /noentry /opt:ref /include:keep \
+# RUN:   /map:%t.dir/arm64ec.map /out:%t.dir/arm64ec.dll %t.dir/arm64ec.obj
+# RUN: FileCheck --check-prefix=EC --input-file=%t.dir/arm64ec.map %s
+#
+# X64-NOT: .text$dead
+# X64: .text$target
+# X64-NOT: .text$dead
+# X64: target
+# X64-NOT: .text$dead
+# EC-NOT: .text$dead
+# EC: .text$target
+# EC-NOT: .text$dead
+# EC: #target
+# EC-NOT: .text$dead
+
+#--- x64.s
+    .section .text$target,"xr",discard,target
+    .globl target
+target:
+    retq
+    .section .text$dead,"xr",discard,dead
+    .globl dead
+dead:
+    retq
+    .section .rdata$keep,"dr",discard,keep
+    .globl keep
+keep:
+    .quad __imp_target
+
+#--- arm64ec.s
+    .section .text$target,"xr",discard,"#target"
+    .globl "#target"
+"#target":
+    ret
+    .section .text$dead,"xr",discard,"#dead"
+    .globl "#dead"
+"#dead":
+    ret
+    .section .rdata$keep,"dr",discard,keep
+    .globl keep
+keep:
+    .quad __imp_aux_target
