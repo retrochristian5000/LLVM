@@ -8936,6 +8936,11 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
                                                      << "/kernel";
  }
 
+  // MSVC /arch:AVX10.x and /vlen are x86/x64 instruction-selection
+  // policies, not ARM64EC target features. Keep the feature flags out of
+  // ARM64 and ARM64EC cc1 invocations even when supplied accidentally.
+  const auto VLenArch = getToolChain().getArch();
+  if (VLenArch == llvm::Triple::x86 || VLenArch == llvm::Triple::x86_64) {
   if (const Arg *A = Args.getLastArg(options::OPT__SLASH_vlen,
                                      options::OPT__SLASH_vlen_EQ_256,
                                      options::OPT__SLASH_vlen_EQ_512)) {
@@ -8978,6 +8983,8 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
   if (Arch == "AVX10.2") {
     CmdArgs.push_back("-target-feature");
     CmdArgs.push_back("+avx10.2");
+  }
+
   }
 
   Arg *MostGeneralArg = Args.getLastArg(options::OPT__SLASH_vmg);
