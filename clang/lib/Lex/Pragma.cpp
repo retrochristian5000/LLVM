@@ -2275,7 +2275,10 @@ void Preprocessor::RegisterBuiltinPragmas() {
   if (LangOpts.MicrosoftExt) {
     AddPragmaHandler(new PragmaWarningHandler());
     AddPragmaHandler(new PragmaExecCharsetHandler());
-    if (getTargetInfo().getTriple().isWindowsArm64EC())
+    // ARM64EC by itself does not imply the Microsoft C++ ABI; an
+    // arm64ec-windows-gnu target still has the GNU/Itanium C++ ABI.
+    const llvm::Triple &Triple = getTargetInfo().getTriple();
+    if (Triple.isWindowsArm64EC() && Triple.isWindowsMSVCEnvironment())
       AddPragmaHandler(new PragmaSetLocaleARM64ECHandler());
     AddPragmaHandler(new PragmaIncludeAliasHandler());
     AddPragmaHandler(new PragmaHdrstopHandler());
