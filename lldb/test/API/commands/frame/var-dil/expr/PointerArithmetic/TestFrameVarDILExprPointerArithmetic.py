@@ -48,6 +48,18 @@ class TestFrameVarDILExprPointerArithmetic(TestBase):
         self.expect_var_path("*cp_int5", value="5")
         self.expect_var_path("*(&*(cp_int5 + 1) - 1)", value="5")
 
+        # Null pointer +/- zero is valid.  The zero must be read from the
+        # offset value, not confused with its non-null ValueObjectSP owner.
+        for expression in (
+            "int_null + 0",
+            "0 + int_null",
+            "int_null - 0",
+            "int_null + (offset - offset)",
+            "int_null - (offset - offset)",
+        ):
+            result = self.expect_var_path(expression, type="int *")
+            self.assertEqual(result.GetValueAsUnsigned(), 0)
+
         self.expect_var_path("p_int0 - p_int0", value="0", type="__ptrdiff_t")
         self.expect_var_path("cp_int5 - p_int0", value="5", type="__ptrdiff_t")
         self.expect_var_path("cp_int5 - td_int_ptr0", value="5", type="__ptrdiff_t")
@@ -148,6 +160,12 @@ class TestFrameVarDILExprPointerArithmetic(TestBase):
             error=True,
             substrs=["arithmetic on a nullptr is undefined"],
         )
+        for expression in ("int_null + offset", "int_null - offset"):
+            self.expect(
+                f"frame var -- '{expression}'",
+                error=True,
+                substrs=["arithmetic on a nullptr is undefined"],
+            )
         self.expect(
             "frame var -- 'p_char + *((int*) 0)'",
             error=True,
