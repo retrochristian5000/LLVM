@@ -26,6 +26,12 @@ int main(int argc, char **argv) {
 
   int *int_null = nullptr;
 
+  // GNU zero-length array extension: its pointee size is zero.  DIL must
+  // diagnose arithmetic rather than divide by zero or leave the pointer
+  // unchanged when an element offset is nonzero.
+  int zero_length_array[0];
+  int (*p_zero_length)[0] = &zero_length_array;
+
   stop(); // Set a breakpoint here
   return 0;
 }
