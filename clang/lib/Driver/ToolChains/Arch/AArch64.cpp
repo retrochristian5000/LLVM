@@ -309,8 +309,7 @@ void aarch64::getAArch64TargetFeatures(const Driver &D,
       success = getAArch64ArchFeaturesFromMarch(D, March, Args, Extensions,
                                                 InvalidArg);
     }
-  }
-  else if (isCPUDeterminedByTriple(Triple))
+  } else if (isCPUDeterminedByTriple(Triple))
     success = getAArch64ArchFeaturesFromMcpu(
         D, getAArch64TargetCPUByTriple(Triple), Args, Extensions, InvalidArg);
   else
