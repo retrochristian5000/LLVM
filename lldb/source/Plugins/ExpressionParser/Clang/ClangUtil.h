@@ -16,6 +16,8 @@
 
 #include "lldb/Symbol/CompilerType.h"
 
+#include <string>
+
 namespace clang {
 class TagDecl;
 }

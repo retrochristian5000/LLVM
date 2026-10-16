@@ -13,6 +13,8 @@
 #include "lldb/Symbol/SourceModule.h"
 #include "lldb/Target/Platform.h"
 
+#include <cstdint>
+#include <functional>
 #include <set>
 #include <vector>
 

@@ -14,6 +14,10 @@
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-private-enumerations.h"
 
+#include <cstdint>
+#include <cstring>
+#include <optional>
+
 namespace lldb_private {
 
 class ClangASTMetadata {

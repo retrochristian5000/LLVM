@@ -10,6 +10,7 @@
 
 #include "ClangHost.h"
 #include "lldb/Host/FileSystem.h"
+#include "llvm/Support/Regex.h"
 #include "llvm/TargetParser/Triple.h"
 #include <optional>
 

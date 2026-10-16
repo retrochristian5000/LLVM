@@ -9,8 +9,17 @@
 #ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CPPMODULECONFIGURATION_H
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CPPMODULECONFIGURATION_H
 
-#include <lldb/Utility/FileSpecList.h>
-#include <llvm/Support/Regex.h>
+#include "lldb/Utility/FileSpecList.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
+
+#include <cassert>
+#include <string>
+#include <vector>
+
+namespace llvm {
+class Triple;
+}
 
 namespace lldb_private {
 
