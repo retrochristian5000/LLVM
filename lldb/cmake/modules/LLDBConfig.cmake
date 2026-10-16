@@ -311,6 +311,25 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   append("-Wno-vla-extension" CMAKE_CXX_FLAGS)
 endif()
 
+# Opt-in LLDB-only audit: mixed unscoped enum operations become errors with
+# Clang, including the corresponding deprecated diagnostic in C++20 builds.
+# Leave regular LLDB builds untouched until the diagnostic locations have been
+# identified and fixed; do not blanket-disable this warning.
+option(LLDB_ENUM_WARNINGS_AS_ERRORS
+  "Diagnose mixed-enum conversions as errors when compiling LLDB with Clang" OFF)
+if (LLDB_ENUM_WARNINGS_AS_ERRORS)
+  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "LLDB_ENUM_WARNINGS_AS_ERRORS requires Clang")
+  endif()
+  check_cxx_compiler_flag(
+    "-Werror=unknown-warning-option -Werror=enum-enum-conversion"
+    LLDB_SUPPORTS_ENUM_ENUM_CONVERSION)
+  if (NOT LLDB_SUPPORTS_ENUM_ENUM_CONVERSION)
+    message(FATAL_ERROR "Clang does not support -Werror=enum-enum-conversion")
+  endif()
+  append("-Werror=enum-enum-conversion" CMAKE_CXX_FLAGS)
+endif()
+
 # Disable MSVC warnings
 if( MSVC )
   add_definitions(
