@@ -11,8 +11,6 @@
 
 #include <string>
 
-#include "ScriptedProcess.h"
-
 #include "Plugins/Process/Utility/RegisterContextMemory.h"
 #include "lldb/Interpreter/ScriptInterpreter.h"
 #include "lldb/Target/DynamicRegisterInfo.h"

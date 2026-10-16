@@ -15,9 +15,9 @@
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/Status.h"
 
-#include "ScriptedThread.h"
-
 namespace lldb_private {
+class ScriptedThread;
+
 class ScriptedProcess : public Process {
 public:
   static lldb::ProcessSP CreateInstance(lldb::TargetSP target_sp,

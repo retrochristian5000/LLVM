@@ -8,6 +8,7 @@
 
 #include "ScriptedThread.h"
 #include "ScriptedFrame.h"
+#include "ScriptedProcess.h"
 
 #include "Plugins/Process/Utility/RegisterContextThreadMemory.h"
 #include "Plugins/Process/Utility/StopInfoMachException.h"

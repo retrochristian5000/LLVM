@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ScriptedProcess.h"
+#include "ScriptedThread.h"
 
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
