@@ -69,9 +69,14 @@ if ((CMAKE_GENERATOR MATCHES "Visual Studio") AND (MSVC_TOOLSET_VERSION LESS 142
 endif()
 
 if (CMAKE_GENERATOR STREQUAL "Xcode" AND NOT CMAKE_OSX_ARCHITECTURES)
-  # Some CMake features like object libraries get confused if you don't
-  # explicitly specify an architecture setting with the Xcode generator.
-  set(CMAKE_OSX_ARCHITECTURES "x86_64")
+  # Xcode needs an explicit architecture for some targets, including object
+  # libraries. Default to the native architecture instead of forcing x86_64
+  # on Apple Silicon. ARM64e must remain an explicit opt-in ABI choice.
+  if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|arm64e|aarch64)$")
+    set(CMAKE_OSX_ARCHITECTURES "arm64")
+  else()
+    set(CMAKE_OSX_ARCHITECTURES "x86_64")
+  endif()
 endif()
 
 project(LLVM

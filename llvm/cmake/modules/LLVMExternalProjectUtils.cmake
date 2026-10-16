@@ -79,15 +79,17 @@ function(llvm_ExternalProject_Add name source_dir)
   canonicalize_tool_name(${name} nameCanon)
 
   foreach(arg ${ARG_CMAKE_ARGS})
-    if(arg MATCHES "^-DCMAKE_SYSTEM_NAME=")
-      string(REGEX REPLACE "^-DCMAKE_SYSTEM_NAME=(.*)$" "\\1" _cmake_system_name "${arg}")
+    # Accept both -DVAR=value and -DVAR:TYPE=value CMake arguments.
+    if(arg MATCHES "^-DCMAKE_SYSTEM_NAME(:[^=]+)?=(.*)$")
+      set(_cmake_system_name "${CMAKE_MATCH_2}")
     endif()
   endforeach()
 
-  # If CMAKE_SYSTEM_NAME is not set explicitly in the arguments passed to us,
-  # reflect CMake's own default.
+  # If the subproject does not override CMAKE_SYSTEM_NAME, use the configured
+  # target system. The host system can differ in cross builds (e.g. when
+  # selecting Darwin-specific llvm-libtool-darwin and llvm-lipo).
   if (NOT _cmake_system_name)
-    set(_cmake_system_name "${CMAKE_HOST_SYSTEM_NAME}")
+    set(_cmake_system_name "${CMAKE_SYSTEM_NAME}")
   endif()
 
   if(NOT ARG_TARGET_TRIPLE)
