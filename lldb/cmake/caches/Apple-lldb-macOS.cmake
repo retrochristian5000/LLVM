@@ -7,12 +7,24 @@ set(LLDB_SKIP_STRIP ON CACHE BOOL "")
 # preset can be kept for Intel-only builds, but not for native Apple Silicon
 # or universal builds containing arm64. Check an explicit architecture
 # selection first: an Apple Silicon host may intentionally cross-build x86_64.
+# -C cache scripts are evaluated before project(), when CMake can leave
+# CMAKE_HOST_SYSTEM_PROCESSOR empty. Resolve that case from the local
+# 'uname' executable, rather than quietly selecting the Intel default.
+set(_LLDB_MACOS_HOST_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+if(NOT _LLDB_MACOS_HOST_ARCH)
+  execute_process(
+    COMMAND uname -m
+    OUTPUT_VARIABLE _LLDB_MACOS_HOST_ARCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+endif()
+
 set(_LLDB_MACOS_HAS_ARM64 OFF)
 if(CMAKE_OSX_ARCHITECTURES)
   if(CMAKE_OSX_ARCHITECTURES MATCHES "(^|;)arm64(e)?(;|$)")
     set(_LLDB_MACOS_HAS_ARM64 ON)
   endif()
-elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|arm64e|aarch64)$")
+elseif(_LLDB_MACOS_HOST_ARCH MATCHES "^(arm64|arm64e|aarch64)$")
   set(_LLDB_MACOS_HAS_ARM64 ON)
 endif()
 
@@ -35,6 +47,7 @@ if(_LLDB_MACOS_HAS_ARM64 AND
 endif()
 unset(_LLDB_MACOS_HAS_ARM64)
 unset(_LLDB_MACOS_DEFAULT_DEPLOYMENT_TARGET)
+unset(_LLDB_MACOS_HOST_ARCH)
 
 # Default install location on the enduser machine. On the build machine, use the
 # DESTDIR environment variable in order to relocate the whole installation, e.g.:
