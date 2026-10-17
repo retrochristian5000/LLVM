@@ -1,0 +1,39 @@
+name: LLDB macOS native build smoke
+
+# Full LLVM + Clang + LLDB builds are expensive. Opt in explicitly.
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: Native macOS runner architecture
+        type: choice
+        required: true
+        default: macos-15
+        options:
+          - macos-15
+          - macos-15-intel
+
+permissions:
+  contents: read
+
+jobs:
+  native-compile:
+    runs-on: ${{ inputs.host }}
+    timeout-minutes: 120
+    steps:
+      - name: Check out LLVM fork
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify host tools
+        run: |
+          uname -a
+          xcodebuild -version
+          cmake --version
+          ninja --version
+
+      - name: Compile Clang and LLDB and test expression compilation
+        env:
+          WHP_LLDB_JOBS: "2"
+        run: bash lldb/scripts/whp-macos-host-smoke.sh "$RUNNER_TEMP/whp-lldb-build"

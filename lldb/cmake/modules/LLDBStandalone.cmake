@@ -141,7 +141,7 @@ if (NOT TARGET clang-resource-headers)
   get_clang_resource_dir(LLDB_EXTERNAL_CLANG_RESOURCE_DIR
     PREFIX "${Clang_DIR}/../../../")
 
-  if (NOT EXISTS ${LLDB_EXTERNAL_CLANG_RESOURCE_DIR})
+  if (NOT EXISTS "${LLDB_EXTERNAL_CLANG_RESOURCE_DIR}")
     message(FATAL_ERROR "Expected directory for clang-resource-headers not found: ${LLDB_EXTERNAL_CLANG_RESOURCE_DIR}")
   endif()
 endif()
