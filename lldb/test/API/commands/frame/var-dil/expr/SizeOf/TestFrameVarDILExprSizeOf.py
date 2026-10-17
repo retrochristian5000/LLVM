@@ -84,3 +84,18 @@ class TestFrameVarDILExprSizeOf(TestBase):
             error=True,
             substrs=["use of undeclared identifier 'bar'"],
         )
+
+        # sizeof is unevaluated in C++: never change the inferior while
+        # computing a size. Unsupported assignment-bearing expressions must
+        # fail closed until DIL has an unevaluated type-only evaluator.
+        self.expect(
+            "frame var -- 'sizeof(i = 42)'",
+            error=True,
+            substrs=["assignment is not supported in sizeof operand"],
+        )
+        self.expect(
+            "frame var -- 'sizeof(arr[(i = 2)])'",
+            error=True,
+            substrs=["assignment is not supported in sizeof operand"],
+        )
+        self.expect_var_path("i", value="1")
