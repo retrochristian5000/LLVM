@@ -1097,7 +1097,7 @@ macro(generate_llvm_objects name)
   # helper is a macro, appending it to LLVM_COMMON_DEPENDS would also make
   # unrelated later executables in the same directory wait for these targets.
   # Preserve the shared directory prerequisites without modifying them here.
-  
+
   # Generate objlib
   if(LLVM_ENABLE_OBJLIB OR (ARG_GENERATE_DRIVER AND LLVM_TOOL_LLVM_DRIVER_BUILD))
     # Generate an obj library for both targets.
