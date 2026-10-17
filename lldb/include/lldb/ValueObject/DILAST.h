@@ -343,7 +343,6 @@ public:
   }
 
 private:
-  std::string m_name;
   ASTNodeUP m_node_arg;
   CompilerType m_type_arg;
 };
