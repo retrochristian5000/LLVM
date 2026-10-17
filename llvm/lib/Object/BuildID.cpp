@@ -81,11 +81,16 @@ BuildIDRef llvm::object::getBuildID(const ObjectFile *Obj) {
 }
 
 Expected<std::string> BuildIDFetcher::fetch(BuildIDRef BuildID) const {
+  if (BuildID.empty())
+    return createStringError(std::errc::invalid_argument, "empty build ID");
+
+  // Encode once and split after the first byte for the .build-id layout.
+  std::string Hex = llvm::toHex(BuildID, /*LowerCase=*/true);
+  StringRef HexRef(Hex);
   auto GetDebugPath = [&](StringRef Directory) {
     SmallString<128> Path{Directory};
-    sys::path::append(Path, ".build-id",
-                      llvm::toHex(BuildID[0], /*LowerCase=*/true),
-                      llvm::toHex(BuildID.slice(1), /*LowerCase=*/true));
+    sys::path::append(Path, ".build-id", HexRef.take_front(2),
+                      HexRef.drop_front(2));
     Path += ".debug";
     return Path;
   };
@@ -112,5 +117,5 @@ Expected<std::string> BuildIDFetcher::fetch(BuildIDRef BuildID) const {
   return createStringError(
       make_error_code(std::errc::no_such_file_or_directory),
       "could not find debug file for build ID '" +
-          llvm::toHex(BuildID, /*LowerCase=*/true) + "'");
+          Hex + "'");
 }
