@@ -118,3 +118,18 @@ Sections:
       StringRef(reinterpret_cast<const char *>(BuildID.data()), BuildID.size()),
       "\xAB\xB5\x0D\x82\xB6\xBD\xC8\x61");
 }
+
+TEST(BuildIDTest, EmptyBuildID) {
+  BuildIDFetcher Fetcher({});
+  Expected<std::string> PathOrErr = Fetcher.fetch({});
+  ASSERT_FALSE(PathOrErr);
+  EXPECT_EQ(toString(PathOrErr.takeError()), "empty build ID");
+}
+
+TEST(BuildIDTest, MissingDebugFileReportsFullBuildID) {
+  BuildIDFetcher Fetcher({"/this-directory-does-not-contain-llvm-debug-files"});
+  const BuildID ID = {0x01, 0xAB, 0x00};
+  Expected<std::string> PathOrErr = Fetcher.fetch(ID);
+  ASSERT_FALSE(PathOrErr);
+  EXPECT_NE(toString(PathOrErr.takeError()).find("01ab00"), std::string::npos);
+}
