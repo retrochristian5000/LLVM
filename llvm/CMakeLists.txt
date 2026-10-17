@@ -262,7 +262,7 @@ endif()
 # Set up Arm64X build of the OpenMP runtime
 option(LIBOMP_ENABLE_ARM64X "Build the OpenMP library as Arm64X for compatibility with both Arm64 and Arm64EC" OFF)
 if(LIBOMP_ENABLE_ARM64X)
-  if(NOT CMAKE_HOST_WIN32 AND NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "ARM64")
+  if(NOT CMAKE_HOST_WIN32)
     message(FATAL_ERROR "Arm64X builds are only supported on Windows hosts.")
   endif()
   if(NOT LLVM_RUNTIME_TARGETS)
