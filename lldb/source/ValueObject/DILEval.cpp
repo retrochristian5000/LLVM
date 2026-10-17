@@ -1665,6 +1665,49 @@ llvm::Expected<lldb::ValueObjectSP> Interpreter::Visit(const CastNode &node) {
                                               node.GetLocation());
 }
 
+// Evaluating an assignment inside sizeof would modify the debugged process,
+// even though sizeof operands are unevaluated in C/C++. DIL does not yet have
+// general unevaluated-expression type inference; reject these forms instead
+// of executing them while determining a byte size.
+static bool ContainsAssignment(const ASTNode &node) {
+  switch (node.GetKind()) {
+  case NodeKind::eBinaryOpNode: {
+    const auto &binary = static_cast<const BinaryOpNode &>(node);
+    if (binary.GetKind() == BinaryOpKind::Assign ||
+        binary.GetKind() == BinaryOpKind::AddAssign ||
+        binary.GetKind() == BinaryOpKind::SubAssign)
+      return true;
+    return ContainsAssignment(binary.GetLHS()) ||
+           ContainsAssignment(binary.GetRHS());
+  }
+  case NodeKind::eUnaryOpNode:
+    return ContainsAssignment(
+        static_cast<const UnaryOpNode &>(node).GetOperand());
+  case NodeKind::eMemberOfNode:
+    return ContainsAssignment(static_cast<const MemberOfNode &>(node).GetBase());
+  case NodeKind::eArraySubscriptNode: {
+    const auto &subscript = static_cast<const ArraySubscriptNode &>(node);
+    return ContainsAssignment(subscript.GetBase()) ||
+           ContainsAssignment(subscript.GetIndex());
+  }
+  case NodeKind::eBitExtractionNode: {
+    const auto &bitfield = static_cast<const BitFieldExtractionNode &>(node);
+    return ContainsAssignment(bitfield.GetBase()) ||
+           ContainsAssignment(bitfield.GetFirstIndex()) ||
+           ContainsAssignment(bitfield.GetLastIndex());
+  }
+  case NodeKind::eCastNode:
+    return ContainsAssignment(static_cast<const CastNode &>(node).GetOperand());
+  case NodeKind::eSizeOfNode: {
+    const auto &sized = static_cast<const SizeOfNode &>(node);
+    return !sized.GetTypeArg().IsValid() &&
+           ContainsAssignment(sized.GetNodeArg());
+  }
+  default:
+    return false;
+  }
+}
+
 llvm::Expected<lldb::ValueObjectSP> Interpreter::Visit(const SizeOfNode &node) {
   CompilerType typearg = node.GetTypeArg();
   Scalar size;
@@ -1676,6 +1719,10 @@ llvm::Expected<lldb::ValueObjectSP> Interpreter::Visit(const SizeOfNode &node) {
       return byte_size.takeError();
     size = *byte_size;
   } else {
+    if (ContainsAssignment(node.GetNodeArg()))
+      return llvm::make_error<DILDiagnosticError>(
+          m_expr, "assignment is not supported in sizeof operand",
+          node.GetLocation());
     auto arg_or_err = EvaluateAndDereference(node.GetNodeArg());
     if (!arg_or_err)
       return arg_or_err;
