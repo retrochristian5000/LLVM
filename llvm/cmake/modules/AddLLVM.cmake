@@ -1093,8 +1093,11 @@ macro(generate_llvm_objects name)
 
   llvm_process_sources( ALL_FILES ${ARG_UNPARSED_ARGUMENTS} )
 
-  list(APPEND LLVM_COMMON_DEPENDS ${ARG_DEPENDS})
-
+  # ARG_DEPENDS belongs to this executable/object library only. Since this
+  # helper is a macro, appending it to LLVM_COMMON_DEPENDS would also make
+  # unrelated later executables in the same directory wait for these targets.
+  # Preserve the shared directory prerequisites without modifying them here.
+  
   # Generate objlib
   if(LLVM_ENABLE_OBJLIB OR (ARG_GENERATE_DRIVER AND LLVM_TOOL_LLVM_DRIVER_BUILD))
     # Generate an obj library for both targets.
@@ -1173,7 +1176,11 @@ macro(add_llvm_executable name)
   get_subproject_title(subproject_title)
   set_target_properties(${name} PROPERTIES FOLDER "${subproject_title}/Executables")
 
-  setup_dependency_debugging(${name} ${LLVM_COMMON_DEPENDS})
+  # Merge shared and target-local ordering constraints without persisting
+  # the local dependencies into subsequent add_llvm_executable calls.
+  set(_llvm_executable_depends ${LLVM_COMMON_DEPENDS} ${ARG_DEPENDS})
+  list(REMOVE_DUPLICATES _llvm_executable_depends)
+  setup_dependency_debugging(${name} ${_llvm_executable_depends})
 
   if(NOT ARG_NO_INSTALL_RPATH)
     llvm_setup_rpath(${name})
@@ -1247,12 +1254,12 @@ macro(add_llvm_executable name)
   set(EXCLUDE_FROM_ALL OFF)
   set_output_directory(${name} BINARY_DIR ${LLVM_RUNTIME_OUTPUT_INTDIR} LIBRARY_DIR ${LLVM_LIBRARY_OUTPUT_INTDIR})
   llvm_config( ${name} ${USE_SHARED} ${LLVM_LINK_COMPONENTS} )
-  if( LLVM_COMMON_DEPENDS )
-    add_dependencies( ${name} ${LLVM_COMMON_DEPENDS} )
+  if(_llvm_executable_depends)
+    add_dependencies(${name} ${_llvm_executable_depends})
     foreach(objlib ${obj_name})
-      add_dependencies(${objlib} ${LLVM_COMMON_DEPENDS})
+      add_dependencies(${objlib} ${_llvm_executable_depends})
     endforeach()
-  endif( LLVM_COMMON_DEPENDS )
+  endif()
 
   add_custom_linker_flags(${name})
 
@@ -1285,6 +1292,7 @@ macro(add_llvm_executable name)
     # This has to match how the libraries the executable is linked to are built or there be linker errors.
     target_compile_options(${name} PRIVATE /Zc:dllexportInlines-)
   endif()
+  unset(_llvm_executable_depends)
 endmacro(add_llvm_executable name)
 
 # add_llvm_pass_plugin(name [NO_MODULE] ...)
