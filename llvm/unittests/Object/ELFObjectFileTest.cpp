@@ -254,6 +254,18 @@ TEST(ELFObjectFileTest, MachineTestForLANAI) {
     checkFormatAndArch(Data, Formats[Idx], Triple::lanai);
 }
 
+TEST(ELFObjectFileTest, MachineTestForTriMedia) {
+  // These two 32-bit object orders share the EM_TRIMEDIA machine identifier.
+  std::array<StringRef, 4> Formats = {
+      "elf32-littletrimedia", "elf32-bigtrimedia",
+      "elf64-unknown", "elf64-unknown"};
+  std::array<Triple::ArchType, 4> Archs = {
+      Triple::trimedia, Triple::trimediaeb,
+      Triple::UnknownArch, Triple::UnknownArch};
+  for (auto [Idx, Data] : enumerate(generateData(ELF::EM_TRIMEDIA)))
+    checkFormatAndArch(Data, Formats[Idx], Archs[Idx]);
+}
+
 TEST(ELFObjectFileTest, MachineTestForMSP430) {
   std::array<StringRef, 4> Formats = {"elf32-msp430", "elf32-msp430",
                                       "elf64-unknown", "elf64-unknown"};

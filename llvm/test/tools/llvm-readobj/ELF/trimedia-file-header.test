@@ -1,0 +1,16 @@
+## EM_TRIMEDIA is already defined as 163 in llvm/BinaryFormat/ELF.h.
+## Both ELF32 data orders are valid for the dual-endian TM3260 family.
+# RUN: yaml2obj %s -o %t.le.o -DENDIAN=LSB
+# RUN: llvm-readobj --file-headers %t.le.o | FileCheck %s --check-prefix=LE
+# RUN: yaml2obj %s -o %t.be.o -DENDIAN=MSB
+# RUN: llvm-readobj --file-headers %t.be.o | FileCheck %s --check-prefix=BE
+
+# LE: Format: elf32-littletrimedia
+# BE: Format: elf32-bigtrimedia
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2[[ENDIAN]]
+  Type:    ET_REL
+  Machine: EM_TRIMEDIA

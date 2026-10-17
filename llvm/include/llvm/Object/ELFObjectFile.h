@@ -1323,6 +1323,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
       return "elf32-loongarch";
     case ELF::EM_XTENSA:
       return "elf32-xtensa";
+    case ELF::EM_TRIMEDIA:
+      return IsLittleEndian ? "elf32-littletrimedia" : "elf32-bigtrimedia";
     default:
       return "elf32-unknown";
     }
@@ -1455,6 +1457,11 @@ template <class ELFT> Triple::ArchType ELFObjectFile<ELFT>::getArch() const {
 
   case ELF::EM_XTENSA:
     return Triple::xtensa;
+  case ELF::EM_TRIMEDIA:
+    // The ELF machine number is shared by both 32-bit byte orders.
+    return EF.getHeader().e_ident[ELF::EI_CLASS] == ELF::ELFCLASS32
+               ? (IsLittleEndian ? Triple::trimedia : Triple::trimediaeb)
+               : Triple::UnknownArch;
 
   default:
     return Triple::UnknownArch;

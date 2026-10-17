@@ -115,7 +115,9 @@ public:
     renderscript32, // 32-bit RenderScript
     renderscript64, // 64-bit RenderScript
     ve,             // NEC SX-Aurora Vector Engine
-    LastArchType = ve
+    trimedia,        // 32-bit TriMedia VLIW, little-endian ELF
+    trimediaeb,      // 32-bit TriMedia VLIW, big-endian ELF
+    LastArchType = trimediaeb
   };
   enum SubArchType {
     NoSubArch,

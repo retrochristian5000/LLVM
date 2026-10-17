@@ -19,6 +19,40 @@ using namespace llvm;
 
 namespace {
 
+TEST(TripleTest, TriMediaFirmwareIdentity) {
+  // Architecture identification is not an LLVM instruction backend.
+  Triple Little("trimedia-unknown-none");
+  Triple Big("trimediaeb-unknown-none");
+  EXPECT_EQ(Triple::trimedia, Little.getArch());
+  EXPECT_EQ(Triple::trimediaeb, Big.getArch());
+  EXPECT_EQ(Triple::trimedia, Triple::parseArch("trimedia"));
+  EXPECT_EQ(Triple::trimediaeb, Triple::parseArch("trimediaeb"));
+  EXPECT_EQ(Triple::trimedia, Triple::getArchTypeForLLVMName("trimedia"));
+  EXPECT_EQ(Triple::trimediaeb,
+            Triple::getArchTypeForLLVMName("trimediaeb"));
+  EXPECT_EQ("trimedia", Triple::getArchTypeName(Triple::trimedia));
+  EXPECT_EQ("trimediaeb", Triple::getArchTypeName(Triple::trimediaeb));
+  EXPECT_EQ("trimedia", Triple::getArchTypePrefix(Triple::trimediaeb));
+  EXPECT_EQ(32U, Little.getArchPointerBitWidth());
+  EXPECT_EQ(32U, Big.getArchPointerBitWidth());
+  EXPECT_TRUE(Little.isLittleEndian());
+  EXPECT_FALSE(Big.isLittleEndian());
+  EXPECT_TRUE(Little.isArch32Bit());
+  EXPECT_TRUE(Big.isArch32Bit());
+  EXPECT_EQ(Triple::ELF, Little.getObjectFormat());
+  EXPECT_EQ(Triple::ELF, Big.getObjectFormat());
+  EXPECT_EQ(Triple::trimediaeb, Little.getBigEndianArchVariant().getArch());
+  EXPECT_EQ(Triple::trimedia, Big.getLittleEndianArchVariant().getArch());
+  EXPECT_EQ(Triple::trimedia, Little.get32BitArchVariant().getArch());
+  EXPECT_EQ(Triple::trimediaeb, Big.get32BitArchVariant().getArch());
+  EXPECT_EQ(Triple::UnknownArch, Little.get64BitArchVariant().getArch());
+  EXPECT_EQ(Triple::UnknownArch, Big.get64BitArchVariant().getArch());
+  EXPECT_EQ("trimedia-unknown-none",
+            Triple::normalize("trimedia-unknown-none"));
+  EXPECT_EQ("trimediaeb-unknown-none",
+            Triple::normalize("trimediaeb-unknown-none"));
+}
+
 TEST(TripleTest, BasicParsing) {
   Triple T;
 
