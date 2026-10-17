@@ -136,6 +136,7 @@ uint16_t ELF::convertArchNameToEMachine(StringRef Arch) {
       .Case("cypress_m8c", EM_CYPRESS_M8C)
       .Case("r32c", EM_R32C)
       .Case("trimedia", EM_TRIMEDIA)
+      .Case("trimediaeb", EM_TRIMEDIA)
       .Case("hexagon", EM_HEXAGON)
       .Case("8051", EM_8051)
       .Case("stxp7x", EM_STXP7X)
@@ -262,6 +263,9 @@ uint16_t ELF::convertTripleArchTypeToEMachine(Triple::ArchType ArchType) {
     return EM_XCORE;
   case Triple::xtensa:
     return EM_XTENSA;
+  case Triple::trimedia:
+  case Triple::trimediaeb:
+    return EM_TRIMEDIA;
   }
 }
 

@@ -13,6 +13,15 @@ using namespace llvm;
 using namespace llvm::ELF;
 
 namespace {
+TEST(ELFTest, TriMediaMachineIdentity) {
+  EXPECT_EQ(163, EM_TRIMEDIA);
+  EXPECT_EQ(EM_TRIMEDIA, convertArchNameToEMachine("trimedia"));
+  EXPECT_EQ(EM_TRIMEDIA, convertArchNameToEMachine("trimediaeb"));
+  EXPECT_EQ("trimedia", convertEMachineToArchName(EM_TRIMEDIA));
+  EXPECT_EQ(EM_TRIMEDIA, convertTripleArchTypeToEMachine(Triple::trimedia));
+  EXPECT_EQ(EM_TRIMEDIA, convertTripleArchTypeToEMachine(Triple::trimediaeb));
+}
+
 TEST(ELFTest, OSABI) {
   EXPECT_EQ(ELFOSABI_GNU, convertNameToOSABI("gnu"));
   EXPECT_EQ(ELFOSABI_FREEBSD, convertNameToOSABI("freebsd"));
