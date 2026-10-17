@@ -2736,48 +2736,36 @@ template <class ELFT> void Writer<ELFT>::checkSections() {
                << utohexstr(os->size, true)
                << " exceeds available address space";
 
-  // Check for overlapping file offsets. In this case we need to skip any
-  // section marked as SHT_NOBITS. These sections don't actually occupy space in
-  // the file so Sec->Offset + Sec->Size can overlap with others. If --oformat
-  // binary is specified only add SHF_ALLOC sections are added to the output
-  // file so we skip any non-allocated sections in that case.
+  // Collect all three kinds of ranges in one pass. SHT_NOBITS does not
+  // occupy file bytes; a raw binary only contains allocated sections.
+  // Relocatable output has no final virtual/load addresses, and TLS sections
+  // have independent runtime addresses. NOBITS occupies virtual memory but
+  // does not count when checking overlapping load addresses.
   std::vector<SectionOffset> fileOffs;
-  for (OutputSection *sec : ctx.outputSections)
-    if (sec->size > 0 && sec->type != SHT_NOBITS &&
-        (!ctx.arg.oFormatBinary || (sec->flags & SHF_ALLOC)))
-      fileOffs.push_back({sec, sec->offset});
-  checkOverlap(ctx, "file", fileOffs, false);
+  std::vector<SectionOffset> vmas;
+  std::vector<SectionOffset> lmas;
+  for (OutputSection *sec : ctx.outputSections) {
+    if (sec->size == 0)
+      continue;
 
-  // When linking with -r there is no need to check for overlapping virtual/load
-  // addresses since those addresses will only be assigned when the final
-  // executable/shared object is created.
+    bool alloc = sec->flags & SHF_ALLOC;
+    bool nobits = sec->type == SHT_NOBITS;
+    if (!nobits && (!ctx.arg.oFormatBinary || alloc))
+      fileOffs.push_back({sec, sec->offset});
+
+    if (ctx.arg.relocatable || !alloc || (sec->flags & SHF_TLS))
+      continue;
+    vmas.push_back({sec, sec->addr});
+    if (!nobits)
+      lmas.push_back({sec, sec->getLMA()});
+  }
+
+  // Preserve the diagnostic order: file offsets first, followed by virtual
+  // and load addresses only for non-relocatable outputs.
+  checkOverlap(ctx, "file", fileOffs, false);
   if (ctx.arg.relocatable)
     return;
-
-  // Checking for overlapping virtual and load addresses only needs to take
-  // into account SHF_ALLOC sections since others will not be loaded.
-  // Furthermore, we also need to skip SHF_TLS sections since these will be
-  // mapped to other addresses at runtime and can therefore have overlapping
-  // ranges in the file.
-  std::vector<SectionOffset> vmas;
-  for (OutputSection *sec : ctx.outputSections)
-    if (sec->size > 0 && (sec->flags & SHF_ALLOC) && !(sec->flags & SHF_TLS))
-      vmas.push_back({sec, sec->addr});
   checkOverlap(ctx, "virtual address", vmas, true);
-
-  // Finally, check that the load addresses don't overlap. This will
-  // usually be the same as the virtual addresses but can be different
-  // when using a linker script with AT(). SHT_NOBITS sections consume
-  // no space in the file so their load address is normally unimportant.
-  // Following GNU ld we permit the load address of a SHT_PROGBITS section
-  // to overlap the load address of a SHT_NOBITS section. This is used
-  // by embedded systems that copy the SHT_PROGBITS sections to a
-  // non-overlapping VMA before the SHT_NOBITS section is zero-initialized.
-  std::vector<SectionOffset> lmas;
-  for (OutputSection *sec : ctx.outputSections)
-    if (sec->size > 0 && (sec->type != SHT_NOBITS) &&
-        (sec->flags & SHF_ALLOC) && !(sec->flags & SHF_TLS))
-      lmas.push_back({sec, sec->getLMA()});
   checkOverlap(ctx, "load address", lmas, false);
 }
 
@@ -2946,19 +2934,14 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
 template <class ELFT> void Writer<ELFT>::writeSections() {
   llvm::TimeTraceScope timeScope("Write sections");
 
-  {
-    // In -r or --emit-relocs mode, write the relocation sections first as in
-    // ELf_Rel targets we might find out that we need to modify the relocated
-    // section while doing it.
+  // In -r or --emit-relocs mode, static relocation sections must be written
+  // before their targets: on Elf_Rel targets, writing relocations can modify
+  // the relocated section. Each pass has its own TaskGroup so its work finishes
+  // before the next pass begins.
+  for (bool staticRelocs : {true, false}) {
     parallel::TaskGroup tg;
     for (OutputSection *sec : ctx.outputSections)
-      if (isStaticRelSecType(sec->type))
-        sec->writeTo<ELFT>(ctx, ctx.bufferStart + sec->offset, tg);
-  }
-  {
-    parallel::TaskGroup tg;
-    for (OutputSection *sec : ctx.outputSections)
-      if (!isStaticRelSecType(sec->type))
+      if (isStaticRelSecType(sec->type) == staticRelocs)
         sec->writeTo<ELFT>(ctx, ctx.bufferStart + sec->offset, tg);
   }
 
