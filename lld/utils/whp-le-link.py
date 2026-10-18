@@ -302,7 +302,7 @@ def link(inputs, name, ddb, vxd_id=0):
     struct.pack_into('<HH', output, header + 8, 2, 4)
     write32(output, header + 0x10, 0x38000)
     write32(output, header + 0x28, PAGE)
-    struct.pack_into('<HH', output, header + 0xC0, vxd_id, 0x030A)
+    struct.pack_into('<HH', output, header + 0xC0, vxd_id, 0x0400)
     write32(output, header + 0x40, len(output) - header)
     write32(output, header + 0x44, len(objects))
 
