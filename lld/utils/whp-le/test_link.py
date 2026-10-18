@@ -37,6 +37,7 @@ class WriterTests(unittest.TestCase):
             self.assertEqual(img[0x80:0x82], b"LE")
             self.assertEqual(struct.unpack_from("<H", img, 0x8A)[0], 4)
             self.assertEqual(struct.unpack_from("<I", img, 0x90)[0], 0x38000)
+            self.assertEqual(struct.unpack_from("<H", img, 0x80 + 0xC2)[0], 0x0400)
             entry = struct.unpack_from("<I", img, 0x80 + 0x5C)[0] + 0x80
             self.assertEqual(img[entry:entry + 2], b"\x01\x03")
             self.assertEqual(struct.unpack_from("<H", img, entry + 2)[0], 1)
