@@ -154,10 +154,12 @@ static std::optional<StringRef> findFramework(StringRef name) {
 
 static bool warnIfNotDirectory(StringRef option, StringRef path) {
   if (!fs::exists(path)) {
-    warn("directory not found for option -" + option + path);
+    warn("ignoring -" + option + " search directory '" + path +
+         "': path does not exist; supply an existing directory");
     return false;
   } else if (!fs::is_directory(path)) {
-    warn("option -" + option + path + " references a non-directory path");
+    warn("ignoring -" + option + " search directory '" + path +
+         "': path is not a directory");
     return false;
   }
   return true;
