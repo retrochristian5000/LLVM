@@ -27,6 +27,10 @@ static_assert(std::is_same_v<
 static_assert(std::is_same_v<
               decltype(&ASTStructExtractor::shouldSkipFunctionBody),
               bool (ASTStructExtractor::*)(clang::Decl *)>);
+static_assert(std::is_same_v<
+              decltype(&ASTStructExtractor::HandleOpenACCRoutineReference),
+              void (ASTStructExtractor::*)(const clang::FunctionDecl *,
+                                           const clang::OpenACCRoutineDecl *)>);
 
 TEST(ASTStructExtractorTest, ValidWrapperLayout) {
   // A pointer, one argument, then a four-byte return slot.
