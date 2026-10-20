@@ -9,18 +9,18 @@
 #ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_ASTSTRUCTEXTRACTOR_H
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_ASTSTRUCTEXTRACTOR_H
 
-#include "ClangExpressionVariable.h"
-#include "ClangFunctionCaller.h"
-
 #include "clang/Sema/SemaConsumer.h"
 #include "llvm/ADT/ArrayRef.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace lldb_private {
+
+class ClangFunctionCaller;
 
 /// \class ASTStructExtractor ASTStructExtractor.h
 /// "lldb/Expression/ASTStructExtractor.h" Extracts and describes the argument
