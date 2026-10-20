@@ -11,6 +11,8 @@
 #include "Plugins/Platform/MacOSX/PlatformRemoteMacOSX.h"
 #include "TestingSupport/TestUtilities.h"
 #include "lldb/Core/Debugger.h"
+#include "lldb/Interpreter/CommandInterpreter.h"
+#include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Target/ExecutionContext.h"
@@ -113,6 +115,39 @@ TEST_F(DiagnosticsTest, ArtifactProviderContributesToBundle) {
     llvm::sys::fs::remove_directories(dir->GetPath());
   }
 
+  Debugger::Destroy(debugger_sp);
+}
+
+TEST_F(DiagnosticsTest, CapturesCommandOutputAndError) {
+  DebuggerSP debugger_sp = Debugger::CreateInstance();
+  ASSERT_TRUE(debugger_sp);
+
+  // Exercise Diagnostics::CaptureCommand through the public bundle API.
+  // GetOutputString() is StringRef and GetErrorString() is std::string:
+  // neither stream may be dropped or reordered by concatenation.
+  CommandReturnObject command_result(/*colors=*/false);
+  debugger_sp->GetCommandInterpreter().HandleCommand(
+      "target list", eLazyBoolNo, command_result);
+  std::string expected = "=== target list ===\\n";
+  llvm::StringRef output = command_result.GetOutputString();
+  expected.append(output.data(), output.size());
+  expected += command_result.GetErrorString();
+  expected += "\\n\\n";
+
+  Diagnostics diagnostics;
+  ExecutionContext exe_ctx;
+  llvm::Expected<FileSpec> dir = Diagnostics::CreateUniqueDirectory();
+  ASSERT_THAT_EXPECTED(dir, llvm::Succeeded());
+  llvm::Expected<Diagnostics::Report> report =
+      diagnostics.Collect(*debugger_sp, exe_ctx, *dir);
+  ASSERT_THAT_EXPECTED(report, llvm::Succeeded());
+
+  std::string commands = ReadBundleFile(*dir, "commands.txt");
+  EXPECT_TRUE(llvm::StringRef(commands).starts_with(expected))
+      << "expected diagnostic command capture: " << expected
+      << "\\nactual capture: " << commands;
+
+  llvm::sys::fs::remove_directories(dir->GetPath());
   Debugger::Destroy(debugger_sp);
 }
 
