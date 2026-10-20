@@ -15,6 +15,7 @@
 #include "clang/Sema/SemaConsumer.h"
 #include "llvm/ADT/ArrayRef.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -51,7 +52,7 @@ public:
   static std::optional<WrapperLayout>
   ValidateWrapperLayout(uint64_t struct_size, uint64_t data_size,
                         llvm::ArrayRef<uint64_t> field_offset_bits,
-                        size_t argument_count, unsigned char_width);
+                        size_t argument_count, uint64_t char_width);
 
   /// Constructor
   ///
