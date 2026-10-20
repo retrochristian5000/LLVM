@@ -250,7 +250,7 @@ bool ASTStructExtractor::shouldSkipFunctionBody(Decl *D) {
   // The wrapper's body contains the only available argument struct layout.
   // It must be parsed even when the underlying consumer permits body skipping.
   if (auto *function = dyn_cast_or_null<FunctionDecl>(D))
-    if (function->getName() == m_function.m_wrapper_function_name)
+    if (function->getName() == StringRef(m_function.m_wrapper_function_name))
       return false;
 
   return m_passthrough ? m_passthrough->shouldSkipFunctionBody(D)
