@@ -68,15 +68,15 @@ CompilerType ClangASTImporter::CopyType(TypeSystemClang &dst_ast,
 
 clang::Decl *ClangASTImporter::CopyDecl(clang::ASTContext *dst_ast,
                                         clang::Decl *decl) {
-  ImporterDelegateSP delegate_sp;
+  if (!dst_ast || !decl)
+    return nullptr;
 
   clang::ASTContext *src_ast = &decl->getASTContext();
-  delegate_sp = GetDelegate(dst_ast, src_ast);
-
-  ASTImporterDelegate::CxxModuleScope std_scope(*delegate_sp, dst_ast);
-
+  ImporterDelegateSP delegate_sp = GetDelegate(dst_ast, src_ast);
   if (!delegate_sp)
     return nullptr;
+
+  ASTImporterDelegate::CxxModuleScope std_scope(*delegate_sp, dst_ast);
 
   llvm::Expected<clang::Decl *> result = delegate_sp->Import(decl);
   if (!result) {
