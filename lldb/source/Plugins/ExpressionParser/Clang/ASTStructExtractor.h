@@ -103,6 +103,9 @@ public:
   void CompleteExternalDeclaration(clang::DeclaratorDecl *D) override;
   void AssignInheritanceModel(clang::CXXRecordDecl *RD) override;
   void HandleCXXStaticMemberVarInstantiation(clang::VarDecl *D) override;
+  void HandleOpenACCRoutineReference(
+      const clang::FunctionDecl *FD,
+      const clang::OpenACCRoutineDecl *RD) override;
   clang::ASTMutationListener *GetASTMutationListener() override;
   clang::ASTDeserializationListener *GetASTDeserializationListener() override;
   bool shouldSkipFunctionBody(clang::Decl *D) override;
