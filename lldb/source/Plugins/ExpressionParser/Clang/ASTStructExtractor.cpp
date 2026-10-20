@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ASTStructExtractor.h"
+#include "ClangFunctionCaller.h"
 
 #include "lldb/Utility/Log.h"
 #include "clang/AST/ASTContext.h"
