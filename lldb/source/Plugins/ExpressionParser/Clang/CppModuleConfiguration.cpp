@@ -81,8 +81,12 @@ bool CppModuleConfiguration::analyzeFile(const FileSpec &f,
 
     posix_dir.consume_back("c++/v1");
     // Check if this is a target-specific libc++ include directory.
-    return m_std_target_inc.TrySet(
-        (posix_dir + triple.str() + "/c++/v1").str());
+    // Explicitly append the std::string triple: C++26 string concatenation
+    // overloads can make the expression a std::string with no .str() method.
+    std::string target_include_path = posix_dir.str();
+    target_include_path += triple.str();
+    target_include_path += "/c++/v1";
+    return m_std_target_inc.TrySet(target_include_path);
   }
 
   std::optional<llvm::StringRef> inc_path;
