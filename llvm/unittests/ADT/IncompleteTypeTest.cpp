@@ -19,6 +19,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "gtest/gtest.h"
 
+#include <memory>
 #include <type_traits>
 
 namespace {
@@ -36,6 +37,13 @@ static_assert(sizeof(llvm::SmallPtrSet<ForwardNode *, 4>) > 0);
 static_assert(sizeof(llvm::SmallVector<ForwardNode *, 2>) > 0);
 static_assert(sizeof(llvm::ArrayRef<ForwardNode>) == 2 * sizeof(void *));
 static_assert(llvm::is_incomplete_v<NeverCompleted>);
+
+// A shared_ptr may own a never-completed type. This exercises the libc++
+// <memory> inclusion path (including shared_ptr.h / unique_ptr.h) alongside
+// ADT containers without requiring default_delete<NeverCompleted>.
+static_assert(std::is_default_constructible_v<std::shared_ptr<NeverCompleted>>);
+static_assert(std::is_copy_constructible_v<std::shared_ptr<NeverCompleted>>);
+static_assert(sizeof(llvm::SmallVector<std::shared_ptr<NeverCompleted>, 2>) > 0);
 
 struct alignas(8) ForwardNode {
   int Value = 0;
@@ -71,6 +79,19 @@ TEST(IncompleteTypeTest, ForwardDeclaredPointerContainers) {
   llvm::ArrayRef<ForwardNode> Ref(First);
   EXPECT_EQ(Ref.size(), 1u);
   EXPECT_EQ(&Ref.front(), &First);
+}
+
+
+// Destruction of a shared_ptr does not need a complete pointee, unlike
+// destruction of a default-deleting unique_ptr. NeverCompleted intentionally
+// remains forward-declared through this test.
+TEST(IncompleteTypeTest, SharedPtrWithNeverCompletedPointee) {
+  llvm::SmallVector<std::shared_ptr<NeverCompleted>, 2> Owners;
+  Owners.emplace_back();
+  Owners.push_back(Owners.front());
+  EXPECT_EQ(Owners.size(), 2u);
+  EXPECT_FALSE(Owners.front());
+  EXPECT_EQ(Owners.back().use_count(), 0);
 }
 
 } // namespace
