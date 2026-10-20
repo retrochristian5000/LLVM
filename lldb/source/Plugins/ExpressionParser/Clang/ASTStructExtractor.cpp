@@ -188,6 +188,75 @@ bool ASTStructExtractor::HandleTopLevelDecl(DeclGroupRef D) {
   return true;
 }
 
+// The wrapper is an ASTConsumer in front of CodeGen. When Clang calls a
+// callback other than HandleTopLevelDecl, preserve the downstream consumer's
+// notification rather than silently accepting AST events on its behalf.
+void ASTStructExtractor::HandleInlineFunctionDefinition(FunctionDecl *D) {
+  if (m_passthrough)
+    m_passthrough->HandleInlineFunctionDefinition(D);
+}
+
+void ASTStructExtractor::HandleInterestingDecl(DeclGroupRef D) {
+  for (Decl *decl : D)
+    ExtractFromTopLevelDecl(decl);
+  if (m_passthrough)
+    m_passthrough->HandleInterestingDecl(D);
+}
+
+void ASTStructExtractor::HandleTagDeclRequiredDefinition(const TagDecl *D) {
+  if (m_passthrough)
+    m_passthrough->HandleTagDeclRequiredDefinition(D);
+}
+
+void ASTStructExtractor::HandleCXXImplicitFunctionInstantiation(FunctionDecl *D) {
+  if (m_passthrough)
+    m_passthrough->HandleCXXImplicitFunctionInstantiation(D);
+}
+
+void ASTStructExtractor::HandleTopLevelDeclInObjCContainer(DeclGroupRef D) {
+  if (m_passthrough)
+    m_passthrough->HandleTopLevelDeclInObjCContainer(D);
+}
+
+void ASTStructExtractor::HandleImplicitImportDecl(ImportDecl *D) {
+  if (m_passthrough)
+    m_passthrough->HandleImplicitImportDecl(D);
+}
+
+void ASTStructExtractor::CompleteExternalDeclaration(DeclaratorDecl *D) {
+  if (m_passthrough)
+    m_passthrough->CompleteExternalDeclaration(D);
+}
+
+void ASTStructExtractor::AssignInheritanceModel(CXXRecordDecl *RD) {
+  if (m_passthrough)
+    m_passthrough->AssignInheritanceModel(RD);
+}
+
+void ASTStructExtractor::HandleCXXStaticMemberVarInstantiation(VarDecl *D) {
+  if (m_passthrough)
+    m_passthrough->HandleCXXStaticMemberVarInstantiation(D);
+}
+
+ASTMutationListener *ASTStructExtractor::GetASTMutationListener() {
+  return m_passthrough ? m_passthrough->GetASTMutationListener() : nullptr;
+}
+
+ASTDeserializationListener *ASTStructExtractor::GetASTDeserializationListener() {
+  return m_passthrough ? m_passthrough->GetASTDeserializationListener() : nullptr;
+}
+
+bool ASTStructExtractor::shouldSkipFunctionBody(Decl *D) {
+  // The wrapper's body contains the only available argument struct layout.
+  // It must be parsed even when the underlying consumer permits body skipping.
+  if (auto *function = dyn_cast_or_null<FunctionDecl>(D))
+    if (function->getName() == m_function.m_wrapper_function_name)
+      return false;
+
+  return m_passthrough ? m_passthrough->shouldSkipFunctionBody(D)
+                       : SemaConsumer::shouldSkipFunctionBody(D);
+}
+
 void ASTStructExtractor::HandleTranslationUnit(ASTContext &Ctx) {
   if (m_passthrough)
     m_passthrough->HandleTranslationUnit(Ctx);
