@@ -1326,60 +1326,58 @@ bool ClangExpressionDeclMap::LookupFunction(
   }
 
   bool found_function_with_type_info = false;
+  const Symbol *extern_symbol = nullptr;
+  const Symbol *non_extern_symbol = nullptr;
 
-  if (sc_list.GetSize()) {
-    const Symbol *extern_symbol = nullptr;
-    const Symbol *non_extern_symbol = nullptr;
+  for (const SymbolContext &sym_ctx : sc_list) {
+    if (sym_ctx.function) {
+      CompilerDeclContext decl_ctx = sym_ctx.function->GetDeclContext();
+      if (!decl_ctx || decl_ctx.IsClassMethod())
+        continue;
 
-    for (const SymbolContext &sym_ctx : sc_list) {
-      if (sym_ctx.function) {
-        CompilerDeclContext decl_ctx = sym_ctx.function->GetDeclContext();
-
-        if (!decl_ctx)
+      // A function with unusable type information can fail to produce a
+      // parser declaration. Do not suppress the module/symbol fallback.
+      size_t previous_count = context.m_decls.size();
+      AddOneFunction(context, sym_ctx.function, nullptr);
+      found_function_with_type_info |= context.m_decls.size() > previous_count;
+    } else if (sym_ctx.symbol) {
+      const Symbol *symbol = sym_ctx.symbol;
+      if (target && symbol->GetType() == eSymbolTypeReExported) {
+        symbol = symbol->ResolveReExportedSymbol(*target);
+        if (!symbol)
           continue;
+      }
 
-        // Filter out class/instance methods.
-        if (decl_ctx.IsClassMethod())
+      if (symbol->IsExternal())
+        extern_symbol = symbol;
+      else
+        non_extern_symbol = symbol;
+    }
+  }
+
+  // Module declarations are independent of SymbolContextList. A function
+  // provided only by a Clang module must remain visible when no symbols or
+  // debug-info function contexts exist.
+  if (!found_function_with_type_info) {
+    for (const CompilerDecl &compiler_decl : decls_from_modules) {
+      clang::Decl *decl = ClangUtil::GetDecl(compiler_decl);
+      if (auto *function = llvm::dyn_cast_or_null<FunctionDecl>(decl)) {
+        auto *copied_function =
+            llvm::dyn_cast_or_null<FunctionDecl>(CopyDecl(function));
+        if (!copied_function)
           continue;
-
-        AddOneFunction(context, sym_ctx.function, nullptr);
+        MaybeRegisterFunctionBody(copied_function);
+        context.AddNamedDecl(copied_function);
         found_function_with_type_info = true;
-      } else if (sym_ctx.symbol) {
-        const Symbol *symbol = sym_ctx.symbol;
-        if (target && symbol->GetType() == eSymbolTypeReExported) {
-          symbol = symbol->ResolveReExportedSymbol(*target);
-          if (symbol == nullptr)
-            continue;
-        }
-
-        if (symbol->IsExternal())
-          extern_symbol = symbol;
-        else
-          non_extern_symbol = symbol;
       }
     }
+  }
 
-    if (!found_function_with_type_info) {
-      for (const CompilerDecl &compiler_decl : decls_from_modules) {
-        clang::Decl *decl = ClangUtil::GetDecl(compiler_decl);
-        if (llvm::isa_and_nonnull<clang::FunctionDecl>(decl)) {
-          clang::NamedDecl *copied_decl =
-              llvm::cast_or_null<FunctionDecl>(CopyDecl(decl));
-          if (copied_decl) {
-            context.AddNamedDecl(copied_decl);
-            found_function_with_type_info = true;
-          }
-        }
-      }
-    }
-
-    if (!found_function_with_type_info) {
-      if (extern_symbol) {
-        AddOneFunction(context, nullptr, extern_symbol);
-      } else if (non_extern_symbol) {
-        AddOneFunction(context, nullptr, non_extern_symbol);
-      }
-    }
+  if (!found_function_with_type_info) {
+    if (extern_symbol)
+      AddOneFunction(context, nullptr, extern_symbol);
+    else if (non_extern_symbol)
+      AddOneFunction(context, nullptr, non_extern_symbol);
   }
 
   return found_function_with_type_info;
