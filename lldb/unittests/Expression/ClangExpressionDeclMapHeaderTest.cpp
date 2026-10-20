@@ -23,6 +23,5 @@ static_assert(sizeof(ClangExpressionDeclMap) > 0);
 static_assert(sizeof(ClangExpressionVariable) > 0);
 static_assert(std::is_destructible_v<ClangExpressionDeclMap>);
 static_assert(std::is_destructible_v<ClangExpressionVariable>);
-static_assert(std::is_same_v<decltype(std::make_unique<ClangExpressionDeclMap>()),
-                             std::unique_ptr<ClangExpressionDeclMap>> == false,
-              "DeclMap must not be implicitly default constructible");
+static_assert(!std::is_default_constructible_v<ClangExpressionDeclMap>,
+              "Declaration map requires an importer and target context");
