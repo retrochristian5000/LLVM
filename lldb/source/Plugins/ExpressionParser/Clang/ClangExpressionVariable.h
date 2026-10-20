@@ -9,7 +9,7 @@
 #ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONVARIABLE_H
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONVARIABLE_H
 
-#include <csignal>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
