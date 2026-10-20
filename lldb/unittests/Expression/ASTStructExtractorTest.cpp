@@ -11,8 +11,22 @@
 
 #include <array>
 #include <cstdint>
+#include <type_traits>
 
 using lldb_private::ASTStructExtractor;
+
+// A standalone include of ASTStructExtractor.h must expose the Clang callback
+// signatures without importing the implementation-only function-caller header.
+static_assert(std::is_base_of_v<clang::SemaConsumer, ASTStructExtractor>);
+static_assert(std::is_same_v<
+              decltype(&ASTStructExtractor::HandleInlineFunctionDefinition),
+              void (ASTStructExtractor::*)(clang::FunctionDecl *)>);
+static_assert(std::is_same_v<
+              decltype(&ASTStructExtractor::HandleTagDeclRequiredDefinition),
+              void (ASTStructExtractor::*)(const clang::TagDecl *)>);
+static_assert(std::is_same_v<
+              decltype(&ASTStructExtractor::shouldSkipFunctionBody),
+              bool (ASTStructExtractor::*)(clang::Decl *)>);
 
 TEST(ASTStructExtractorTest, ValidWrapperLayout) {
   // A pointer, one argument, then a four-byte return slot.
@@ -52,6 +66,7 @@ TEST(ASTStructExtractorTest, RejectMalformedRecordLayouts) {
   constexpr std::array<uint64_t, 3> fields = {0, 64, 128};
   constexpr std::array<uint64_t, 3> unaligned = {0, 65, 128};
   constexpr std::array<uint64_t, 3> overlapping = {0, 64, 64};
+  constexpr std::array<uint64_t, 3> wrong_first_offset = {8, 64, 128};
 
   EXPECT_FALSE(ASTStructExtractor::ValidateWrapperLayout(24, 20, empty, 0, 8));
   EXPECT_FALSE(
@@ -64,4 +79,6 @@ TEST(ASTStructExtractorTest, RejectMalformedRecordLayouts) {
   EXPECT_FALSE(ASTStructExtractor::ValidateWrapperLayout(24, 20, fields, 1, 0));
   EXPECT_FALSE(ASTStructExtractor::ValidateWrapperLayout(24, 16, fields, 1, 8));
   EXPECT_FALSE(ASTStructExtractor::ValidateWrapperLayout(20, 24, fields, 1, 8));
+  EXPECT_FALSE(ASTStructExtractor::ValidateWrapperLayout(
+      24, 20, wrong_first_offset, 1, 8));
 }
