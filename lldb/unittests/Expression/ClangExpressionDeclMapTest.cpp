@@ -14,6 +14,8 @@
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/lldb-defines.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/AST/Decl.h"
 #include "gtest/gtest.h"
 
 using namespace lldb_private;
@@ -125,4 +127,25 @@ TEST_F(ClangExpressionDeclMapTest, TestPersistentDeclLookup) {
   auto *record = llvm::cast<clang::RecordDecl>(decls.front());
   // The class was minimally imported from the scratch AST context.
   EXPECT_TRUE(record->hasExternalLexicalStorage());
+}
+
+TEST_F(ClangExpressionDeclMapTest, NamespaceWithoutImporterMapping) {
+  // Clang's parser may construct a namespace that has no corresponding
+  // imported module or debug-info namespace.  Its missing map must be an
+  // ordinary lookup miss (including when expression logging is verbose).
+  clang::ASTContext &ast = target_ast->getASTContext();
+  clang::NamespaceDecl *ns = clang::NamespaceDecl::Create(
+      ast, target_ast->GetTranslationUnitDecl(), /*Inline=*/false,
+      clang::SourceLocation(), clang::SourceLocation(),
+      &ast.Idents.get("unmapped"), /*PrevDecl=*/nullptr, /*Nested=*/false);
+  target_ast->GetTranslationUnitDecl()->addDecl(ns);
+  ASSERT_FALSE(importer->GetNamespaceMap(ns));
+
+  llvm::SmallVector<clang::NamedDecl *, 16> decls;
+  clang::DeclarationName name =
+      clang_utils::getDeclarationName(*target_ast, "not_in_debug_info");
+  NameSearchContext search(*target_ast, decls, name, ns);
+
+  decl_map->FindExternalVisibleDecls(search);
+  EXPECT_TRUE(decls.empty());
 }
