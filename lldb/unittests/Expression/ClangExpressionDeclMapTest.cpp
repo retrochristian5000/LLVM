@@ -158,8 +158,7 @@ TEST_F(ClangExpressionDeclMapTest, TargetlessPersistentVariableIsRejected) {
   ExecutionContext exe_ctx;
   ASSERT_TRUE(decl_map->WillParse(exe_ctx, nullptr));
 
-  TypeFromParser parser_type(
-      target_ast->GetBasicType(lldb::eBasicTypeInt));
+  TypeFromParser parser_type;
   EXPECT_FALSE(decl_map->AddPersistentVariable(
       nullptr, ConstString("$missing"), parser_type,
       /*is_result=*/false, /*is_lvalue=*/false));
