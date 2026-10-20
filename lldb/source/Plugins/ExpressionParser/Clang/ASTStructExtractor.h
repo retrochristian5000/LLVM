@@ -92,6 +92,21 @@ public:
   ///     TransformTopLevelDecl.
   bool HandleTopLevelDecl(clang::DeclGroupRef D) override;
 
+  // Preserve Clang ASTConsumer notifications while wrapping the code
+  // generator. These callbacks are not forwarded by SemaConsumer itself.
+  void HandleInlineFunctionDefinition(clang::FunctionDecl *D) override;
+  void HandleInterestingDecl(clang::DeclGroupRef D) override;
+  void HandleTagDeclRequiredDefinition(const clang::TagDecl *D) override;
+  void HandleCXXImplicitFunctionInstantiation(clang::FunctionDecl *D) override;
+  void HandleTopLevelDeclInObjCContainer(clang::DeclGroupRef D) override;
+  void HandleImplicitImportDecl(clang::ImportDecl *D) override;
+  void CompleteExternalDeclaration(clang::DeclaratorDecl *D) override;
+  void AssignInheritanceModel(clang::CXXRecordDecl *RD) override;
+  void HandleCXXStaticMemberVarInstantiation(clang::VarDecl *D) override;
+  clang::ASTMutationListener *GetASTMutationListener() override;
+  clang::ASTDeserializationListener *GetASTDeserializationListener() override;
+  bool shouldSkipFunctionBody(clang::Decl *D) override;
+
   /// Passthrough stub
   void HandleTranslationUnit(clang::ASTContext &Ctx) override;
 
