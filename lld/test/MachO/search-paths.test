@@ -15,3 +15,11 @@ CHECK_Z:      Library search paths:
 CHECK_Z-NEXT: [[LDIR]]
 CHECK_Z-NEXT: Framework search paths:
 CHECK_Z-NEXT: [[FDIR]]
+
+# Invalid search directories are omitted from the link; distinguish missing
+# paths from existing files and name the offending -L/-F option.
+RUN: touch %t1/not-a-directory
+RUN: %no-lsystem-lld -dylib -o /dev/null -L%t1/missing -F%t1/not-a-directory 2>&1 \
+RUN:     | FileCheck -DMISSING=%t1/missing -DFILE=%t1/not-a-directory --check-prefix=PATH-DIAG %s
+PATH-DIAG: warning: ignoring -L search directory '[[MISSING]]': path does not exist; supply an existing directory
+PATH-DIAG: warning: ignoring -F search directory '[[FILE]]': path is not a directory
