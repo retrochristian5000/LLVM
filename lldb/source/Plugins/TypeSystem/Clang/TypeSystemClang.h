@@ -1262,7 +1262,10 @@ class ScratchTypeSystemClang : public TypeSystemClang {
 public:
   ScratchTypeSystemClang(Target &target, llvm::Triple triple);
 
-  ~ScratchTypeSystemClang() override = default;
+  // Defined out-of-line: these members own incomplete types in this header
+  // (ClangPersistentVariables and ClangASTSource). Instantiating their
+  // unique_ptr destructors here triggers libc++ default_delete's sizeof(T).
+  ~ScratchTypeSystemClang() override;
 
   void Finalize() override;
 
