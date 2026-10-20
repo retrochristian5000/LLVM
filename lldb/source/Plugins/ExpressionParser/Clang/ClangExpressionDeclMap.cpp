@@ -184,7 +184,6 @@ void ClangExpressionDeclMap::DidParse() {
               llvm::dyn_cast<ClangExpressionVariable>(pvar_sp.get()))
         clang_var->DisableParserVars(GetParserID());
     }
-
   }
 
   // Parser state exists even for expressions without a target or when setup
