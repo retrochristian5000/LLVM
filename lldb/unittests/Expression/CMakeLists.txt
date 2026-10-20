@@ -13,6 +13,7 @@ add_lldb_unittest(ExpressionTests
   CppModuleConfigurationTest.cpp
   ExpressionTest.cpp
   IRMemoryMapTest.cpp
+  ScratchTypeSystemClangHeaderTest.cpp
   ValueMatcher.cpp
 
   LINK_COMPONENTS
