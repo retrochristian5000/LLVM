@@ -133,11 +133,17 @@ bool ClangExpressionDeclMap::WillParse(ExecutionContext &exe_ctx,
   }
 
   if (target) {
-    m_parser_vars->m_persistent_vars = llvm::cast<ClangPersistentVariables>(
-        target->GetPersistentExpressionStateForLanguage(eLanguageTypeC));
-
-    if (!ScratchTypeSystemClang::GetForTarget(*target))
+    // A target may have no compatible persistent state (or its scratch
+    // type system may fail to initialize). Do not leave a half-initialized
+    // parser behind when either dependency is unavailable.
+    m_parser_vars->m_persistent_vars =
+        llvm::dyn_cast_or_null<ClangPersistentVariables>(
+            target->GetPersistentExpressionStateForLanguage(eLanguageTypeC));
+    if (!m_parser_vars->m_persistent_vars ||
+        !ScratchTypeSystemClang::GetForTarget(*target)) {
+      DidParse();
       return false;
+    }
   }
 
   m_parser_vars->m_target_info = GetTargetInfo();
@@ -179,8 +185,11 @@ void ClangExpressionDeclMap::DidParse() {
         clang_var->DisableParserVars(GetParserID());
     }
 
-    DisableParserVars();
   }
+
+  // Parser state exists even for expressions without a target or when setup
+  // fails before a persistent-variable store is available.
+  DisableParserVars();
 }
 
 // Interface for IRForTarget
@@ -223,7 +232,9 @@ bool ClangExpressionDeclMap::AddPersistentVariable(const NamedDecl *decl,
                                                    TypeFromParser parser_type,
                                                    bool is_result,
                                                    bool is_lvalue) {
-  assert(m_parser_vars.get());
+  if (!m_parser_vars || !m_parser_vars->m_persistent_vars)
+    return false;
+
   auto ast = parser_type.GetTypeSystem<TypeSystemClang>();
   if (ast == nullptr)
     return false;
@@ -233,8 +244,9 @@ bool ClangExpressionDeclMap::AddPersistentVariable(const NamedDecl *decl,
           m_parser_vars->m_persistent_vars->GetVariable(name)) {
     std::string msg = llvm::formatv("redefinition of persistent variable '{0}'",
                                     name).str();
-    m_parser_vars->m_diagnostics->AddDiagnostic(
-        msg, lldb::eSeverityError, DiagnosticOrigin::eDiagnosticOriginLLDB);
+    if (m_parser_vars->m_diagnostics)
+      m_parser_vars->m_diagnostics->AddDiagnostic(
+          msg, lldb::eSeverityError, DiagnosticOrigin::eDiagnosticOriginLLDB);
     return false;
   }
 
@@ -301,14 +313,13 @@ bool ClangExpressionDeclMap::AddPersistentVariable(const NamedDecl *decl,
   if (!m_parser_vars->m_persistent_vars)
     return false;
 
-  ClangExpressionVariable *var = llvm::cast<ClangExpressionVariable>(
-      m_parser_vars->m_persistent_vars
-          ->CreatePersistentVariable(
-              exe_ctx.GetBestExecutionContextScope(), name, user_type,
-              m_parser_vars->m_target_info.byte_order,
-              m_parser_vars->m_target_info.address_byte_size)
-          .get());
-
+  ExpressionVariableSP var_sp =
+      m_parser_vars->m_persistent_vars->CreatePersistentVariable(
+          exe_ctx.GetBestExecutionContextScope(), name, user_type,
+          m_parser_vars->m_target_info.byte_order,
+          m_parser_vars->m_target_info.address_byte_size);
+  ClangExpressionVariable *var =
+      llvm::dyn_cast_or_null<ClangExpressionVariable>(var_sp.get());
   if (!var)
     return false;
 
