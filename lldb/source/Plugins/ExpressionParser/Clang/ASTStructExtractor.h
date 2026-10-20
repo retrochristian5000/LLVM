@@ -13,6 +13,11 @@
 #include "ClangFunctionCaller.h"
 
 #include "clang/Sema/SemaConsumer.h"
+#include "llvm/ADT/ArrayRef.h"
+
+#include <cstdint>
+#include <optional>
+#include <vector>
 
 namespace lldb_private {
 
@@ -32,6 +37,22 @@ namespace lldb_private {
 /// reads through the AST for the wrapper function and finds the struct.
 class ASTStructExtractor : public clang::SemaConsumer {
 public:
+  /// Checked byte offsets for the ClangFunctionCaller wrapper layout.
+  struct WrapperLayout {
+    uint64_t struct_size;
+    uint64_t return_offset;
+    uint64_t return_size;
+    std::vector<uint64_t> member_offsets;
+  };
+
+  /// Reject incomplete, misaligned, empty, or incompatible wrapper layouts.
+  /// The wrapper consists of a function pointer, N arguments, and a return
+  /// slot, in that order. Offsets are in target bits, sizes in target bytes.
+  static std::optional<WrapperLayout>
+  ValidateWrapperLayout(uint64_t struct_size, uint64_t data_size,
+                        llvm::ArrayRef<uint64_t> field_offset_bits,
+                        size_t argument_count, unsigned char_width);
+
   /// Constructor
   ///
   /// \param[in] passthrough
