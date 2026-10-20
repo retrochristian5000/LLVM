@@ -239,6 +239,12 @@ void ASTStructExtractor::HandleCXXStaticMemberVarInstantiation(VarDecl *D) {
     m_passthrough->HandleCXXStaticMemberVarInstantiation(D);
 }
 
+void ASTStructExtractor::HandleOpenACCRoutineReference(
+    const FunctionDecl *FD, const OpenACCRoutineDecl *RD) {
+  if (m_passthrough)
+    m_passthrough->HandleOpenACCRoutineReference(FD, RD);
+}
+
 ASTMutationListener *ASTStructExtractor::GetASTMutationListener() {
   return m_passthrough ? m_passthrough->GetASTMutationListener() : nullptr;
 }
