@@ -173,3 +173,16 @@ TEST_F(ClangExpressionDeclMapTest, TargetlessPersistentVariableIsRejected) {
       nullptr, ConstString("$missing"), parser_type, false, false));
   decl_map->DidParse();
 }
+
+TEST_F(ClangExpressionDeclMapTest, ImporterRejectsNullDeclCalls) {
+  // The declaration-map CopyDecl path must reject a missing declaration or
+  // destination AST *before* constructing a scoped importer delegate.
+  CompilerType source_type =
+      clang_utils::createRecord(*decl_map->m_scratch_context, "SourceRecord");
+  auto *source_decl = ClangUtil::GetAsTagDecl(source_type);
+  ASSERT_NE(source_decl, nullptr);
+
+  EXPECT_EQ(importer->CopyDecl(&target_ast->getASTContext(), nullptr), nullptr);
+  EXPECT_EQ(importer->CopyDecl(nullptr, source_decl), nullptr);
+  EXPECT_EQ(importer->CopyDecl(nullptr, nullptr), nullptr);
+}
