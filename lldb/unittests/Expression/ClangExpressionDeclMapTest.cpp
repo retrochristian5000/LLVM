@@ -13,6 +13,7 @@
 #include "TestingSupport/Symbol/ClangTestUtils.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
+#include "lldb/Target/ExecutionContext.h"
 #include "lldb/lldb-defines.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -148,4 +149,28 @@ TEST_F(ClangExpressionDeclMapTest, NamespaceWithoutImporterMapping) {
 
   decl_map->FindExternalVisibleDecls(search);
   EXPECT_TRUE(decls.empty());
+}
+
+TEST_F(ClangExpressionDeclMapTest, TargetlessPersistentVariableIsRejected) {
+  // Parsing without a target may be needed for AST-only queries. There is no
+  // persistent variable store in that case: the IR callback must fail
+  // gracefully, not dereference a null persistent-variable pointer.
+  ExecutionContext exe_ctx;
+  ASSERT_TRUE(decl_map->WillParse(exe_ctx, nullptr));
+
+  TypeFromParser parser_type(
+      target_ast->GetBasicType(lldb::eBasicTypeInt));
+  EXPECT_FALSE(decl_map->AddPersistentVariable(
+      nullptr, ConstString("$missing"), parser_type,
+      /*is_result=*/false, /*is_lvalue=*/false));
+
+  // A missing persistent-variable store must not block parser teardown or
+  // cause the next AST-only parsing session to inherit stale parser state.
+  decl_map->DidParse();
+  EXPECT_FALSE(decl_map->AddPersistentVariable(
+      nullptr, ConstString("$missing"), parser_type, false, false));
+  ASSERT_TRUE(decl_map->WillParse(exe_ctx, nullptr));
+  EXPECT_FALSE(decl_map->AddPersistentVariable(
+      nullptr, ConstString("$missing"), parser_type, false, false));
+  decl_map->DidParse();
 }
