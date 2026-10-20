@@ -26,6 +26,38 @@ using namespace llvm;
 using namespace clang;
 using namespace lldb_private;
 
+std::optional<ASTStructExtractor::WrapperLayout>
+ASTStructExtractor::ValidateWrapperLayout(
+    uint64_t struct_size, uint64_t data_size,
+    ArrayRef<uint64_t> field_offset_bits, size_t argument_count,
+    unsigned char_width) {
+  // The first member is a function pointer and the last one is the result.
+  // Never evaluate getFieldOffset(field_count - 1) for an empty record.
+  if (field_offset_bits.size() < 2 ||
+      argument_count != field_offset_bits.size() - 2 ||
+      char_width == 0 || data_size == 0 || data_size > struct_size)
+    return std::nullopt;
+
+  WrapperLayout result{struct_size, 0, 0, {}};
+  result.member_offsets.reserve(field_offset_bits.size());
+
+  for (uint64_t bit_offset : field_offset_bits) {
+    if (bit_offset % char_width)
+      return std::nullopt;
+    uint64_t byte_offset = bit_offset / char_width;
+    // The synthesized wrapper contains ordinary, non-overlapping members.
+    if (byte_offset >= data_size ||
+        (!result.member_offsets.empty() &&
+         byte_offset <= result.member_offsets.back()))
+      return std::nullopt;
+    result.member_offsets.push_back(byte_offset);
+  }
+
+  result.return_offset = result.member_offsets.back();
+  result.return_size = data_size - result.return_offset;
+  return result;
+}
+
 ASTStructExtractor::ASTStructExtractor(ASTConsumer *passthrough,
                                        const char *struct_name,
                                        ClangFunctionCaller &function)
@@ -85,26 +117,38 @@ void ASTStructExtractor::ExtractFromFunctionDecl(FunctionDecl *F) {
   if (!struct_decl)
     return;
 
-  const ASTRecordLayout *struct_layout(
-      &m_ast_context->getASTRecordLayout(struct_decl));
-
-  if (!struct_layout)
+  // A declaration may still be incomplete or invalid when AST callbacks
+  // arrive. Do not ask Clang for its record layout until it is complete.
+  if (!struct_decl->isCompleteDefinition() || struct_decl->isInvalidDecl() ||
+      !struct_decl->isStruct())
     return;
 
-  m_function.m_struct_size =
-      struct_layout->getSize()
-          .getQuantity(); // TODO Store m_struct_size as CharUnits
-  m_function.m_return_offset =
-      struct_layout->getFieldOffset(struct_layout->getFieldCount() - 1) / 8;
-  m_function.m_return_size =
-      struct_layout->getDataSize().getQuantity() - m_function.m_return_offset;
+  const ASTRecordLayout &struct_layout =
+      m_ast_context->getASTRecordLayout(struct_decl);
 
-  for (unsigned field_index = 0, num_fields = struct_layout->getFieldCount();
-       field_index < num_fields; ++field_index) {
-    m_function.m_member_offsets.push_back(
-        struct_layout->getFieldOffset(field_index) / 8);
+  std::vector<uint64_t> field_offsets;
+  field_offsets.reserve(struct_layout.getFieldCount());
+  for (const FieldDecl *field : struct_decl->fields()) {
+    // The generated wrapper must not contain bitfields.
+    if (field->isBitField())
+      return;
   }
+  for (unsigned i = 0; i < struct_layout.getFieldCount(); ++i)
+    field_offsets.push_back(struct_layout.getFieldOffset(i));
 
+  auto layout = ValidateWrapperLayout(
+      struct_layout.getSize().getQuantity(),
+      struct_layout.getDataSize().getQuantity(), field_offsets,
+      m_function.m_arg_values.GetSize(), m_ast_context->getCharWidth());
+  if (!layout)
+    return;
+
+  // Publish only after validating the whole layout; a rejected declaration
+  // must not leave stale or partially populated member offsets.
+  m_function.m_struct_size = layout->struct_size;
+  m_function.m_return_offset = layout->return_offset;
+  m_function.m_return_size = layout->return_size;
+  m_function.m_member_offsets = std::move(layout->member_offsets);
   m_function.m_struct_valid = true;
 }
 
