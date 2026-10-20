@@ -51,6 +51,7 @@
 #include "llvm/Support/Threading.h"
 
 #include "Plugins/ExpressionParser/Clang/ClangASTImporter.h"
+#include "Plugins/ExpressionParser/Clang/ClangASTSource.h"
 #include "Plugins/ExpressionParser/Clang/ClangASTMetadata.h"
 #include "Plugins/ExpressionParser/Clang/ClangExternalASTSourceCallbacks.h"
 #include "Plugins/ExpressionParser/Clang/ClangFunctionCaller.h"
@@ -9603,6 +9604,11 @@ public:
 
 char ScratchTypeSystemClang::ID;
 const std::nullopt_t ScratchTypeSystemClang::DefaultAST = std::nullopt;
+
+// The complete definitions of ClangPersistentVariables and ClangASTSource
+// are available here, rather than in TypeSystemClang.h. This is the required
+// instantiation point for their std::unique_ptr default deleters.
+ScratchTypeSystemClang::~ScratchTypeSystemClang() = default;
 
 ScratchTypeSystemClang::ScratchTypeSystemClang(Target &target,
                                                llvm::Triple triple)
