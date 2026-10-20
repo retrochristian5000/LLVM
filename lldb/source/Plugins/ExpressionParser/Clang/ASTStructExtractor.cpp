@@ -21,6 +21,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdlib>
+#include <utility>
 
 using namespace llvm;
 using namespace clang;
@@ -30,7 +31,7 @@ std::optional<ASTStructExtractor::WrapperLayout>
 ASTStructExtractor::ValidateWrapperLayout(
     uint64_t struct_size, uint64_t data_size,
     ArrayRef<uint64_t> field_offset_bits, size_t argument_count,
-    unsigned char_width) {
+    uint64_t char_width) {
   // The first member is a function pointer and the last one is the result.
   // Never evaluate getFieldOffset(field_count - 1) for an empty record.
   if (field_offset_bits.size() < 2 ||
