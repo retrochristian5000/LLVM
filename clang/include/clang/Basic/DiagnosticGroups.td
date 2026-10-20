@@ -1389,6 +1389,10 @@ def MissingFormatAttribute : DiagGroup<"missing-format-attribute">;
 
 def FormatOverflowNonKprintf: DiagGroup<"format-overflow-non-kprintf">;
 def FormatOverflow: DiagGroup<"format-overflow", [FormatOverflowNonKprintf]>;
+// QEMU (and GCC) spell this warning with =2. Accept the spelling and
+// enable Clang's existing format-overflow checks rather than silently drop
+// the warning. This is not GCC's optimization-dependent level-2 analysis.
+def : DiagGroup<"format-overflow=2", [FormatOverflow]>;
 def FormatTruncationNonKprintf: DiagGroup<"format-truncation-non-kprintf">;
 def FormatTruncation: DiagGroup<"format-truncation", [FormatTruncationNonKprintf]>;
 
