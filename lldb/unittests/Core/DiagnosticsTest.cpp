@@ -129,8 +129,7 @@ TEST_F(DiagnosticsTest, CapturesCommandOutputAndError) {
   debugger_sp->GetCommandInterpreter().HandleCommand(
       "target list", eLazyBoolNo, command_result);
   std::string expected = "=== target list ===\n";
-  llvm::StringRef output = command_result.GetOutputString();
-  expected.append(output.data(), output.size());
+  expected += command_result.GetOutputString().str();
   expected += command_result.GetErrorString();
   expected += "\n\n";
 
