@@ -128,11 +128,11 @@ TEST_F(DiagnosticsTest, CapturesCommandOutputAndError) {
   CommandReturnObject command_result(/*colors=*/false);
   debugger_sp->GetCommandInterpreter().HandleCommand(
       "target list", eLazyBoolNo, command_result);
-  std::string expected = "=== target list ===\\n";
+  std::string expected = "=== target list ===\n";
   llvm::StringRef output = command_result.GetOutputString();
   expected.append(output.data(), output.size());
   expected += command_result.GetErrorString();
-  expected += "\\n\\n";
+  expected += "\n\n";
 
   Diagnostics diagnostics;
   ExecutionContext exe_ctx;
@@ -145,7 +145,7 @@ TEST_F(DiagnosticsTest, CapturesCommandOutputAndError) {
   std::string commands = ReadBundleFile(*dir, "commands.txt");
   EXPECT_TRUE(llvm::StringRef(commands).starts_with(expected))
       << "expected diagnostic command capture: " << expected
-      << "\\nactual capture: " << commands;
+      << "\nactual capture: " << commands;
 
   llvm::sys::fs::remove_directories(dir->GetPath());
   Debugger::Destroy(debugger_sp);
