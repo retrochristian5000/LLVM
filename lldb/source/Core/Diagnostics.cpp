@@ -212,7 +212,12 @@ static std::string CaptureCommand(Debugger &debugger, llvm::StringRef command) {
   CommandReturnObject result(/*colors=*/false);
   debugger.GetCommandInterpreter().HandleCommand(command.str().c_str(),
                                                  eLazyBoolNo, result);
-  return (result.GetOutputString() + result.GetErrorString()).str();
+  // GetOutputString() is a StringRef while GetErrorString() is a
+  // std::string. Do not depend on whether a given C++ standard selects
+  // Twine or std::string operator+ (the latter has no .str() method).
+  std::string output = result.GetOutputString().str();
+  output += result.GetErrorString();
+  return output;
 }
 
 namespace {
