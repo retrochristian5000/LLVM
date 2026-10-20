@@ -1329,12 +1329,14 @@ void ClangASTSource::LookupInNamespace(NameSearchContext &context) {
   ClangASTImporter::NamespaceMapSP namespace_map =
       m_ast_importer_sp->GetNamespaceMap(namespace_context);
 
+  // Namespaces created in the expression's AST need not have an importer
+  // origin. Do not dereference an absent map when verbose logging is enabled.
+  if (!namespace_map)
+    return;
+
   LLDB_LOG_VERBOSE(log,
                    "  CAS::FEVD Inspecting namespace map {0:x} ({1} entries)",
                    namespace_map.get(), namespace_map->size());
-
-  if (!namespace_map)
-    return;
 
   for (ClangASTImporter::NamespaceMap::iterator i = namespace_map->begin(),
                                                 e = namespace_map->end();
