@@ -272,11 +272,14 @@ size_t SourceManager::DisplaySourceLinesWithLineNumbersUsingLastFile(
 
       auto debugger_sp = m_debugger_wp.lock();
       if (should_show_stop_line_with_ansi(debugger_sp)) {
-        current_line_highlight = ansi::FormatAnsiTerminalCodes(
-            (debugger_sp->GetStopShowLineMarkerAnsiPrefix() +
-             current_line_highlight +
-             debugger_sp->GetStopShowLineMarkerAnsiSuffix())
-                .str());
+        // This expression mixes StringRef with std::string. Construct the
+        // format text explicitly: a C++26 operator+ may return std::string
+        // rather than a Twine with a .str() member.
+        std::string marker_format =
+            debugger_sp->GetStopShowLineMarkerAnsiPrefix().str();
+        marker_format += current_line_highlight;
+        marker_format += debugger_sp->GetStopShowLineMarkerAnsiSuffix();
+        current_line_highlight = ansi::FormatAnsiTerminalCodes(marker_format);
       }
 
       s->Printf("%s%s %-4u\t", prefix.c_str(), current_line_highlight.c_str(),
