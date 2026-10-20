@@ -706,18 +706,19 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
     ClangASTImporter::NamespaceMapSP namespace_map =
         m_ast_importer_sp->GetNamespaceMap(namespace_context);
 
-    if (!namespace_map)
-      return;
+    // Not every namespace in the expression AST was imported from debug
+    // information. Even without a namespace map, run the inherited lookup.
+    if (namespace_map) {
+      LLDB_LOG_VERBOSE(
+          log, "  CEDM::FEVD Inspecting (NamespaceMap*){0:x} ({1} entries)",
+          namespace_map.get(), namespace_map->size());
 
-    LLDB_LOG_VERBOSE(
-        log, "  CEDM::FEVD Inspecting (NamespaceMap*){0:x} ({1} entries)",
-        namespace_map.get(), namespace_map->size());
+      for (ClangASTImporter::NamespaceMapItem &n : *namespace_map) {
+        LLDB_LOG(log, "  CEDM::FEVD Searching namespace {0} in module {1}",
+                 n.second.GetName(), n.first->GetFileSpec().GetFilename());
 
-    for (ClangASTImporter::NamespaceMapItem &n : *namespace_map) {
-      LLDB_LOG(log, "  CEDM::FEVD Searching namespace {0} in module {1}",
-               n.second.GetName(), n.first->GetFileSpec().GetFilename());
-
-      FindExternalVisibleDecls(context, n.first, n.second);
+        FindExternalVisibleDecls(context, n.first, n.second);
+      }
     }
   } else if (isa<TranslationUnitDecl>(context.m_decl_context)) {
     CompilerDeclContext namespace_decl;
@@ -732,7 +733,8 @@ void ClangExpressionDeclMap::FindExternalVisibleDecls(
 
 void ClangExpressionDeclMap::MaybeRegisterFunctionBody(
     FunctionDecl *copied_function_decl) {
-  if (copied_function_decl->getBody() && m_parser_vars->m_code_gen) {
+  if (m_parser_vars && copied_function_decl->getBody() &&
+      m_parser_vars->m_code_gen) {
     clang::DeclGroupRef decl_group_ref(copied_function_decl);
     m_parser_vars->m_code_gen->HandleTopLevelDecl(decl_group_ref);
   }
@@ -1055,9 +1057,14 @@ void ClangExpressionDeclMap::LookupInModulesDeclVendor(
   if (!modules_decl_vendor->FindDecls(name, append, max_matches, decls))
     return;
 
-  assert(!decls.empty() && "FindDecls returned true but no decls?");
+  // Module vendors may report success without returning a usable Clang
+  // declaration. Treat that as a miss rather than aborting the expression.
+  if (decls.empty())
+    return;
   auto *const decl_from_modules =
-      llvm::cast<NamedDecl>(ClangUtil::GetDecl(decls[0]));
+      llvm::dyn_cast_or_null<NamedDecl>(ClangUtil::GetDecl(decls.front()));
+  if (!decl_from_modules)
+    return;
 
   LLDB_LOG(log,
            "  CAS::FEVD Matching decl found for "
@@ -1344,7 +1351,7 @@ bool ClangExpressionDeclMap::LookupFunction(
     if (!found_function_with_type_info) {
       for (const CompilerDecl &compiler_decl : decls_from_modules) {
         clang::Decl *decl = ClangUtil::GetDecl(compiler_decl);
-        if (llvm::isa<clang::FunctionDecl>(decl)) {
+        if (llvm::isa_and_nonnull<clang::FunctionDecl>(decl)) {
           clang::NamedDecl *copied_decl =
               llvm::cast_or_null<FunctionDecl>(CopyDecl(decl));
           if (copied_decl) {
