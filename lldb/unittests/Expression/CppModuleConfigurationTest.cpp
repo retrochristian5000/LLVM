@@ -93,6 +93,24 @@ TEST_F(CppModuleConfigurationTest, LinuxTargetSpecificInclude) {
                                    libcpp_target));
 }
 
+TEST_F(CppModuleConfigurationTest, SysrootTargetSpecificLibCpp) {
+  // A target triple is a std::string while the directory prefix is an
+  // llvm::StringRef. Preserve the entire sysroot and target when combining
+  // them; the C++26 build must not depend on a trailing Twine::str() call.
+  const std::string sysroot = "/opt/whp/SDKs/Arm64e.sdk";
+  const std::string triple = "arm64e-apple-darwin";
+  const std::string usr = sysroot + "/usr/include";
+  const std::string libcpp = usr + "/c++/v1";
+  const std::string libcpp_target = usr + "/" + triple + "/c++/v1";
+  const std::vector<std::string> files = {
+      usr + "/stdio.h", libcpp + "/vector", libcpp + "/module.modulemap"};
+
+  CppModuleConfiguration config(makeFiles(files), llvm::Triple(triple));
+  EXPECT_THAT(config.GetImportedModules(), testing::ElementsAre("std"));
+  EXPECT_THAT(config.GetIncludeDirs(),
+              testing::ElementsAre(libcpp, ResourceInc(), usr, libcpp_target));
+}
+
 TEST_F(CppModuleConfigurationTest, Sysroot) {
   // Test that having a sysroot for the whole system works fine.
 
