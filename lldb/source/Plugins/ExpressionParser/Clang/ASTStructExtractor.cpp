@@ -37,7 +37,8 @@ ASTStructExtractor::ValidateWrapperLayout(
   // Never evaluate getFieldOffset(field_count - 1) for an empty record.
   if (field_offset_bits.size() < 2 ||
       argument_count != field_offset_bits.size() - 2 ||
-      char_width == 0 || data_size == 0 || data_size > struct_size)
+      field_offset_bits.front() != 0 || char_width == 0 ||
+      data_size == 0 || data_size > struct_size)
     return std::nullopt;
 
   WrapperLayout result{struct_size, 0, 0, {}};
