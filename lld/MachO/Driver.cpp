@@ -1094,21 +1094,26 @@ static void warnIfUnimplementedOption(const Option &opt) {
     // warn about deprecated options elsewhere
     break;
   case OPT_grp_undocumented:
-    warn("Option `" + opt.getPrefixedName() +
-         "' is undocumented. Should lld implement it?");
+    warn("option '" + opt.getPrefixedName() +
+         "' is undocumented in Apple's ld64 and is not supported by "
+         "ld64.lld; remove it or use a linker that implements it");
     break;
   case OPT_grp_obsolete:
-    warn("Option `" + opt.getPrefixedName() +
-         "' is obsolete. Please modernize your usage.");
+    warn("option '" + opt.getPrefixedName() +
+         "' is obsolete in Apple's ld64; remove it or use a supported "
+         "replacement");
     break;
   case OPT_grp_ignored:
-    warn("Option `" + opt.getPrefixedName() + "' is ignored.");
+    warn("option '" + opt.getPrefixedName() +
+         "' is accepted for compatibility but ignored; it has no effect "
+         "on the linked output");
     break;
   case OPT_grp_ignored_silently:
     break;
   default:
-    warn("Option `" + opt.getPrefixedName() +
-         "' is not yet implemented. Stay tuned...");
+    warn("option '" + opt.getPrefixedName() +
+         "' is not fully implemented by ld64.lld; remove it or use a "
+         "linker that supports the requested behavior");
     break;
   }
 }
