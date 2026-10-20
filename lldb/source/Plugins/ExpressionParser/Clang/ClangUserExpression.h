@@ -9,12 +9,12 @@
 #ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGUSEREXPRESSION_H
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGUSEREXPRESSION_H
 
+#include <memory>
 #include <optional>
 #include <vector>
 
 #include "ASTResultSynthesizer.h"
 #include "ASTStructExtractor.h"
-#include "ClangExpressionDeclMap.h"
 #include "ClangExpressionHelper.h"
 #include "ClangExpressionSourceCode.h"
 #include "ClangExpressionVariable.h"
@@ -29,6 +29,7 @@
 
 namespace lldb_private {
 
+class ClangExpressionDeclMap;
 class ClangExpressionParser;
 
 /// \class ClangUserExpression ClangUserExpression.h
@@ -58,8 +59,12 @@ public:
     // LLVM RTTI support
     static char ID;
 
-    ClangUserExpressionHelper(Target &target, bool top_level)
-        : m_target(target), m_top_level(top_level) {}
+    // Keep unique_ptr<ClangExpressionDeclMap> ownership operations in the
+    // translation unit that includes its complete definition.  The macOS
+    // libc++ headers can instantiate a completeness check when the helper's
+    // constructor/destructor is emitted from an unrelated translation unit.
+    ClangUserExpressionHelper(Target &target, bool top_level);
+    ~ClangUserExpressionHelper() override;
 
     /// Return the object that the parser should use when resolving external
     /// values.  May be NULL if everything should be self-contained.
@@ -67,7 +72,7 @@ public:
       return m_expr_decl_map_up.get();
     }
 
-    void ResetDeclMap() { m_expr_decl_map_up.reset(); }
+    void ResetDeclMap();
 
     void ResetDeclMap(ExecutionContext &exe_ctx,
                       Materializer::PersistentVariableDelegate &result_delegate,

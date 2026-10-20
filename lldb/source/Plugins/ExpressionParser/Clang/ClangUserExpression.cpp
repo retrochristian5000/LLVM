@@ -1025,6 +1025,17 @@ void ClangUserExpression::FixupParseErrorDiagnostics(
 
 char ClangUserExpression::ClangUserExpressionHelper::ID;
 
+ClangUserExpression::ClangUserExpressionHelper::ClangUserExpressionHelper(
+    Target &target, bool top_level)
+    : m_target(target), m_top_level(top_level) {}
+
+ClangUserExpression::ClangUserExpressionHelper::~ClangUserExpressionHelper() =
+    default;
+
+void ClangUserExpression::ClangUserExpressionHelper::ResetDeclMap() {
+  m_expr_decl_map_up.reset();
+}
+
 void ClangUserExpression::ClangUserExpressionHelper::ResetDeclMap(
     ExecutionContext &exe_ctx,
     Materializer::PersistentVariableDelegate &delegate,

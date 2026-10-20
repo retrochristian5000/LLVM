@@ -1,0 +1,29 @@
+name: LLDB incomplete declaration-map ownership
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.cpp'
+      - 'lldb/scripts/test-declmap-incomplete-lifetime.py'
+      - '.github/workflows/lldb-declmap-lifetime.yml'
+  pull_request:
+    paths:
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.cpp'
+      - 'lldb/scripts/test-declmap-incomplete-lifetime.py'
+      - '.github/workflows/lldb-declmap-lifetime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ownership-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out LLVM fork
+        uses: actions/checkout@v4
+      - name: Validate LLDB ClangExpressionDeclMap lifetime definitions
+        run: python3 lldb/scripts/test-declmap-incomplete-lifetime.py
