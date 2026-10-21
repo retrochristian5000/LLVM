@@ -28,6 +28,19 @@ done
 # Do not mix e.g. iOS SDKs, arm64e-only flags or foreign ELF targets
 # into a normal native macOS LLDB host build.
 sysroot="$(xcrun --sdk macosx --show-sdk-path)"
+# The SDKROOT environment is also consumed by Clang/LLDB's expression driver.
+# Override an inherited iPhoneOS/iPhoneSimulator SDK for this macOS *host* test.
+if [[ ! -d "$sysroot" ]]; then
+  echo "error: xcrun did not select a valid macOS SDK: $sysroot" >&2
+  exit 2
+fi
+case "$(cd "$sysroot" && pwd -P)" in
+  */MacOSX*.sdk) ;;
+  *)
+    echo "error: LLDB host smoke selected a non-macOS SDK: $sysroot" >&2
+    exit 2 ;;
+esac
+export SDKROOT="$sysroot"
 host_cc="$(xcrun --sdk macosx --find clang)"
 host_cxx="$(xcrun --sdk macosx --find clang++)"
 deployment="${WHP_MACOS_DEPLOYMENT_TARGET:-11.0}"
@@ -42,6 +55,23 @@ echo "Host macOS ABI: $host_arch; deployment target: $deployment"
 echo "Clang host compiler: $host_cxx"
 echo "macOS SDK: $sysroot"
 echo "Build directory: $build_dir"
+
+# Check the Apple SDK's target macros before an expensive LLVM/LLDB build.
+# TARGET_OS_MAC alone is not sufficient: it can include iOS targets.
+if ! "$host_cc" -arch "$host_arch" -isysroot "$sysroot" \
+        "-mmacosx-version-min=$deployment" -x c -fsyntax-only - <<'WHP_LLDB_HOST_SDK'
+#include <TargetConditionals.h>
+#if !defined(TARGET_OS_OSX) || !TARGET_OS_OSX || \
+    (defined(TARGET_OS_IOS) && TARGET_OS_IOS) || \
+    (defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST) || \
+    (defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR)
+#error LLDB host bootstrap must not use iOS/iPadOS SDK headers
+#endif
+WHP_LLDB_HOST_SDK
+then
+  echo "error: Apple SDK target macros disagree with the LLDB macOS host" >&2
+  exit 2
+fi
 
 cmake -S "$source_root/llvm" -B "$build_dir" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
