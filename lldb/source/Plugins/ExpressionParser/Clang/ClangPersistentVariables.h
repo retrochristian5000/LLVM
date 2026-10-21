@@ -28,9 +28,10 @@ class TypeSystemClang;
 /// "lldb/Expression/ClangPersistentVariables.h" Manages persistent values
 /// that need to be preserved between expression invocations.
 ///
-/// A list of variables that can be accessed and updated by any expression.  See
-/// ClangPersistentVariable for more discussion.  Also provides an increasing,
-/// 0-based counter for naming result variables.
+/// A collection of variables that expressions can access and update.
+/// Individual persistent values are represented by ClangExpressionVariable;
+/// this manager also provides an increasing, 0-based counter for naming
+/// result variables.
 class ClangPersistentVariables
     : public llvm::RTTIExtends<ClangPersistentVariables,
                                PersistentExpressionState> {
