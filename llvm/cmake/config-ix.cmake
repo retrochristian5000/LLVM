@@ -536,6 +536,36 @@ set(LLVM_HOST_TRIPLE "${LLVM_INFERRED_HOST_TRIPLE}" CACHE STRING
     "Host on which LLVM binaries will run")
 message(STATUS "LLVM host triple: ${LLVM_HOST_TRIPLE}")
 
+# CMake determines the target OS and Mach-O architecture, while
+# LLVM_HOST_TRIPLE describes where the compiled LLVM tools will run.  Do not
+# silently accept an inherited iOS/iPadOS triple or a different architecture
+# when configuring native macOS tools.  This does not apply to cross-builds
+# with an explicit CMake toolchain/platform such as iOS or visionOS.
+if(CMAKE_HOST_APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
+   NOT CMAKE_CROSSCOMPILING)
+  if(NOT LLVM_HOST_TRIPLE MATCHES "-(apple|unknown)-(darwin|macos|macosx)[0-9.]*$")
+    message(FATAL_ERROR
+      "Native macOS LLVM host triple must describe macOS/Darwin, not "
+      "another Apple platform: ${LLVM_HOST_TRIPLE}")
+  endif()
+  if(CMAKE_OSX_ARCHITECTURES AND
+     NOT CMAKE_OSX_ARCHITECTURES MATCHES ";")
+    string(REGEX MATCH "^[^-]+" _llvm_macos_host_arch "${LLVM_HOST_TRIPLE}")
+    if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64" AND
+       NOT _llvm_macos_host_arch STREQUAL "x86_64")
+      message(FATAL_ERROR
+        "LLVM_HOST_TRIPLE (${LLVM_HOST_TRIPLE}) is incompatible with "
+        "CMAKE_OSX_ARCHITECTURES=x86_64")
+    elseif(CMAKE_OSX_ARCHITECTURES MATCHES "^arm64e?$" AND
+           NOT _llvm_macos_host_arch MATCHES "^(aarch64|arm64e?)$")
+      message(FATAL_ERROR
+        "LLVM_HOST_TRIPLE (${LLVM_HOST_TRIPLE}) is incompatible with "
+        "CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}")
+    endif()
+    unset(_llvm_macos_host_arch)
+  endif()
+endif()
+
 # Determine the native architecture.
 string(TOLOWER "${LLVM_TARGET_ARCH}" LLVM_NATIVE_ARCH)
 if( LLVM_NATIVE_ARCH STREQUAL "host" )
