@@ -83,6 +83,54 @@ project(LLVM
   VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
   LANGUAGES C CXX ASM)
 
+# A native macOS LLVM bootstrap must use macOS SDK declarations, not headers
+# inherited from an iOS/iPadOS, simulator, or Mac Catalyst SDKROOT.  CMake's
+# CMAKE_OSX_SYSROOT variable also accepts these other Apple SDKs.
+#
+# Check the compiler's effective header selection rather than trusting only
+# the SDK directory name.  A target-platform cross-build remains governed by
+# its own toolchain file and does not inherit this host-only restriction.
+if(CMAKE_HOST_APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
+   NOT CMAKE_CROSSCOMPILING)
+  include(CheckCSourceCompiles)
+  include(CheckCXXSourceCompiles)
+
+  set(_llvm_macos_sdk_check [[
+#include <TargetConditionals.h>
+#if !defined(TARGET_OS_OSX) || !TARGET_OS_OSX || \
+    (defined(TARGET_OS_IOS) && TARGET_OS_IOS) || \
+    (defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST) || \
+    (defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR)
+#error Native LLVM host tools require macOS SDK headers
+#endif
+int main(void) { return 0; }
+]])
+  # A new CMAKE_OSX_SYSROOT must be tested even when reusing the same cache.
+  # Header checks must not depend on the selected host linker's capabilities.
+  set(_llvm_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  unset(LLVM_MACOS_HOST_C_SDK_HEADERS_OK CACHE)
+  unset(LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK CACHE)
+  check_c_source_compiles("${_llvm_macos_sdk_check}"
+                          LLVM_MACOS_HOST_C_SDK_HEADERS_OK)
+  check_cxx_source_compiles("${_llvm_macos_sdk_check}"
+                            LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK)
+  if(_llvm_saved_try_compile_target_type)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_llvm_saved_try_compile_target_type}")
+  else()
+    unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+  endif()
+  unset(_llvm_saved_try_compile_target_type)
+  unset(_llvm_macos_sdk_check)
+  if(NOT LLVM_MACOS_HOST_C_SDK_HEADERS_OK OR
+     NOT LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK)
+    message(FATAL_ERROR
+      "Native macOS LLVM requires matching macOS SDK C and C++ headers; "
+      "verify SDKROOT/CMAKE_OSX_SYSROOT and the selected host compilers. "
+      "An iPhoneOS/iPhoneSimulator SDK cannot build native macOS tools.")
+  endif()
+endif()
+
 if (NOT DEFINED CMAKE_INSTALL_LIBDIR AND DEFINED LLVM_LIBDIR_SUFFIX)
   # Must go before `include(GNUInstallDirs)`.
   set(CMAKE_INSTALL_LIBDIR "lib${LLVM_LIBDIR_SUFFIX}")
