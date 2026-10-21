@@ -113,12 +113,52 @@ endfunction()
 # This function takes an OS and a list of architectures and identifies the
 # subset of the architectures list that the installed toolchain can target.
 function(darwin_test_archs os valid_archs)
+  set(archs ${ARGN})
+
+  # Native macOS host tools should not probe legacy i386/x86_64 runtime
+  # slices when the selected Mach-O ABI is arm64 or arm64e. This is opt-in
+  # so universal and cross-target compiler-rt behavior is unchanged.
+  if(COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY AND CMAKE_HOST_APPLE AND
+     CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_CROSSCOMPILING AND
+     "${os}" STREQUAL "osx")
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+      message(FATAL_ERROR
+        "COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY requires explicit CMAKE_OSX_ARCHITECTURES")
+    endif()
+    foreach(native_arch IN LISTS CMAKE_OSX_ARCHITECTURES)
+      if(NOT native_arch MATCHES "^(arm64|arm64e|x86_64)$")
+        message(FATAL_ERROR "Unsupported native macOS runtime ABI: ${native_arch}")
+      endif()
+    endforeach()
+    set(selected_archs)
+    foreach(arch IN LISTS archs)
+      if(arch IN_LIST CMAKE_OSX_ARCHITECTURES)
+        list(APPEND selected_archs "${arch}")
+      endif()
+    endforeach()
+    set(archs ${selected_archs})
+
+    # Never reuse an older cache holding foreign architectures after
+    # switching between arm64/arm64e or migrating a legacy x86_64 build.
+    if(DEFINED ${valid_archs})
+      set(invalid_cache FALSE)
+      foreach(cached_arch IN LISTS ${valid_archs})
+        if(NOT cached_arch IN_LIST archs)
+          set(invalid_cache TRUE)
+          break()
+        endif()
+      endforeach()
+      if(invalid_cache)
+        unset(${valid_archs} CACHE)
+        unset(${valid_archs})
+      endif()
+    endif()
+  endif()
+
   if(${valid_archs})
     message(STATUS "Using cached valid architectures for ${os}.")
     return()
   endif()
-
-  set(archs ${ARGN})
   if(NOT TEST_COMPILE_ONLY)
     message(STATUS "Finding valid architectures for ${os}...")
     set(SIMPLE_C ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/src.c)

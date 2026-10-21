@@ -1,0 +1,19 @@
+name: WHP compiler-rt native Darwin ABI isolation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'compiler-rt/CMakeLists.txt'
+      - 'compiler-rt/cmake/Modules/CompilerRTDarwinUtils.cmake'
+      - 'compiler-rt/cmake/tests/native-darwin-arch-isolation.cmake'
+      - '.github/workflows/compiler-rt-native-darwin-arch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-arch-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Test native Darwin runtime arch isolation
+        run: cmake -P compiler-rt/cmake/tests/native-darwin-arch-isolation.cmake

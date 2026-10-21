@@ -76,6 +76,11 @@ set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} --no-default-config")
 check_cxx_compiler_flag("" COMPILER_RT_HAS_NO_DEFAULT_CONFIG_FLAG)
 set(CMAKE_REQUIRED_FLAGS "${OLD_CMAKE_REQUIRED_FLAGS}")
 
+# An opt-in host compiler profile. Universal/cross-target runtime builds
+# retain their usual multi-architecture probing unless explicitly narrowed.
+option(COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY
+  "Restrict native macOS compiler-rt slices to CMAKE_OSX_ARCHITECTURES" OFF)
+
 option(COMPILER_RT_BUILD_BUILTINS "Build builtins" ON)
 mark_as_advanced(COMPILER_RT_BUILD_BUILTINS)
 option(COMPILER_RT_DISABLE_AARCH64_FMV "Disable AArch64 Function Multi Versioning support" OFF)
