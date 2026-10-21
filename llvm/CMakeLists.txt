@@ -1317,22 +1317,9 @@ if(LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE)
     message(FATAL_ERROR
       "Explicit macOS LLVM default target requires CMAKE_OSX_DEPLOYMENT_TARGET")
   endif()
-  if(NOT LLVM_DEFAULT_TARGET_TRIPLE MATCHES
-     "^(aarch64|arm64e?|x86_64)-apple-macosx([0-9]+(\\.[0-9]+){1,2})$")
-    message(FATAL_ERROR
-      "Native macOS LLVM default target must be versioned -apple-macosx, "
-      "not Darwin, iOS, iPadOS, Catalyst or simulator: "
-      "${LLVM_DEFAULT_TARGET_TRIPLE}")
-  endif()
-  set(_llvm_macos_default_version "${CMAKE_MATCH_2}")
-  if(NOT "${_llvm_macos_default_version}" VERSION_EQUAL
-         "${CMAKE_OSX_DEPLOYMENT_TARGET}")
-    message(FATAL_ERROR
-      "Native macOS LLVM default triple version (${_llvm_macos_default_version}) "
-      "does not match deployment target (${CMAKE_OSX_DEPLOYMENT_TARGET})")
-  endif()
-  message(STATUS "LLVM native macOS default target: ${LLVM_DEFAULT_TARGET_TRIPLE}")
-  unset(_llvm_macos_default_version)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/CheckNativeMacOSTriple.cmake")
+  llvm_check_native_macos_default_triple(
+    "${LLVM_DEFAULT_TARGET_TRIPLE}" "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
 set(LLVM_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE}")

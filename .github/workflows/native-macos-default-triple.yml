@@ -1,0 +1,19 @@
+name: WHP native macOS default target ABI
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'llvm/CMakeLists.txt'
+      - 'llvm/cmake/modules/CheckNativeMacOSTriple.cmake'
+      - 'llvm/cmake/tests/check-native-macos-default-triple.cmake'
+      - '.github/workflows/native-macos-default-triple.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  target-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify versioned macOS triplets and reject iOS variants
+        run: cmake -P llvm/cmake/tests/check-native-macos-default-triple.cmake
