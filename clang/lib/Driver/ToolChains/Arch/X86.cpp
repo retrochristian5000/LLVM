@@ -14,6 +14,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/TargetParser/X86TargetParser.h"
 
 using namespace clang::driver;
