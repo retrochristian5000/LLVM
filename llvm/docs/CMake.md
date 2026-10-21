@@ -219,6 +219,27 @@ commonly used variables that control features of LLVM and enabled subprojects.
 
 :   Extra flags to use when compiling C and C++ source files respectively.
 
+    `-march` is an *instruction-set requirement* for the objects compiled by
+    the selected C or C++ compiler, not an LLVM backend selector or a platform
+    ABI name.  For a deliberately machine-local compiler build on a matching
+    host, an explicit `-march=native` may be appropriate.  Do not use
+    `-march=native` in cross-architecture builds, portable binaries, or
+    general-purpose runtime/compiler-rt builds: it describes the CPU executing
+    the compiler, not the intended deployment machines.
+
+    For cross-compilation, select the actual target triple/toolchain first and
+    choose a supported, *explicit* target ISA (such as `-march=armv8-a` for
+    an AArch64 target), preferably in the target-specific toolchain or runtime
+    configuration rather than in globally inherited host flags.  On Darwin,
+    `-arch arm64` and `-arch arm64e` select different ABI targets; neither
+    is an `-march` value.  An arm64e target must retain the required pointer
+    authentication features.  `-mtune` tunes a CPU model without intentionally
+    raising the minimum instruction set.
+
+    `LLVM_TARGET_ARCH` chooses LLVM's native target for JIT infrastructure,
+    and `LLVM_TARGETS_TO_BUILD` chooses which LLVM code-generation backends are
+    available.  Neither is a substitute for an output-target `-march`.
+
 **CMAKE\_{C,CXX}\_COMPILER**:STRING
 
 :   Specify the C and C++ compilers to use. If you have multiple compilers
