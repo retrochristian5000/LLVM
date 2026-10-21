@@ -240,6 +240,24 @@ commonly used variables that control features of LLVM and enabled subprojects.
     and `LLVM_TARGETS_TO_BUILD` chooses which LLVM code-generation backends are
     available.  Neither is a substitute for an output-target `-march`.
 
+    **Apple host versus target:** CMake's `CMAKE_HOST_SYSTEM_NAME` describes
+    the build machine, while `CMAKE_SYSTEM_NAME` describes the configured
+    output platform. A native macOS build uses `Darwin` for the latter;
+    iOS/iPadOS, iOS Simulator, Mac Catalyst and visionOS are distinct target
+    environments, not alternative macOS host ABIs. `CMAKE_OSX_SYSROOT` selects
+    SDK headers and libraries, and `CMAKE_OSX_ARCHITECTURES` selects Mach-O
+    architecture slices. Do not set `CMAKE_SYSTEM_NAME=Darwin` to disguise an
+    intentional iOS cross-build.
+
+    When configuring native macOS LLVM, the C and C++ SDK checks verify that
+    `TargetConditionals.h` identifies macOS and that a single explicitly
+    selected Mach-O architecture agrees with the compiler's predefined ABI
+    macros. `LLVM_HOST_TRIPLE` is checked against the native macOS platform
+    and selected architecture in `llvm/cmake/config-ix.cmake`; it is **not**
+    a way to override `CMAKE_SYSTEM_NAME` or an implicit request for arm64e.
+    For Apple Silicon, the baseline native ABI is arm64; select arm64e only
+    deliberately and with a compatible compiler, linker and runtime.
+
 **CMAKE\_{C,CXX}\_COMPILER**:STRING
 
 :   Specify the C and C++ compilers to use. If you have multiple compilers
