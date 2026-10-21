@@ -114,6 +114,8 @@ endfunction()
 # subset of the architectures list that the installed toolchain can target.
 function(darwin_test_archs os valid_archs)
   set(archs ${ARGN})
+  set(native_arch_limit FALSE)
+  set(native_arch_cache_key "${valid_archs}_NATIVE_ARCH_SELECTION")
 
   # Native macOS host tools should not probe legacy i386/x86_64 runtime
   # slices when the selected Mach-O ABI is arm64 or arm64e. This is opt-in
@@ -121,6 +123,7 @@ function(darwin_test_archs os valid_archs)
   if(COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY AND CMAKE_HOST_APPLE AND
      CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_CROSSCOMPILING AND
      "${os}" STREQUAL "osx")
+    set(native_arch_limit TRUE)
     if(NOT CMAKE_OSX_ARCHITECTURES)
       message(FATAL_ERROR
         "COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY requires explicit CMAKE_OSX_ARCHITECTURES")
@@ -141,7 +144,13 @@ function(darwin_test_archs os valid_archs)
     # Never reuse an older cache holding foreign architectures after
     # switching between arm64/arm64e or migrating a legacy x86_64 build.
     if(DEFINED ${valid_archs})
+      # Subset-only checks are insufficient: arm64 -> arm64;arm64e must
+      # re-probe the newly selected second slice, even if arm64 was cached.
       set(invalid_cache FALSE)
+      if(NOT DEFINED ${native_arch_cache_key} OR
+         NOT "${${native_arch_cache_key}}" STREQUAL "${CMAKE_OSX_ARCHITECTURES}")
+        set(invalid_cache TRUE)
+      endif()
       foreach(cached_arch IN LISTS ${valid_archs})
         if(NOT cached_arch IN_LIST archs)
           set(invalid_cache TRUE)
@@ -153,6 +162,14 @@ function(darwin_test_archs os valid_archs)
         unset(${valid_archs})
       endif()
     endif()
+  endif()
+
+  # An opt-out or a cross-build must not inherit a previously narrowed
+  # native-cache result from the same incremental compiler-rt directory.
+  if(NOT native_arch_limit AND DEFINED ${native_arch_cache_key})
+    unset(${valid_archs} CACHE)
+    unset(${valid_archs})
+    unset(${native_arch_cache_key} CACHE)
   endif()
 
   if(${valid_archs})
@@ -222,6 +239,10 @@ function(darwin_test_archs os valid_archs)
   endforeach()
   set(${valid_archs} ${working_archs}
     CACHE STRING "List of valid architectures for platform ${os}." FORCE)
+  if(native_arch_limit)
+    set(${native_arch_cache_key} "${CMAKE_OSX_ARCHITECTURES}" CACHE INTERNAL
+        "Selected native macOS runtime ABI set for ${os}" FORCE)
+  endif()
 endfunction()
 
 # This function checks the host cputype/cpusubtype to filter supported
