@@ -81,6 +81,10 @@
 // RUN: not %clang -target arm64e-apple-ios -march=armv8-a -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ARCH
 // RUN: not %clang -target arm64e-apple-ios -march=armv8.3-a+nopauth -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-NOPAUTH
 // RUN: %clang -target arm64e-apple-ios -march=armv8.3-a -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ARCH
+// A newer -mcpu must not silently rescue an incompatible -march ABI floor.
+// RUN: not %clang -target arm64e-apple-macos -mcpu=apple-m4 -march=armv8-a -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ARCH
+// An ISA-compatible -march and independent tune choice are valid on arm64e.
+// RUN: %clang -target arm64e-apple-macos -march=armv8.3-a -mtune=apple-m4 -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ARCH
 // RUN: %clang -target arm64e-apple-ios -mcpu=apple-a18 -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-A18
 //
 // BAD-CPU: error: unsupported argument 'apple-a7' to option '-mcpu='
