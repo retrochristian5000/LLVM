@@ -105,8 +105,43 @@ if(CMAKE_HOST_APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
 #endif
 int main(void) { return 0; }
 ]])
-  # A new CMAKE_OSX_SYSROOT must be tested even when reusing the same cache.
-  # Header checks must not depend on the selected host linker's capabilities.
+  # CMake's Darwin target platform is authoritative for these host objects.
+  # uname identifies the process host, not necessarily the ABI selected by
+  # CMAKE_OSX_ARCHITECTURES (for example, under Rosetta).  On a single-arch
+  # build, verify the compiler's actual predefines for that selected Mach-O
+  # architecture as well as the Apple platform headers.  Multi-arch builds
+  # retain CMake's per-slice compiler validation.
+  if(CMAKE_OSX_ARCHITECTURES AND
+     NOT CMAKE_OSX_ARCHITECTURES MATCHES ";")
+    if(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+      string(APPEND _llvm_macos_sdk_check [[
+
+#if !defined(__aarch64__) || defined(__arm64e__)
+#error CMake selected arm64 but the compiler uses another Mach-O ABI
+#endif
+]])
+    elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64e")
+      string(APPEND _llvm_macos_sdk_check [[
+
+#if !defined(__arm64e__) || !defined(__PTRAUTH__)
+#error CMake selected arm64e but pointer-authenticated ABI is absent
+#endif
+]])
+    elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+      string(APPEND _llvm_macos_sdk_check [[
+
+#if !defined(__x86_64__)
+#error CMake selected x86_64 but the compiler uses another Mach-O ABI
+#endif
+]])
+    endif()
+  endif()
+  message(STATUS "LLVM Apple host configuration: host=${CMAKE_HOST_SYSTEM_NAME}, "
+                 "target=${CMAKE_SYSTEM_NAME}, "
+                 "arch=${CMAKE_OSX_ARCHITECTURES}, "
+                 "SDK=${CMAKE_OSX_SYSROOT}")
+  # A new CMAKE_OSX_SYSROOT/architecture must be tested even when reusing a
+  # cache. Header checks do not rely on the selected linker's capabilities.
   set(_llvm_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
   set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
   unset(LLVM_MACOS_HOST_C_SDK_HEADERS_OK CACHE)
