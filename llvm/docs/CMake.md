@@ -258,6 +258,26 @@ commonly used variables that control features of LLVM and enabled subprojects.
     For Apple Silicon, the baseline native ABI is arm64; select arm64e only
     deliberately and with a compatible compiler, linker and runtime.
 
+    The WHP native host bootstraps can enable
+    `-DLLVM_MACOS_HOST_SDK_RESOLVE=ON`. Before CMake's first `project()`
+    configures C, C++, or assembler, this resolves the SDK in the following
+    order: an explicitly configured `CMAKE_OSX_SYSROOT`, an inherited
+    `SDKROOT`, and finally the active `macosx` SDK selected by
+    `xcrun --sdk macosx --show-sdk-path`. The symbolic `macosx` value is
+    resolved through `xcrun`; other requests must be absolute SDK paths.
+    The selected SDK is canonicalized and written to both the
+    `CMAKE_OSX_SYSROOT` cache and the child-process `SDKROOT` environment.
+    The SDK must contain `usr/include/TargetConditionals.h`, and the
+    compile-time C/C++ checks also verify that the chosen SDK actually
+    supplies native macOS headers. This prevents accidental fallback to an
+    unrelated Apple SDK or compiler default.
+
+    This switch is intentionally **off** for ordinary target-platform CMake
+    builds. iOS/iPadOS, simulators, Mac Catalyst, and other cross-target SDK
+    selection must remain in their own toolchain configuration. The LLVM
+    bootstrap's separately configured builtins and runtimes should also be
+    passed the resolved SDK path, not left to discover their own default.
+
 **CMAKE\_{C,CXX}\_COMPILER**:STRING
 
 :   Specify the C and C++ compilers to use. If you have multiple compilers
