@@ -77,6 +77,7 @@ cmake -S "$source_root/llvm" -B "$build_dir" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$host_cc" \
   -DCMAKE_CXX_COMPILER="$host_cxx" \
+  -DLLVM_MACOS_HOST_SDK_RESOLVE=ON \
   -DCMAKE_OSX_SYSROOT="$sysroot" \
   -DCMAKE_OSX_ARCHITECTURES="$host_arch" \
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
