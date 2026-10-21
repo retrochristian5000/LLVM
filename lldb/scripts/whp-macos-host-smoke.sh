@@ -78,6 +78,62 @@ fi
 "$compiler" --version
 "$debugger" --version
 
+# Compile LLDB private headers in both Apple SDK include orders, with C++23.
+header_flags=(
+  -std=c++23 -fsyntax-only -Werror
+  -arch "$host_arch" -isysroot "$sysroot"
+  "-mmacosx-version-min=$deployment"
+  -I "$source_root"
+  -I "$source_root/lldb/include"
+  -I "$source_root/llvm/include"
+  -I "$source_root/clang/include"
+  -I "$build_dir/include"
+  -I "$build_dir/tools/lldb/include"
+  -I "$build_dir/tools/clang/include"
+)
+sdk_first="$build_dir/lldb-private-sdk-first.cpp"
+private_first="$build_dir/lldb-private-lldb-first.cpp"
+cat > "$sdk_first" <<'CPP'
+#include <mach/mach.h>
+#include <pthread.h>
+#include <memory>
+#include <optional>
+#include <type_traits>
+#include "lldb/lldb-private-types.h"
+#include "lldb/lldb-private-interfaces.h"
+#include "lldb/Core/EmulateInstruction.h"
+#include "lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h"
+#include "lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.h"
+static_assert(std::is_destructible_v<
+              lldb_private::SingleStepBreakpointLocationsPredictor>);
+static_assert(std::is_destructible_v<
+              lldb_private::ClangUserExpression::ClangUserExpressionHelper>);
+static_assert(std::is_destructible_v<
+              lldb_private::ScratchTypeSystemClang>);
+CPP
+cat > "$private_first" <<'CPP'
+#include "lldb/lldb-private-types.h"
+#include "lldb/lldb-private-interfaces.h"
+#include "lldb/Core/EmulateInstruction.h"
+#include "lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h"
+#include "lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.h"
+#include <mach/mach.h>
+#include <pthread.h>
+#include <memory>
+#include <optional>
+#include <type_traits>
+static_assert(std::is_destructible_v<
+              lldb_private::SingleStepBreakpointLocationsPredictor>);
+static_assert(std::is_destructible_v<
+              lldb_private::ClangUserExpression::ClangUserExpressionHelper>);
+static_assert(std::is_destructible_v<
+              lldb_private::ScratchTypeSystemClang>);
+CPP
+for private_header_smoke in "$sdk_first" "$private_first"; do
+  echo "Checking LLDB private headers with Apple SDK: $private_header_smoke"
+  "$host_cxx" "${header_flags[@]}" "$private_header_smoke"
+done
+
 # Check that the generated tools actually match the native macOS slice.
 for artifact in "$compiler" "$debugger"; do
   if ! xcrun lipo -archs "$artifact" | grep -Eq "(^| )$host_arch( |$)"; then
