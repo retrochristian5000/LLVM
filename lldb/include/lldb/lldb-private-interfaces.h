@@ -13,7 +13,9 @@
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-private-enumerations.h"
 #include "lldb/lldb-types.h"
+#include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <vector>
 
