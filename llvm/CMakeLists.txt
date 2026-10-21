@@ -185,13 +185,22 @@ if(CMAKE_HOST_APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
   include(CheckCSourceCompiles)
   include(CheckCXXSourceCompiles)
 
+  # Use independent preprocessor conditions. Backslash-newline continuations
+  # can be consumed while passing a source string through CMake's check macros,
+  # leaving an invalid #if expression in the compiler's temporary source.
   set(_llvm_macos_sdk_check [[
 #include <TargetConditionals.h>
-#if !defined(TARGET_OS_OSX) || !TARGET_OS_OSX || \
-    (defined(TARGET_OS_IOS) && TARGET_OS_IOS) || \
-    (defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST) || \
-    (defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR)
+#if !defined(TARGET_OS_OSX) || !TARGET_OS_OSX
 #error Native LLVM host tools require macOS SDK headers
+#endif
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+#error Native LLVM host tools must not use iOS SDK headers
+#endif
+#if defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST
+#error Native LLVM host tools must not use Mac Catalyst SDK headers
+#endif
+#if defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR
+#error Native LLVM host tools must not use simulator SDK headers
 #endif
 int main(void) { return 0; }
 ]])
@@ -226,6 +235,15 @@ int main(void) { return 0; }
 ]])
     endif()
   endif()
+  # C++ must also resolve its standard-library headers; the C SDK check
+  # alone cannot detect a mismatched or incomplete C++ toolchain.
+  set(_llvm_macos_cxx_sdk_check "${_llvm_macos_sdk_check}")
+  string(APPEND _llvm_macos_cxx_sdk_check [[
+#include <cstddef>
+#include <memory>
+static_assert(sizeof(std::unique_ptr<int>) > 0,
+              "LLVM host C++ standard library headers unavailable");
+]])
   message(STATUS "LLVM Apple host configuration: host=${CMAKE_HOST_SYSTEM_NAME}, "
                  "target=${CMAKE_SYSTEM_NAME}, "
                  "arch=${CMAKE_OSX_ARCHITECTURES}, "
@@ -238,7 +256,7 @@ int main(void) { return 0; }
   unset(LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK CACHE)
   check_c_source_compiles("${_llvm_macos_sdk_check}"
                           LLVM_MACOS_HOST_C_SDK_HEADERS_OK)
-  check_cxx_source_compiles("${_llvm_macos_sdk_check}"
+  check_cxx_source_compiles("${_llvm_macos_cxx_sdk_check}"
                             LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK)
   if(_llvm_saved_try_compile_target_type)
     set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_llvm_saved_try_compile_target_type}")
@@ -247,12 +265,18 @@ int main(void) { return 0; }
   endif()
   unset(_llvm_saved_try_compile_target_type)
   unset(_llvm_macos_sdk_check)
-  if(NOT LLVM_MACOS_HOST_C_SDK_HEADERS_OK OR
-     NOT LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK)
+  unset(_llvm_macos_cxx_sdk_check)
+  if(NOT LLVM_MACOS_HOST_C_SDK_HEADERS_OK)
     message(FATAL_ERROR
-      "Native macOS LLVM requires matching macOS SDK C and C++ headers; "
-      "verify SDKROOT/CMAKE_OSX_SYSROOT and the selected host compilers. "
-      "An iPhoneOS/iPhoneSimulator SDK cannot build native macOS tools.")
+      "Native macOS LLVM C SDK compile check failed. Verify the C compiler "
+      "and SDKROOT/CMAKE_OSX_SYSROOT; iOS, Catalyst and simulator headers "
+      "cannot build macOS host tools. Inspect CMakeConfigureLog.yaml.")
+  endif()
+  if(NOT LLVM_MACOS_HOST_CXX_SDK_HEADERS_OK)
+    message(FATAL_ERROR
+      "Native macOS LLVM C++ SDK/standard-library compile check failed. "
+      "Verify the C++ compiler, its standard-library headers, and "
+      "SDKROOT/CMAKE_OSX_SYSROOT. Inspect CMakeConfigureLog.yaml.")
   endif()
 endif()
 
