@@ -86,6 +86,8 @@ endif()
 # cross-target configurations must retain their own toolchain/SDK selection.
 option(LLVM_MACOS_HOST_SDK_RESOLVE
   "Resolve an exact macOS host SDK before enabling LLVM compilers" OFF)
+option(LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE
+  "Require a versioned macOS (not Darwin or iOS) default target for native host tools" OFF)
 if(LLVM_MACOS_HOST_SDK_RESOLVE)
   if(NOT CMAKE_HOST_APPLE OR
      (DEFINED CMAKE_SYSTEM_NAME AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin") OR
@@ -1299,6 +1301,39 @@ endif()
 set(LLVM_DEFAULT_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE_DEFAULT}" CACHE STRING
     "Default target for which LLVM will generate code." )
 message(STATUS "LLVM default target triple: ${LLVM_DEFAULT_TARGET_TRIPLE}")
+
+# When explicitly requested by a native macOS host-tools build, keep the
+# build-host identity (darwin kernel triple) distinct from the default code
+# generation target (macOS deployment triple).  A Darwin kernel version is
+# not an iOS triple, but it should not be used as a substitute for the
+# explicitly selected macOS product/deployment version.
+if(LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE)
+  if(NOT LLVM_MACOS_HOST_SDK_RESOLVE OR NOT CMAKE_HOST_APPLE OR
+     NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_CROSSCOMPILING)
+    message(FATAL_ERROR
+      "LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE is for native macOS host tools only")
+  endif()
+  if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    message(FATAL_ERROR
+      "Explicit macOS LLVM default target requires CMAKE_OSX_DEPLOYMENT_TARGET")
+  endif()
+  if(NOT LLVM_DEFAULT_TARGET_TRIPLE MATCHES
+     "^(aarch64|arm64e?|x86_64)-apple-macosx([0-9]+(\\.[0-9]+){1,2})$")
+    message(FATAL_ERROR
+      "Native macOS LLVM default target must be versioned -apple-macosx, "
+      "not Darwin, iOS, iPadOS, Catalyst or simulator: "
+      "${LLVM_DEFAULT_TARGET_TRIPLE}")
+  endif()
+  set(_llvm_macos_default_version "${CMAKE_MATCH_2}")
+  if(NOT "${_llvm_macos_default_version}" VERSION_EQUAL
+         "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    message(FATAL_ERROR
+      "Native macOS LLVM default triple version (${_llvm_macos_default_version}) "
+      "does not match deployment target (${CMAKE_OSX_DEPLOYMENT_TARGET})")
+  endif()
+  message(STATUS "LLVM native macOS default target: ${LLVM_DEFAULT_TARGET_TRIPLE}")
+  unset(_llvm_macos_default_version)
+endif()
 
 set(LLVM_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE}")
 
