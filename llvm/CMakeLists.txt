@@ -79,6 +79,86 @@ if (CMAKE_GENERATOR STREQUAL "Xcode" AND NOT CMAKE_OSX_ARCHITECTURES)
   endif()
 endif()
 
+# Resolve the native Apple SDK before project() enables C/C++/ASM. CMake 4
+# no longer supplies a default CMAKE_OSX_SYSROOT, and its environment fallback
+# may be an iOS/iPadOS SDK left behind by another build. Keep this explicitly
+# opt-in for host compiler bootstraps: iOS, Catalyst, simulator and visionOS
+# cross-target configurations must retain their own toolchain/SDK selection.
+option(LLVM_MACOS_HOST_SDK_RESOLVE
+  "Resolve an exact macOS host SDK before enabling LLVM compilers" OFF)
+if(LLVM_MACOS_HOST_SDK_RESOLVE)
+  if(NOT CMAKE_HOST_APPLE OR
+     (DEFINED CMAKE_SYSTEM_NAME AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin") OR
+     CMAKE_TOOLCHAIN_FILE)
+    message(FATAL_ERROR
+      "LLVM_MACOS_HOST_SDK_RESOLVE is for native macOS LLVM host tools only; "
+      "use a target-specific toolchain for other Apple operating systems.")
+  endif()
+
+  if(CMAKE_OSX_SYSROOT)
+    set(_llvm_macos_sdk_request "${CMAKE_OSX_SYSROOT}")
+    set(_llvm_macos_sdk_origin "CMAKE_OSX_SYSROOT")
+  elseif(DEFINED ENV{SDKROOT} AND NOT "$ENV{SDKROOT}" STREQUAL "")
+    set(_llvm_macos_sdk_request "$ENV{SDKROOT}")
+    set(_llvm_macos_sdk_origin "SDKROOT")
+  else()
+    set(_llvm_macos_sdk_request "macosx")
+    set(_llvm_macos_sdk_origin "xcrun")
+  endif()
+
+  if(_llvm_macos_sdk_request STREQUAL "macosx")
+    execute_process(
+      COMMAND xcrun --sdk macosx --show-sdk-path
+      RESULT_VARIABLE _llvm_macos_sdk_status
+      OUTPUT_VARIABLE _llvm_macos_sdk_path
+      ERROR_VARIABLE _llvm_macos_sdk_error
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _llvm_macos_sdk_status STREQUAL "0")
+      message(FATAL_ERROR
+        "Could not resolve the active macOS SDK using xcrun: "
+        "${_llvm_macos_sdk_error}")
+    endif()
+  elseif(IS_ABSOLUTE "${_llvm_macos_sdk_request}")
+    set(_llvm_macos_sdk_path "${_llvm_macos_sdk_request}")
+  else()
+    message(FATAL_ERROR
+      "Native LLVM macOS host SDK must be an absolute path or 'macosx': "
+      "${_llvm_macos_sdk_request}")
+  endif()
+
+  if(NOT IS_DIRECTORY "${_llvm_macos_sdk_path}")
+    message(FATAL_ERROR
+      "Selected macOS SDK directory is missing: ${_llvm_macos_sdk_path}")
+  endif()
+  file(REAL_PATH "${_llvm_macos_sdk_path}" _llvm_macos_sdk_path)
+  get_filename_component(_llvm_macos_sdk_name "${_llvm_macos_sdk_path}" NAME)
+  if(NOT _llvm_macos_sdk_name MATCHES "^MacOSX.*[.]sdk$")
+    message(FATAL_ERROR
+      "Native macOS LLVM requires MacOSX.sdk, not ${_llvm_macos_sdk_path}")
+  endif()
+  if(NOT EXISTS "${_llvm_macos_sdk_path}/usr/include/TargetConditionals.h")
+    message(FATAL_ERROR
+      "Selected macOS SDK lacks TargetConditionals.h: ${_llvm_macos_sdk_path}")
+  endif()
+
+  # A real, canonical absolute SDK path must be in the cache *before*
+  # project() selects compiler flags and Apple framework/library search paths.
+  # Pass the same selection to child compiler processes and runtime projects.
+  set(CMAKE_OSX_SYSROOT "${_llvm_macos_sdk_path}" CACHE PATH
+      "SDK for the native macOS LLVM build" FORCE)
+  set(ENV{SDKROOT} "${_llvm_macos_sdk_path}")
+  set(LLVM_MACOS_HOST_RESOLVED_SDK "${_llvm_macos_sdk_path}"
+      CACHE INTERNAL "SDK pinned before LLVM compiler detection" FORCE)
+  message(STATUS "LLVM native macOS SDK: ${CMAKE_OSX_SYSROOT} "
+                 "(source: ${_llvm_macos_sdk_origin})")
+  unset(_llvm_macos_sdk_request)
+  unset(_llvm_macos_sdk_origin)
+  unset(_llvm_macos_sdk_status)
+  unset(_llvm_macos_sdk_error)
+  unset(_llvm_macos_sdk_name)
+  unset(_llvm_macos_sdk_path)
+endif()
+
 project(LLVM
   VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
   LANGUAGES C CXX ASM)
