@@ -28,8 +28,14 @@ std::string x86::getX86TargetCPU(const Driver &D, const ArgList &Args,
     if (CPU != "native")
       return std::string(CPU);
 
-    // FIXME: Reject attempts to use -march=native unless the target matches
-    // the host.
+    // Native CPU names and feature bits describe the running host.  They
+    // cannot describe an x86 target when Clang itself runs on another ISA.
+    // Named -march= CPUs remain valid for cross-compilation.
+    if (!llvm::Triple(llvm::sys::getProcessTriple()).isX86()) {
+      D.Diag(diag::err_drv_unsupported_opt_for_target)
+          << A->getAsString(Args) << Triple.getTriple();
+      return "";
+    }
     CPU = llvm::sys::getHostCPUName();
     if (!CPU.empty() && CPU != "generic")
       return std::string(CPU);
@@ -131,7 +137,10 @@ void x86::getX86TargetFeatures(const Driver &D, const llvm::Triple &Triple,
 
   // If -march=native, autodetect the feature list.
   if (const Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
-    if (StringRef(A->getValue()) == "native") {
+    // Do not inject host ISA bits into a cross-architecture x86 target.
+    // getX86TargetCPU diagnoses this unsupported use of -march=native.
+    if (StringRef(A->getValue()) == "native" &&
+        llvm::Triple(llvm::sys::getProcessTriple()).isX86()) {
       for (auto &F : llvm::sys::getHostCPUFeatures())
         Features.push_back(
             Args.MakeArgString((F.second ? "+" : "-") + F.first()));
