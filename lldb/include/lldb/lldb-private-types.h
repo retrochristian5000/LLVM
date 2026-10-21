@@ -12,7 +12,11 @@
 #include "lldb/lldb-types.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
+#include <cstdint>
+#include <functional>
+#include <optional>
 #include <type_traits>
+#include <utility>
 
 namespace llvm {
 namespace sys {
