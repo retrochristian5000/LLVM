@@ -163,6 +163,16 @@ project(LLVM
   VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
   LANGUAGES C CXX ASM)
 
+# Confirm that CMake's compiler initialization retained the SDK selected
+# before project(). The compiler, Apple framework lookup and child toolchains
+# must all see the identical canonical path.
+if(LLVM_MACOS_HOST_SDK_RESOLVE AND
+   NOT CMAKE_OSX_SYSROOT STREQUAL LLVM_MACOS_HOST_RESOLVED_SDK)
+  message(FATAL_ERROR
+    "CMake changed LLVM's selected native macOS SDK after compiler setup: "
+    "requested=${LLVM_MACOS_HOST_RESOLVED_SDK}, effective=${CMAKE_OSX_SYSROOT}")
+endif()
+
 # A native macOS LLVM bootstrap must use macOS SDK declarations, not headers
 # inherited from an iOS/iPadOS, simulator, or Mac Catalyst SDKROOT.  CMake's
 # CMAKE_OSX_SYSROOT variable also accepts these other Apple SDKs.
