@@ -1,5 +1,13 @@
 // Ensure we support the various CPU architecture names.
 //
+// -march=native may use the executing host's CPU and feature bits only
+// when the compiler is itself running on the target ISA family.
+// Explicit named -march choices remain available for cross-compilation.
+// RUN: %if aarch64-host %{ not %clang -target x86_64-unknown-linux-gnu -march=native -### -c %s 2>&1 | FileCheck %s --check-prefix=CROSS-NATIVE %}
+// RUN: %if aarch64-host %{ %clang -target x86_64-unknown-linux-gnu -march=haswell -### -c %s 2>&1 | FileCheck %s --check-prefix=CROSS-EXPLICIT %}
+// CROSS-NATIVE: error: unsupported option '-march=native' for target 'x86_64-unknown-linux-gnu'
+// CROSS-EXPLICIT: "-target-cpu" "haswell"
+//
 // RUN: %clang -target x86_64-unknown-unknown -c -### %s -march=nocona 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=nocona
 // nocona: "-target-cpu" "nocona"
