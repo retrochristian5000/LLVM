@@ -23,8 +23,10 @@ def Is64Bit : SubtargetFeature<"64bit-mode", "Is64Bit", "true",
                                "64-bit mode (x86_64)">;
 def Is32Bit : SubtargetFeature<"32bit-mode", "Is32Bit", "true",
                                "32-bit mode (80386)">;
+// Instruction encoding mode is independent of the minimum required CPU.
+// .code16 can legally contain 80386+ instructions and is not an 8086 gate.
 def Is16Bit : SubtargetFeature<"16bit-mode", "Is16Bit", "true",
-                               "16-bit mode (i8086)">;
+                               "16-bit encoding mode (no CPU ISA limit)">;
 def IsX32 : SubtargetFeature<"x32", "IsX32", "true",
                              "64-bit with ILP32 programming model (e.g. x32 ABI)">;
 
