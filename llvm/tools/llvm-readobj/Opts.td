@@ -30,6 +30,7 @@ def dyn_syms : FF<"dyn-syms", "Display the dynamic symbol table">;
 def expand_relocs : FF<"expand-relocs", "Expand each shown relocation to multiple lines">;
 def extra_sym_info : FF<"extra-sym-info", "Display extra information when showing symbols">;
 def file_header : FF<"file-header", "Display file header">;
+def dos_device_header : FF<"dos-device-header", "Inspect a raw DOS device-driver header (explicit opt-in)">;
 def headers : FF<"headers", "Equivalent to setting: --file-header, --program-headers, --section-headers">;
 defm hex_dump : Eq<"hex-dump", "Display the specified section(s) as hexadecimal bytes">, MetaVarName<"<name or index>">;
 def pretty_print : FF<"pretty-print", "Pretty print JSON output">;

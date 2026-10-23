@@ -1,0 +1,13 @@
+# RUN: %python -c "import struct; open(r'%t.sys', 'wb').write(struct.pack('<IHHH8s', 0xffffffff, 0x8000, 18, 19, b'WHPTEST ') + bytes([0xcb, 0xcb]))"
+# RUN: llvm-readobj --dos-device-header %t.sys | FileCheck %s --check-prefix=DRIVER
+# RUN: not llvm-readobj --dos-device-header %s 2>&1 | FileCheck %s --check-prefix=INVALID
+#
+# DRIVER: Format: DOSDevice
+# DRIVER: DOSDeviceHeader {
+# DRIVER: NextDevice: 0xFFFFFFFF
+# DRIVER: Attributes: 0x8000
+# DRIVER: DeviceType: Character
+# DRIVER: StrategyOffset: 0x12
+# DRIVER: InterruptOffset: 0x13
+# DRIVER: DeviceName: WHPTEST
+# INVALID: invalid initial DOS device header link

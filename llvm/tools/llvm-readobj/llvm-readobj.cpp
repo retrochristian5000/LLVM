@@ -26,6 +26,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/COFFImportFile.h"
+#include "llvm/Object/DOSDevice.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/NEFile.h"
@@ -109,6 +110,7 @@ static bool DynRelocs;
 static bool DynamicSymbols;
 static bool ExtraSymInfo;
 static bool FileHeaders;
+static bool DOSDeviceHeader;
 static bool Headers;
 static std::vector<std::string> HexDump;
 static bool PrettyPrint;
@@ -236,6 +238,7 @@ static void parseOptions(const opt::InputArgList &Args) {
   opts::ExpandRelocs = Args.hasArg(OPT_expand_relocs);
   opts::ExtraSymInfo = Args.hasArg(OPT_extra_sym_info);
   opts::FileHeaders = Args.hasArg(OPT_file_header);
+  opts::DOSDeviceHeader = Args.hasArg(OPT_dos_device_header);
   opts::Headers = Args.hasArg(OPT_headers);
   opts::HexDump = Args.getAllArgValues(OPT_hex_dump_EQ);
   opts::Relocations = Args.hasArg(OPT_relocs);
@@ -626,6 +629,27 @@ static void dumpCOFFObject(COFFObjectFile *Obj, ScopedPrinter &Writer) {
   dumpObject(**HybridObjOrErr, Writer);
 }
 
+/// Inspect an explicitly selected raw DOS installable device-driver header.
+/// No filename-based detection: IO.SYS and NT .sys files are different ABIs.
+static void dumpDOSDeviceHeader(const DOSDevice::Header &Hdr,
+                                ScopedPrinter &Writer) {
+  Writer.printString("Format", "DOSDevice");
+  DictScope D(Writer, "DOSDeviceHeader");
+  Writer.printHex("NextDevice", Hdr.NextDevice);
+  Writer.printHex("Attributes", Hdr.Attributes);
+  Writer.printString("DeviceType",
+                     Hdr.isCharacterDevice() ? "Character" : "Block");
+  Writer.printHex("StrategyOffset", Hdr.StrategyOffset);
+  Writer.printHex("InterruptOffset", Hdr.InterruptOffset);
+  if (Hdr.isCharacterDevice())
+    Writer.printString("DeviceName",
+                       StringRef(Hdr.NameOrUnits.data(), Hdr.NameOrUnits.size())
+                           .rtrim(" "));
+  else
+    Writer.printNumber("Units",
+                       static_cast<unsigned char>(Hdr.NameOrUnits[0]));
+}
+
 /// Dumps a Windows 16-bit New Executable file.
 static void dumpNEFile(NEFile *Obj, ScopedPrinter &Writer) {
   const NE::Header &Hdr = Obj->getHeader();
@@ -711,6 +735,15 @@ static void dumpInput(StringRef File, ScopedPrinter &Writer) {
     return reportError(errorCodeToError(EC), File);
 
   std::unique_ptr<MemoryBuffer> &Buffer = FileOrErr.get();
+  if (opts::DOSDeviceHeader) {
+    Expected<DOSDevice::Header> HeaderOrErr =
+        DOSDevice::parseHeader(Buffer->getMemBufferRef());
+    if (!HeaderOrErr)
+      reportError(HeaderOrErr.takeError(), File);
+    dumpDOSDeviceHeader(*HeaderOrErr, Writer);
+    return;
+  }
+
   file_magic Type = identify_magic(Buffer->getBuffer());
   if (Type == file_magic::bitcode) {
     reportWarning(createStringError(errc::invalid_argument,

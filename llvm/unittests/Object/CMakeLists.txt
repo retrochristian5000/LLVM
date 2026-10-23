@@ -10,6 +10,7 @@ add_llvm_unittest(ObjectTests
   ArchiveTest.cpp
   BuildIDTest.cpp
   COFFObjectFileTest.cpp
+  DOSDeviceTest.cpp
   DXContainerTest.cpp
   ELFObjectFileTest.cpp
   ELFTypesTest.cpp

@@ -8,6 +8,7 @@ add_llvm_component_library(LLVMObject
   COFFModuleDefinition.cpp
   COFFObjectFile.cpp
   Decompressor.cpp
+  DOSDevice.cpp
   DXContainer.cpp
   ELF.cpp
   ELFObjectFile.cpp
