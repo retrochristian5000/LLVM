@@ -320,9 +320,14 @@ tools.extend(
     ]
 )
 
+if (os.path.isfile(os.path.join(config.llvm_tools_dir, "llvm-vbc")) or
+    os.path.isfile(os.path.join(config.llvm_tools_dir, "llvm-vbc.exe"))):
+    config.available_features.add("llvm-vbc")
+
 # The following tools are optional
 tools.extend(
     [
+        ToolSubst("llvm-vbc", unresolved="ignore"),
         ToolSubst("llvm-mt", unresolved="ignore"),
         ToolSubst("llvm-debuginfod", unresolved="ignore"),
         ToolSubst("Kaleidoscope-Ch3", unresolved="ignore"),

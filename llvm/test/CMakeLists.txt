@@ -169,6 +169,10 @@ if(TARGET llvm-driver)
   set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} llvm-driver)
 endif()
 
+if(TARGET llvm-vbc)
+  list(APPEND LLVM_TEST_DEPENDS llvm-vbc)
+endif()
+
 # If Intel JIT events are supported, depend on a tool that tests the listener.
 if( LLVM_USE_INTEL_JITEVENTS )
   set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} llvm-jitlistener)

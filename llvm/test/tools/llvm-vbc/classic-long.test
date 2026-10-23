@@ -1,0 +1,52 @@
+# REQUIRES: llvm-vbc
+# RUN: split-file %s %t
+# RUN: llvm-vbc %t/valid.bas | FileCheck %s --check-prefix=VALID
+# RUN: llvm-vbc %t/valid.bas | llvm-as -o %t/valid.bc
+# RUN: llvm-vbc %t/minimum.bas | FileCheck %s --check-prefix=MIN
+# RUN: not llvm-vbc %t/undeclared.bas 2>&1 | FileCheck %s --check-prefix=UNDECLARED
+# RUN: not llvm-vbc %t/variant.bas 2>&1 | FileCheck %s --check-prefix=VARIANT
+# RUN: not llvm-vbc %t/overflow.bas 2>&1 | FileCheck %s --check-prefix=LIMIT
+# RUN: not llvm-vbc %t/unsupported.bas 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
+#
+# VALID: define i32 @vb_main() {
+# VALID: call { i32, i1 } @llvm.sadd.with.overflow.i32
+# VALID: store i32
+# VALID: ret i32
+# MIN: store i32 -2147483648
+# UNDECLARED: undeclared or unsupported identifier 'missing'
+# VARIANT: Option Explicit required: implicit Variant is unsupported
+# LIMIT: Long integer literal exceeds 32-bit signed range
+# UNSUPPORTED: only 'Dim name As Long' declarations are supported
+#
+#--- valid.bas
+Option Explicit
+Public Function Main() As Long
+  Dim Count As Long
+  Count = 20
+  main = count + 22
+End Function
+#--- minimum.bas
+Option Explicit
+Function Smallest() As Long
+  Smallest = -2147483648
+End Function
+#--- undeclared.bas
+Option Explicit
+Function Main() As Long
+  Main = missing + 2
+End Function
+#--- variant.bas
+Function Main() As Long
+  Main = 1
+End Function
+#--- overflow.bas
+Option Explicit
+Function Main() As Long
+  Main = 2147483648
+End Function
+#--- unsupported.bas
+Option Explicit
+Function Main() As Long
+  Dim Index As Integer
+  Main = 0
+End Function
