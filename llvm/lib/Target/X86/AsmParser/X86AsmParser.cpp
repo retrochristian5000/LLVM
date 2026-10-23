@@ -4914,9 +4914,13 @@ bool X86AsmParser::ParseDirective(AsmToken DirectiveID) {
 }
 
 bool X86AsmParser::parseDirectiveArch() {
-  // Ignore .arch for now.
+  // A .code16 directive selects instruction encoding, not an 8086/186/286
+  // ISA baseline.  Treating .arch as a no-op can silently emit instructions
+  // that the requested processor cannot execute.
+  SMLoc ArchLoc = getTok().getLoc();
   getParser().parseStringToEndOfStatement();
-  return false;
+  return Error(ArchLoc, "x86 .arch does not select an instruction-set "
+                        "baseline; refusing to ignore CPU restriction");
 }
 
 /// parseDirectiveNops
