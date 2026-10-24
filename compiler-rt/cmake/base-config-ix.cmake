@@ -172,13 +172,18 @@ if(APPLE)
                    "-Werror")
   option(COMPILER_RT_ENABLE_MACCATALYST "Enable building for Mac Catalyst" ${COMPILER_RT_HAS_DARWIN_TARGET_VARIANT_FLAG})
 
-  # Don't enable COMPILER_RT_ENABLE_IOS if we can't find the sdk dir.
-  # This can happen when you only have the commandline tools installed
-  # which doesn't come with the iOS SDK.
-  find_darwin_sdk_dir(HAS_IOS_SDK "iphoneos")
+  # Auto-detect iOS only if it was not explicitly disabled. A macOS-only
+  # compiler-rt build does not need an iPhoneOS SDK, and an explicit OFF must
+  # not cause an irrelevant SDK probe or missing-iOS warning. Preserve the
+  # existing automatic default and explicit ON behavior for cross-target builds.
   set(COMPILER_RT_ENABLE_IOS_DEFAULT On)
-  if("${HAS_IOS_SDK}" STREQUAL "")
-    message(WARNING "iOS SDK not found! Building compiler-rt without iOS support.")
+  if(NOT DEFINED COMPILER_RT_ENABLE_IOS OR COMPILER_RT_ENABLE_IOS)
+    find_darwin_sdk_dir(HAS_IOS_SDK "iphoneos")
+    if("${HAS_IOS_SDK}" STREQUAL "")
+      message(WARNING "iOS SDK not found! Building compiler-rt without iOS support.")
+      set(COMPILER_RT_ENABLE_IOS_DEFAULT Off)
+    endif()
+  else()
     set(COMPILER_RT_ENABLE_IOS_DEFAULT Off)
   endif()
   option(COMPILER_RT_ENABLE_IOS "Enable building for iOS" ${COMPILER_RT_ENABLE_IOS_DEFAULT})
