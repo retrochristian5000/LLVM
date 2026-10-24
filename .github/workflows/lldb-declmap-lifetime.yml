@@ -6,12 +6,20 @@ on:
     paths:
       - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h'
       - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.cpp'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUtilityFunction.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUtilityFunction.cpp'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangFunctionCaller.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangFunctionCaller.cpp'
       - 'lldb/scripts/test-declmap-incomplete-lifetime.py'
       - '.github/workflows/lldb-declmap-lifetime.yml'
   pull_request:
     paths:
       - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.h'
       - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUserExpression.cpp'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUtilityFunction.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangUtilityFunction.cpp'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangFunctionCaller.h'
+      - 'lldb/source/Plugins/ExpressionParser/Clang/ClangFunctionCaller.cpp'
       - 'lldb/scripts/test-declmap-incomplete-lifetime.py'
       - '.github/workflows/lldb-declmap-lifetime.yml'
 
