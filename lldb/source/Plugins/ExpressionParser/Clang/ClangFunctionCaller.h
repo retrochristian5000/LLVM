@@ -9,6 +9,8 @@
 #ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGFUNCTIONCALLER_H
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGFUNCTIONCALLER_H
 
+#include <memory>
+
 #include "ClangExpressionHelper.h"
 
 #include "lldb/Core/Address.h"
@@ -64,7 +66,10 @@ class ClangFunctionCaller : public FunctionCaller {
     // LLVM RTTI support
     static char ID;
 
-    ClangFunctionCallerHelper(ClangFunctionCaller &owner) : m_owner(owner) {}
+    // Keep unique_ptr<ASTStructExtractor> cleanup in the implementation
+    // where the Clang consumer is a complete type.
+    ClangFunctionCallerHelper(ClangFunctionCaller &owner);
+    ~ClangFunctionCallerHelper() override;
 
     /// Return the object that the parser should use when resolving external
     /// values.  May be NULL if everything should be self-contained.
