@@ -5,7 +5,9 @@ on:
     paths:
       - 'compiler-rt/CMakeLists.txt'
       - 'compiler-rt/cmake/Modules/CompilerRTDarwinUtils.cmake'
+      - 'compiler-rt/cmake/base-config-ix.cmake'
       - 'compiler-rt/cmake/tests/native-darwin-arch-isolation.cmake'
+      - 'compiler-rt/cmake/tests/ios-sdk-option-isolation.py'
       - '.github/workflows/compiler-rt-native-darwin-arch.yml'
   workflow_dispatch:
 permissions:
@@ -17,3 +19,5 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Test native Darwin runtime arch isolation
         run: cmake -P compiler-rt/cmake/tests/native-darwin-arch-isolation.cmake
+      - name: Reject unneeded iPhoneOS SDK discovery on macOS
+        run: python3 compiler-rt/cmake/tests/ios-sdk-option-isolation.py
