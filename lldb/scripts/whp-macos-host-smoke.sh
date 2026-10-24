@@ -165,6 +165,27 @@ for private_header_smoke in "$sdk_first" "$private_first"; do
   "$host_cxx" "${header_flags[@]}" "$private_header_smoke"
 done
 
+# Xcode 27's mach/machine.h defines CPU_SUBTYPE_ARM64E_X1 as a typed
+# macro, while llvm/BinaryFormat/MachO.h exposes the same value as an enum
+# member.  A legacy SDK may not yet define the macro, so inject that exact
+# spelling when absent.  SafeMachO must undefine it *before* LLVM's enum.
+macho_macro_smoke="$build_dir/lldb-macho-arm64e-x1-sdk.cpp"
+cat > "$macho_macro_smoke" <<'CPP'
+#include <mach/machine.h>
+#ifndef CPU_SUBTYPE_ARM64E_X1
+#define CPU_SUBTYPE_ARM64E_X1 ((cpu_subtype_t) 12)
+#endif
+#include "lldb/Host/SafeMachO.h"
+#ifdef CPU_SUBTYPE_ARM64E_X1
+#error SafeMachO left Apple's arm64e.x1 macro visible
+#endif
+static_assert(llvm::MachO::CPU_SUBTYPE_ARM64E_X1 == 12,
+              "Mach-O arm64e.x1 subtype must equal Apple's ABI value");
+static_assert(llvm::MachO::CPU_SUBTYPE_ARM64E == 2,
+              "Mach-O arm64e subtype must remain unchanged");
+CPP
+"$host_cxx" "${header_flags[@]}" "$macho_macro_smoke"
+
 # Check that the generated tools actually match the native macOS slice.
 for artifact in "$compiler" "$debugger"; do
   if ! xcrun lipo -archs "$artifact" | grep -Eq "(^| )$host_arch( |$)"; then
