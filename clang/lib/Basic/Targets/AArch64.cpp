@@ -1904,6 +1904,10 @@ void clang::targets::getAppleMachOAArch64Defines(MacroBuilder &Builder,
 
   if (Triple.isArm64e()) {
     Builder.defineMacro("__arm64e__", "1");
+    // __PTRAUTH__ is the documented arm64e ABI feature macro. Keep it
+    // alongside the legacy intrinsic spelling; WHP's PAC call admission
+    // probes require both the ABI and the supported intrinsic interface.
+    Builder.defineMacro("__PTRAUTH__", "1");
     Builder.defineMacro("__PTRAUTH_INTRINSICS__", "1");
   }
 }
