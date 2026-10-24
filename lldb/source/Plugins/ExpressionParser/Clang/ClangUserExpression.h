@@ -31,6 +31,7 @@ namespace lldb_private {
 
 class ClangExpressionDeclMap;
 class ClangExpressionParser;
+class ClangPersistentVariables;
 
 /// \class ClangUserExpression ClangUserExpression.h
 /// "lldb/Expression/ClangUserExpression.h" Encapsulates a single expression
