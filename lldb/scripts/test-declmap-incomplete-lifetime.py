@@ -13,6 +13,23 @@ PLUGIN = ROOT / "lldb/source/Plugins/ExpressionParser/Clang"
 header = (PLUGIN / "ClangUserExpression.h").read_text(encoding="utf-8")
 impl = (PLUGIN / "ClangUserExpression.cpp").read_text(encoding="utf-8")
 
+# ClangUserExpression stores a pointer to the plugin-local persistent-state
+# subclass. Its public header needs a forward declaration, not a transitive
+# include or a full definition; .cpp uses the concrete type for llvm::cast
+# and member calls and must include the defining header itself.
+persistent_header = (PLUGIN / "ClangPersistentVariables.h").read_text(
+    encoding="utf-8"
+)
+assert "ClangPersistentVariables *m_clang_state;" in header
+namespace_index = header.index("namespace lldb_private {")
+forward_index = header.index("class ClangPersistentVariables;")
+expression_index = header.index("class ClangUserExpression :")
+assert namespace_index < forward_index < expression_index
+assert '#include "ClangPersistentVariables.h"' not in header
+assert '#include "ClangPersistentVariables.h"' in impl
+assert "class ClangPersistentVariables" in persistent_header
+assert "llvm::cast<ClangPersistentVariables>" in impl
+
 assert '#include "ClangExpressionDeclMap.h"' not in header
 assert "class ClangExpressionDeclMap;" in header
 assert "#include <memory>" in header
