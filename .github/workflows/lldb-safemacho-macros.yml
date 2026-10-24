@@ -1,0 +1,27 @@
+name: LLDB Mach-O SDK macro isolation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lldb/include/lldb/Host/SafeMachO.h'
+      - 'llvm/include/llvm/BinaryFormat/MachO.h'
+      - 'lldb/scripts/test-safemacho-arm64e-x1.py'
+      - 'lldb/scripts/whp-macos-host-smoke.sh'
+      - '.github/workflows/lldb-safemacho-macros.yml'
+  pull_request:
+    paths:
+      - 'lldb/include/lldb/Host/SafeMachO.h'
+      - 'llvm/include/llvm/BinaryFormat/MachO.h'
+      - 'lldb/scripts/test-safemacho-arm64e-x1.py'
+      - 'lldb/scripts/whp-macos-host-smoke.sh'
+      - '.github/workflows/lldb-safemacho-macros.yml'
+permissions:
+  contents: read
+jobs:
+  macro-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile injected Apple arm64e.x1 SDK macro against SafeMachO
+        run: python3 lldb/scripts/test-safemacho-arm64e-x1.py
