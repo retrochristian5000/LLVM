@@ -10,6 +10,7 @@
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGUTILITYFUNCTION_H
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -79,13 +80,18 @@ private:
     // LLVM RTTI support
     static char ID;
 
+    // Define ownership lifetime in the .cpp with ClangExpressionDeclMap
+    // complete. libc++ requires the full type when deleting a unique_ptr.
+    ClangUtilityFunctionHelper();
+    ~ClangUtilityFunctionHelper() override;
+
     /// Return the object that the parser should use when resolving external
     /// values.  May be NULL if everything should be self-contained.
     ClangExpressionDeclMap *DeclMap() override {
       return m_expr_decl_map_up.get();
     }
 
-    void ResetDeclMap() { m_expr_decl_map_up.reset(); }
+    void ResetDeclMap();
 
     void ResetDeclMap(ExecutionContext &exe_ctx, bool keep_result_in_memory);
 
