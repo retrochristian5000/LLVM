@@ -43,4 +43,45 @@ assert "m_expr_decl_map_up.reset();" in impl[impl.index(reset):impl.index(
 
 # Ensure that the actual allocation remains in this same translation unit.
 assert "std::make_unique<ClangExpressionDeclMap>(" in impl
-print("LLDB incomplete ClangExpressionDeclMap ownership: verified")
+# Utility-function expressions have a *second* DeclMap owner.  Its reset
+# and implicitly generated destructor must not instantiate default_delete
+# from the header that only knows ClangExpressionHelper's forward declaration.
+utility_header = (PLUGIN / "ClangUtilityFunction.h").read_text(encoding="utf-8")
+utility_impl = (PLUGIN / "ClangUtilityFunction.cpp").read_text(encoding="utf-8")
+utility_class = utility_header.split("class ClangUtilityFunctionHelper", 1)[1]
+utility_class = utility_class.split("  };", 1)[0]
+assert '#include "ClangExpressionDeclMap.h"' not in utility_header
+assert "#include <memory>" in utility_header
+assert "std::unique_ptr<ClangExpressionDeclMap> m_expr_decl_map_up;" in utility_class
+assert "ClangUtilityFunctionHelper();" in utility_class
+assert "~ClangUtilityFunctionHelper() override;" in utility_class
+assert "void ResetDeclMap();" in utility_class
+assert "m_expr_decl_map_up.reset()" not in utility_header
+assert '#include "ClangExpressionDeclMap.h"' in utility_impl
+utility_owner = "ClangUtilityFunction::ClangUtilityFunctionHelper::"
+assert utility_impl.count(utility_owner + "ClangUtilityFunctionHelper()") == 1
+assert utility_impl.count(utility_owner + "~ClangUtilityFunctionHelper()") == 1
+assert utility_impl.count(utility_owner + "ResetDeclMap()") == 1
+assert "m_expr_decl_map_up.reset();" in utility_impl
+assert "std::make_unique<ClangExpressionDeclMap>(" in utility_impl
+
+# An adjacent LLDB helper owns ASTStructExtractor through unique_ptr.
+# Keep its construction and destruction in the TU that includes the complete
+# ASTStructExtractor class; an inline constructor can trigger unwinding cleanup.
+caller_header = (PLUGIN / "ClangFunctionCaller.h").read_text(encoding="utf-8")
+caller_impl = (PLUGIN / "ClangFunctionCaller.cpp").read_text(encoding="utf-8")
+caller_class = caller_header.split("class ClangFunctionCallerHelper", 1)[1]
+caller_class = caller_class.split("  };", 1)[0]
+assert "#include <memory>" in caller_header
+assert "class ASTStructExtractor;" in caller_header
+assert "std::unique_ptr<ASTStructExtractor> m_struct_extractor;" in caller_class
+assert "ClangFunctionCallerHelper(ClangFunctionCaller &owner);" in caller_class
+assert "~ClangFunctionCallerHelper() override;" in caller_class
+assert "ClangFunctionCallerHelper(ClangFunctionCaller &owner) :" not in caller_header
+assert '#include "ASTStructExtractor.h"' in caller_impl
+caller_owner = "ClangFunctionCaller::ClangFunctionCallerHelper::"
+assert caller_impl.count(caller_owner + "ClangFunctionCallerHelper(") == 1
+assert caller_impl.count(caller_owner + "~ClangFunctionCallerHelper()") == 1
+assert "std::make_unique<ASTStructExtractor>(" in caller_impl
+
+print("LLDB Clang expression incomplete-owner lifetimes: verified")
