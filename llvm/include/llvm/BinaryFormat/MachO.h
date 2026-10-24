@@ -1715,8 +1715,12 @@ enum CPUSubTypeARM64 : uint32_t {
   CPU_SUBTYPE_ARM64_ALL = 0,
   CPU_SUBTYPE_ARM64_V8 = 1,
   CPU_SUBTYPE_ARM64E = 2,
-  // arm64e.x1 is a distinct CPU subtype, not a pointer-auth ABI version.
+  // X1 and arm64e.x1 identify distinct SDK slices. Metadata only: these do
+  // not authorize arm64e.x1 code generation or pointer-authentication changes.
+  CPU_SUBTYPE_ARM64_X1 = 3,
   CPU_SUBTYPE_ARM64E_X1 = 12,
+  // Unallocated subtype values through 20 are reserved by Apple's SDK.
+  CPU_SUBTYPE_ARM64_MAX = 20,
 
   // arm64e uses the capability bits to encode ptrauth ABI information.
   // Bit 63 marks the binary as Versioned.
@@ -1726,6 +1730,19 @@ enum CPUSubTypeARM64 : uint32_t {
   // Bits [59:56] hold the 4-bit ptrauth ABI version.
   CPU_SUBTYPE_ARM64E_PTRAUTH_MASK = 0x0f000000U,
 };
+
+// Apple SDK's slice-family tests must compare subtype IDs without the
+// capability byte. A versioned arm64e.x1 slice belongs to *both* families;
+// a plain arm64.x1 slice must not be misidentified as a PAC (arm64e) slice.
+inline constexpr bool CPU_SUBTYPE_HAS_ARM64E(uint32_t ST) {
+  const uint32_t Subtype = ST & ~uint32_t(CPU_SUBTYPE_MASK);
+  return Subtype == CPU_SUBTYPE_ARM64E || Subtype == CPU_SUBTYPE_ARM64E_X1;
+}
+
+inline constexpr bool CPU_SUBTYPE_HAS_ARM64X1(uint32_t ST) {
+  const uint32_t Subtype = ST & ~uint32_t(CPU_SUBTYPE_MASK);
+  return Subtype == CPU_SUBTYPE_ARM64_X1 || Subtype == CPU_SUBTYPE_ARM64E_X1;
+}
 
 inline unsigned CPU_SUBTYPE_ARM64E_PTRAUTH_VERSION(uint32_t ST) {
   return (ST & CPU_SUBTYPE_ARM64E_PTRAUTH_MASK) >> 24;
