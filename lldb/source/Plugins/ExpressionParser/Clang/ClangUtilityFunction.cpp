@@ -176,6 +176,16 @@ bool ClangUtilityFunction::Install(DiagnosticManager &diagnostic_manager,
 
 char ClangUtilityFunction::ClangUtilityFunctionHelper::ID;
 
+ClangUtilityFunction::ClangUtilityFunctionHelper::ClangUtilityFunctionHelper() =
+    default;
+
+ClangUtilityFunction::ClangUtilityFunctionHelper::~ClangUtilityFunctionHelper() =
+    default;
+
+void ClangUtilityFunction::ClangUtilityFunctionHelper::ResetDeclMap() {
+  m_expr_decl_map_up.reset();
+}
+
 void ClangUtilityFunction::ClangUtilityFunctionHelper::ResetDeclMap(
     ExecutionContext &exe_ctx, bool keep_result_in_memory) {
   std::shared_ptr<ClangASTImporter> ast_importer;
