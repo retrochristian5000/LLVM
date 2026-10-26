@@ -1882,6 +1882,16 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
     return;
   }
 
+  // An arm64e image may depend on an arm64 dylib, but not the reverse:
+  // an arm64 output cannot promise the authenticated pointer/call ABI used
+  // by a versioned arm64e dylib. Matching CPU_TYPE_ARM64 alone is insufficient.
+  if (config->arch() == AK_arm64 &&
+      (hdr->cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) {
+    error(toString(this) +
+          ": arm64e dylib is incompatible with an arm64 output");
+    return;
+  }
+
   // An x1 dylib needs PAuth_LR-aware frames and compatible hardware. A
   // shared CPU type alone does not make it safe to import into an older image.
   if (hdr->cputype == CPU_TYPE_ARM64 &&

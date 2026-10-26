@@ -7,6 +7,7 @@
 
 # RUN: rm -rf %t; split-file %s %t
 # RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/client.o %t/client.s
+# RUN: llvm-mc -filetype=obj -triple=arm64-apple-macos -o %t/client-arm64.o %t/client.s
 # RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/lib-arm64e.o %t/lib.s
 # RUN: llvm-mc -filetype=obj -triple=arm64-apple-macos -o %t/lib-arm64.o %t/lib.s
 
@@ -25,6 +26,15 @@
 
 # FIXUPS: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 # FIXUPS: _foo
+
+## Compatibility is directional: an arm64e image may import an arm64 dylib,
+## but an arm64 image must not import a pointer-authenticated arm64e dylib.
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib %t/client-arm64.o %t/libfoo-arm64.dylib -o %t/valid-arm64.dylib
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib %t/client-arm64.o %t/libfoo.dylib -o %t/bad-reverse.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=BAD-REVERSE
+# BAD-REVERSE: arm64e dylib is incompatible with an arm64 output
 
 ## Mutate only the Mach-O header's 32-bit cpu subtype field (byte 8).
 ## Verify that the binary dylib loader checks its actual ABI version.

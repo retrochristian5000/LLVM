@@ -10,9 +10,11 @@ on:
       - 'clang/test/CodeGen/arm64e-thread-abi.c'
       - 'lld/MachO/Arch/ARM64.cpp'
       - 'lld/MachO/Driver.cpp'
+      - 'lld/MachO/InputFiles.cpp'
       - 'lld/MachO/ICF.cpp'
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - 'lld/test/MachO/arm64e-icf-safe-thunks.s'
+      - 'lld/test/MachO/arm64e-dylib-abi.s'
       - '.github/workflows/arm64e-cpu-subtype.yml'
 
 permissions:
@@ -46,4 +48,5 @@ jobs:
             clang/test/CodeGen/arm64e-c-driver-abi.c \
             clang/test/CodeGen/arm64e-thread-abi.c \
             lld/test/MachO/arm64e-cpu-subtype.s \
-            lld/test/MachO/arm64e-icf-safe-thunks.s
+            lld/test/MachO/arm64e-icf-safe-thunks.s \
+            lld/test/MachO/arm64e-dylib-abi.s
