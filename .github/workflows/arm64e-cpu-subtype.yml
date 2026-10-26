@@ -14,6 +14,7 @@ on:
       - 'lld/MachO/InputFiles.cpp'
       - 'lld/MachO/ICF.cpp'
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
+      - 'lld/test/MachO/arm64e-x1-dylib-metadata.s'
       - 'lld/test/MachO/arm64e-icf-safe-thunks.s'
       - 'lld/test/MachO/arm64e-dylib-abi.s'
       - 'llvm/lib/Object/Archive.cpp'
@@ -43,7 +44,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_INCLUDE_TESTS=ON
       - name: Build focused tools
-        run: ninja -C build-arm64e-subtype clang lld llvm-mc llvm-objdump llvm-ar llvm-as FileCheck
+        run: ninja -C build-arm64e-subtype clang lld llvm-mc llvm-objdump llvm-readobj llvm-ar llvm-as split-file FileCheck
       - name: Run ARM64e ABI regressions
         run: |
           build-arm64e-subtype/bin/llvm-lit -sv \
@@ -51,6 +52,7 @@ jobs:
             clang/test/CodeGen/arm64e-c-driver-abi.c \
             clang/test/CodeGen/arm64e-thread-abi.c \
             lld/test/MachO/arm64e-cpu-subtype.s \
+            lld/test/MachO/arm64e-x1-dylib-metadata.s \
             lld/test/MachO/arm64e-icf-safe-thunks.s \
             lld/test/MachO/arm64e-dylib-abi.s \
             llvm/test/tools/llvm-ar/lto-kind-from-triple.test

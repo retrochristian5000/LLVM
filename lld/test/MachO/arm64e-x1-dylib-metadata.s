@@ -11,10 +11,13 @@
 ## This is an intentionally synthetic header mutation for reader/guard tests,
 ## not a real PAuth_LR dylib: no executable x1 support is implied.
 # RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,0x8000000c); open(sys.argv[2],'wb').write(b)" %t/regular.dylib %t/x1.dylib
+# RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,0x00000003); open(sys.argv[2],'wb').write(b)" %t/regular.dylib %t/arm64-x1.dylib
 # RUN: llvm-readobj -h %t/x1.dylib | FileCheck %s --check-prefix=HEADER
 # RUN: llvm-objdump --macho --private-header %t/x1.dylib | FileCheck %s --check-prefix=OBJDUMP
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 15 26 \
 # RUN:   -dylib %t/provider.o %t/x1.dylib -o %t/refuse.dylib 2>&1 | FileCheck %s --check-prefix=BIN-ERROR
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 15 26 \
+# RUN:   -dylib %t/client.o %t/arm64-x1.dylib -o %t/refuse-arm64-x1.dylib 2>&1 | FileCheck %s --check-prefix=PLAIN-X1-ERROR
 # RUN: not %no-arg-lld -arch arm64e.x1 -platform_version macos 15 26 \
 # RUN:   -dylib %t/provider.o -o %t/unsupported.dylib 2>&1 | FileCheck %s --check-prefix=OUTPUT-ERROR
 # RUN: %no-arg-lld -arch arm64 -platform_version macos 15 26 \
@@ -28,6 +31,7 @@
 # HEADER-NEXT: PointerAuthABIVersion: 0
 # OBJDUMP: E.X1
 # BIN-ERROR: arm64e.x1 dylib requires an arm64e.x1 output
+# PLAIN-X1-ERROR: arm64.x1 dylib requires an arm64.x1 output
 # OUTPUT-ERROR: -arch arm64e.x1 requires PAuth_LR code generation
 # TBD-ERROR: is incompatible with arm64
 

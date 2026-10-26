@@ -205,10 +205,10 @@ static bool compatWithTargetArch(const InputFile *file, const Header *hdr) {
   return checkCompatibility(file);
 }
 
-// Check pointer-authentication ABI only when an object is actually linked.
+// Check the ARM64 Mach-O subtype/ABI only when an object is actually linked.
 // Lazy archive indexing must not reject members that are never extracted.
 template <class Header>
-static bool checkArm64eObjectABI(const ObjFile *file, const Header *hdr) {
+static bool checkArm64ObjectABI(const ObjFile *file, const Header *hdr) {
   if (hdr->cputype != CPU_TYPE_ARM64)
     return true;
 
@@ -228,6 +228,21 @@ static bool checkArm64eObjectABI(const ObjFile *file, const Header *hdr) {
              baseSubtype == CPU_SUBTYPE_ARM64E) {
     error(toString(file) +
           ": arm64e object is incompatible with an arm64 output");
+    return false;
+  } else if (config->arch() == AK_arm64 &&
+             baseSubtype == CPU_SUBTYPE_ARM64E_X1) {
+    // The X1 subtype requires PAuth_LR, even if this particular object has
+    // no authenticated relocations.  Do not silently link it as plain arm64.
+    error(toString(file) +
+          ": arm64e.x1 object requires an arm64e.x1 output "
+          "(PAuth_LR output is not supported yet)");
+    return false;
+  } else if (config->arch() == AK_arm64 &&
+             baseSubtype == CPU_SUBTYPE_ARM64_X1) {
+    // The non-arm64e X1 slice is also a distinct ABI, not plain arm64.
+    error(toString(file) +
+          ": arm64.x1 object requires an arm64.x1 output "
+          "(X1 output is not supported yet)");
     return false;
   }
   return true;
@@ -1106,7 +1121,7 @@ template <class LP> void ObjFile::parse() {
     return;
   if (!(compatArch = compatWithTargetArch(this, hdr)))
     return;
-  if (!(compatArch = checkArm64eObjectABI(this, hdr)))
+  if (!(compatArch = checkArm64ObjectABI(this, hdr)))
     return;
 
   // We will resolve LC linker options once all native objects are loaded after
@@ -1899,6 +1914,14 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
     error(toString(this) +
           ": arm64e.x1 dylib requires an arm64e.x1 output "
           "(PAuth_LR output is not supported yet)");
+    return;
+  }
+
+  if (hdr->cputype == CPU_TYPE_ARM64 &&
+      (hdr->cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64_X1) {
+    error(toString(this) +
+          ": arm64.x1 dylib requires an arm64.x1 output "
+          "(X1 output is not supported yet)");
     return;
   }
 
