@@ -1096,7 +1096,9 @@ Archive::Archive(MemoryBufferRef Source, Error &Err)
 }
 
 object::Archive::Kind Archive::getDefaultKindForTriple(const Triple &T) {
-  if (T.isOSDarwin())
+  // The archive symbol table must match the object format, including explicit
+  // Mach-O targets without a Darwin OS and Darwin targets using another format.
+  if (T.isOSBinFormatMachO())
     return object::Archive::K_DARWIN;
   if (T.isOSAIX())
     return object::Archive::K_AIXBIG;

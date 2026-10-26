@@ -19,6 +19,37 @@
 # RUN: llvm-ar crs %t.ar %t.macho.o
 # RUN: grep -q __.SYMDEF %t.ar
 
+## ARM64e uses Mach-O archives even with a bare Mach-O target triple.  The
+## object format, not just the OS name, determines the archive symbol index.
+
+# RUN: echo -e 'target triple = "arm64e-apple-none-macho" \n define void @_Z3foov() { ret void }' > %t.arm64e-macho.ll
+# RUN: llvm-as -o %t.arm64e-macho.o %t.arm64e-macho.ll
+# RUN: rm -f %t.ar
+# RUN: llvm-ar crs %t.ar %t.arm64e-macho.o
+# RUN: grep -q __.SYMDEF %t.ar
+
+## Both spellings of the versioned Apple target still use Mach-O archives.
+
+# RUN: echo -e 'target triple = "arm64e-apple-darwin27.2.0" \n define void @_Z3foov() { ret void }' > %t.arm64e-darwin.ll
+# RUN: llvm-as -o %t.arm64e-darwin.o %t.arm64e-darwin.ll
+# RUN: rm -f %t.ar
+# RUN: llvm-ar crs %t.ar %t.arm64e-darwin.o
+# RUN: grep -q __.SYMDEF %t.ar
+
+# RUN: echo -e 'target triple = "arm64e-apple-macosx27.2" \n define void @_Z3foov() { ret void }' > %t.arm64e-macos.ll
+# RUN: llvm-as -o %t.arm64e-macos.o %t.arm64e-macos.ll
+# RUN: rm -f %t.ar
+# RUN: llvm-ar crs %t.ar %t.arm64e-macos.o
+# RUN: grep -q __.SYMDEF %t.ar
+
+## An explicit ELF object format must not inherit Darwin's archive layout.
+
+# RUN: echo -e 'target triple = "arm64e-apple-darwin27.2.0-elf" \n define void @_Z3foov() { ret void }' > %t.arm64e-elf.ll
+# RUN: llvm-as -o %t.arm64e-elf.o %t.arm64e-elf.ll
+# RUN: rm -f %t.ar
+# RUN: llvm-ar crs %t.ar %t.arm64e-elf.o
+# RUN: not grep -q __.SYMDEF %t.ar
+
 ## Verify that archive format is based on the first input's target triple.
 
 # RUN: rm -f %t.ar

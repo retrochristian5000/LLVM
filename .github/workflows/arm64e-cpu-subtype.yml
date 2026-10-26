@@ -16,6 +16,8 @@ on:
       - 'lld/test/MachO/arm64e-cpu-subtype.s'
       - 'lld/test/MachO/arm64e-icf-safe-thunks.s'
       - 'lld/test/MachO/arm64e-dylib-abi.s'
+      - 'llvm/lib/Object/Archive.cpp'
+      - 'llvm/test/tools/llvm-ar/lto-kind-from-triple.test'
       - '.github/workflows/arm64e-cpu-subtype.yml'
 
 permissions:
@@ -41,7 +43,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_INCLUDE_TESTS=ON
       - name: Build focused tools
-        run: ninja -C build-arm64e-subtype clang lld llvm-mc llvm-objdump FileCheck
+        run: ninja -C build-arm64e-subtype clang lld llvm-mc llvm-objdump llvm-ar llvm-as FileCheck
       - name: Run ARM64e ABI regressions
         run: |
           build-arm64e-subtype/bin/llvm-lit -sv \
@@ -50,4 +52,5 @@ jobs:
             clang/test/CodeGen/arm64e-thread-abi.c \
             lld/test/MachO/arm64e-cpu-subtype.s \
             lld/test/MachO/arm64e-icf-safe-thunks.s \
-            lld/test/MachO/arm64e-dylib-abi.s
+            lld/test/MachO/arm64e-dylib-abi.s \
+            llvm/test/tools/llvm-ar/lto-kind-from-triple.test
