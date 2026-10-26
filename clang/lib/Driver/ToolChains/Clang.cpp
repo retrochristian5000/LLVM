@@ -1611,18 +1611,19 @@ void RenderAArch64ABI(const Driver &D, const llvm::Triple &Triple,
   const char *ABIName = nullptr;
   if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ)) {
     /*
-     * arm64e names the Apple pointer-authenticated ABI, so pairing it with a
-     * different procedure-call standard produces object code that is neither
-     * standard arm64e nor interoperable with the Darwin runtime.
+     * Darwin AArch64 requires the Darwin procedure-call standard.  arm64e
+     * requires it even with a non-Darwin OS spelling, since it names the
+     * Apple pointer-authenticated ABI rather than just an instruction set.
      */
-    if (Triple.isArm64e() && StringRef(A->getValue()) != "darwinpcs") {
+    if ((Triple.isOSDarwin() || Triple.isArm64e()) &&
+        StringRef(A->getValue()) != "darwinpcs") {
       D.Diag(diag::err_drv_unsupported_option_argument_for_target)
           << A->getSpelling() << A->getValue() << Triple.getTriple();
       ABIName = "darwinpcs";
     } else {
       ABIName = A->getValue();
     }
-  } else if (Triple.isOSDarwin())
+  } else if (Triple.isOSDarwin() || Triple.isArm64e())
     ABIName = "darwinpcs";
   // TODO: we probably want to have some target hook here.
   else if (Triple.isOSLinux() &&

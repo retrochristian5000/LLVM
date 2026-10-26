@@ -122,7 +122,21 @@
 //
 // RUN: not %clang -target arm64e-apple-ios -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
 // RUN: %clang -target arm64e-apple-ios -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64e-apple-none-macho -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64e-apple-none-macho -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: not %clang -target arm64e-apple-none-macho -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
+// RUN: not %clang -target arm64-apple-darwin27.2.0 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -mabi=aapcs-soft -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -arch arm64e -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
+// RUN: not %clang -target arm64e-apple-macosx27.2 -arch arm64 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: %clang -target arm64-apple-darwin27.2.0 -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64-apple-none-macho -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-AAPCS
+// RUN: %clang -target aarch64-unknown-linux-gnu -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-AAPCS
 //
 // BAD-ABI: error: unsupported argument 'aapcs' to option '-mabi=' for target '{{.*arm64e.*}}'
+// BAD-DARWIN-ABI: error: unsupported argument '{{aapcs(-soft)?}}' to option '-mabi=' for target '{{.*}}'
 // GOOD-ABI: "-cc1"{{.*}} "-target-abi" "darwinpcs"
 // GOOD-ABI-NOT: error:
+// GOOD-AAPCS: "-cc1"{{.*}} "-target-abi" "aapcs"
+// GOOD-AAPCS-NOT: error:
