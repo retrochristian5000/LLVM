@@ -2942,6 +2942,16 @@ void Driver::BuildUniversalActions(Compilation &C, const ToolChain &TC,
   DerivedArgList &Args = C.getArgs();
   ActionList &Actions = C.getActions();
   llvm::PrettyStackTraceString CrashInfo("Building universal build actions");
+  // LLVM recognizes arm64e.x1 as a distinct ABI, but Mach-O output for it
+  // requires PAuth_LR support that is not yet available.  Do not let the
+  // default universal arch mapping silently turn an x1 target into arm64.
+  if (TC.getTriple().getSubArch() ==
+      llvm::Triple::AArch64SubArch_arm64e_x1) {
+    Diag(clang::diag::err_target_unsupported_arch)
+        << TC.getTriple().getArchName() << TC.getTripleString();
+    return;
+  }
+
   // Collect the list of architectures. Duplicates are allowed, but should only
   // be handled once (in the order seen).
   llvm::StringSet<> ArchNames;

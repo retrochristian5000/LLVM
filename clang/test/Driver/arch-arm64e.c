@@ -1,5 +1,27 @@
 // Check that we can manually enable specific ptrauth features.
 
+// Darwin's -arch spelling must preserve the arm64e ABI across both OS-triple
+// spellings used by the native bootstrap.
+// RUN: %clang -target arm64-apple-darwin27.2.0 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// RUN: %clang -target arm64-apple-macosx27.2 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// RUN: %clang -target arm64e.x1-apple-macosx27.2 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// ARCH-E: "-cc1" "-triple" "arm64e-apple-macosx27.2.0"
+// ARCH-E: "-fptrauth-calls"
+// RUN: %clang -target arm64e-apple-macosx27.2 -arch arm64 -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-PLAIN
+// ARCH-PLAIN: "-cc1" "-triple" "arm64-apple-macosx27.2.0"
+// ARCH-PLAIN-NOT: "-fptrauth-calls"
+
+// arm64e.x1 has a distinct PAuth_LR ABI that the Darwin driver and linker
+// cannot emit yet.  A target triple must not be silently downgraded to arm64.
+// RUN: not %clang -target arm64e.x1-apple-darwin27.2.0 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-TARGET
+// RUN: not %clang -target arm64e.x1-apple-macosx27.2 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-TARGET
+// X1-TARGET: error: the target architecture 'arm64e.x1' is not supported by the target 'arm64e.x1-apple-
+// X1-TARGET-NOT: "-cc1"
+
+// An explicit unsupported Mach-O -arch name must also remain an error.
+// RUN: not %clang -target arm64-apple-macosx27.2 -arch arm64e.x1 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-ARCH
+// X1-ARCH: error: invalid arch name '-arch arm64e.x1'
+
 // RUN: %clang -target arm64-apple-darwin -c %s -### 2>&1 | FileCheck %s --check-prefix NONE
 // NONE: "-cc1"
 

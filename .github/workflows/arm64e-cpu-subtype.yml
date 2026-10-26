@@ -3,6 +3,7 @@ name: ARM64e ABI
 on:
   push:
     paths:
+      - 'clang/lib/Driver/Driver.cpp'
       - 'clang/lib/Driver/ToolChains/Arch/AArch64.cpp'
       - 'clang/lib/Driver/ToolChains/Clang.cpp'
       - 'clang/test/Driver/arch-arm64e.c'
