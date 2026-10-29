@@ -17,6 +17,15 @@
 # RUN:   FileCheck %s --check-prefix=DISABLED
 # DISABLED: -no_fixup_chains is incompatible with arm64e
 
+## -no_pie must not bypass arm64e's authenticated fixups and emit an
+## unauthenticated lazy-binding/stub path. Fail before writing the image.
+# RUN: rm -f %t-nopie
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -execute -no_pie -e _foo %t-arm64e.o -o %t-nopie 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=NOPIE
+# RUN: test ! -e %t-nopie
+# NOPIE: -no_pie is incompatible with arm64e
+
 ## Apple ld gives -fixup_chains precedence in either argument order.
 # RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
 # RUN:   -dylib -no_fixup_chains -fixup_chains %t-arm64e.o -o %t-force-on.dylib
@@ -30,6 +39,8 @@
 # RUN: llvm-mc -filetype=obj -triple=arm64-apple-macos -o %t-arm64.o %s
 # RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
 # RUN:   -dylib -no_fixup_chains %t-arm64.o -o %t-arm64.dylib
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -execute -no_pie -e _foo %t-arm64.o -o %t-arm64-nopie
 
 .text
 .globl _foo

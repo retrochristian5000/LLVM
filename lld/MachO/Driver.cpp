@@ -1320,8 +1320,14 @@ static bool shouldEmitChainedFixups(const InputArgList &args) {
 
   // Versioned arm64e outputs use pointer authentication, which cannot be
   // represented by the legacy dyld rebase/bind opcodes. Do not silently
-  // generate unauthenticated legacy stubs when fixups are disabled.
-  if (config->arch() == AK_arm64e && config->isPic) {
+  // generate unauthenticated legacy stubs when fixups are disabled or when
+  // -no_pie suppresses the chains altogether.
+  if (config->arch() == AK_arm64e) {
+    if (!config->isPic) {
+      error("-no_pie is incompatible with arm64e: "
+            "authenticated pointers require chained fixups");
+      return false;
+    }
     if (disabled && !requested) {
       error("-no_fixup_chains is incompatible with arm64e: "
             "authenticated pointers require chained fixups");
