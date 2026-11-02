@@ -2032,21 +2032,16 @@ static bool checkMachOAndArchFlags(SymbolicFile *O, StringRef Filename) {
   if (!MachO || ArchAll || ArchFlags.empty())
     return true;
 
-  MachO::mach_header H;
-  MachO::mach_header_64 H_64;
-  Triple T;
-  const char *McpuDefault, *ArchFlag;
+  const char *ArchFlag = nullptr;
   if (MachO->is64Bit()) {
-    H_64 = MachO->MachOObjectFile::getHeader64();
-    T = MachOObjectFile::getArchTriple(H_64.cputype, H_64.cpusubtype,
-                                       &McpuDefault, &ArchFlag);
+    MachO::mach_header_64 H = MachO->getHeader64();
+    MachOObjectFile::getArchTriple(H.cputype, H.cpusubtype, nullptr, &ArchFlag);
   } else {
-    H = MachO->MachOObjectFile::getHeader();
-    T = MachOObjectFile::getArchTriple(H.cputype, H.cpusubtype,
-                                       &McpuDefault, &ArchFlag);
+    MachO::mach_header H = MachO->getHeader();
+    MachOObjectFile::getArchTriple(H.cputype, H.cpusubtype, nullptr, &ArchFlag);
   }
-  const std::string ArchFlagName(ArchFlag);
-  if (!llvm::is_contained(ArchFlags, ArchFlagName)) {
+  // Unknown CPU subtypes have no arch name. Never form a string from null.
+  if (!ArchFlag || !llvm::is_contained(ArchFlags, StringRef(ArchFlag))) {
     error("No architecture specified", Filename);
     return false;
   }

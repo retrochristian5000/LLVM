@@ -2914,6 +2914,13 @@ Triple MachOObjectFile::getArchTriple(uint32_t CPUType, uint32_t CPUSubType,
       if (ArchFlag)
         *ArchFlag = "arm64";
       return Triple("arm64-apple-darwin");
+    case MachO::CPU_SUBTYPE_ARM64_X1:
+      // The X1 slice is object metadata, not a request for PAuth codegen.
+      if (McpuDefault)
+        *McpuDefault = "cyclone";
+      if (ArchFlag)
+        *ArchFlag = "arm64.x1";
+      return Triple("arm64.x1-apple-darwin");
     case MachO::CPU_SUBTYPE_ARM64E:
       if (McpuDefault)
         *McpuDefault = "apple-a12";
@@ -2983,12 +2990,12 @@ bool MachOObjectFile::isValidArch(StringRef ArchFlag) {
 }
 
 ArrayRef<StringRef> MachOObjectFile::getValidArchs() {
-  static const std::array<StringRef, 21> ValidArchs = {{
-      "i386",          "x86_64", "x86_64h", "armv4t",      "arm",
-      "armv5e",        "armv6",  "armv6m",  "armv7",       "armv7em",
-      "armv7k",        "armv7m", "armv7s",  "armv8m.base", "armv8m.main",
-      "armv8.1m.main", "arm64",  "arm64e",  "arm64_32",    "ppc",
-      "ppc64",
+  static const std::array<StringRef, 23> ValidArchs = {{
+      "i386",          "x86_64",  "x86_64h",    "armv4t",      "arm",
+      "armv5e",        "armv6",   "armv6m",     "armv7",       "armv7em",
+      "armv7k",        "armv7m",  "armv7s",     "armv8m.base", "armv8m.main",
+      "armv8.1m.main", "arm64",   "arm64.x1",   "arm64e",      "arm64e.x1",
+      "arm64_32",      "ppc",     "ppc64",
   }};
 
   return ValidArchs;
