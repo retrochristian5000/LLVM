@@ -453,12 +453,14 @@ def TuneAppleM4 : SubtargetFeature<"apple-m4", "ARMProcFamily", "AppleM4",
                                     [FeatureFuseAppleSMECompute])>;
 
 // A18 (TUPAI) and A18 Pro (TAHITI) have distinct processor identities.
-// Retain conservative M4-derived scheduling until latency measurements exist.
+// Keep the A18 profile's existing tuning behavior for compatibility.
+// A18 Pro does not inherit M4/A18 microarchitectural tuning heuristics:
+// those heuristics do not establish measured behavior on TAHITI.  Its
+// instruction availability remains independently defined by AppleA18Pro.
 def TuneAppleA18 : SubtargetFeature<"apple-a18", "ARMProcFamily", "AppleA18",
                                     "Apple A18", TuneAppleM4.Implies>;
 def TuneAppleA18Pro : SubtargetFeature<"apple-a18-pro", "ARMProcFamily",
-                                       "AppleA18Pro", "Apple A18 Pro",
-                                       TuneAppleA18.Implies>;
+                                       "AppleA18Pro", "Apple A18 Pro", []>;
 
 def TuneAppleM5 : SubtargetFeature<"apple-m5", "ARMProcFamily", "AppleM5",
                                     "Apple M5",
