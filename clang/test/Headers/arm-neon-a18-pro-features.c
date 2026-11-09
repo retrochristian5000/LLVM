@@ -17,6 +17,15 @@
 #ifndef __ARM_FEATURE_BF16
 #error "Apple A18 Pro must expose its configured BF16 feature"
 #endif
+#ifndef __ARM_FEATURE_SME2
+#error "Apple A18 Pro must expose its configured SME2 feature"
+#endif
+#ifdef __ARM_FEATURE_SVE
+#error "Apple A18 Pro must not inherit optional non-streaming SVE"
+#endif
+#ifdef __ARM_FEATURE_SVE2
+#error "Apple A18 Pro must not inherit optional non-streaming SVE2"
+#endif
 
 float32x4_t a18_pro_bf16_dot(float32x4_t sum, bfloat16x8_t left,
                             bfloat16x8_t right)
