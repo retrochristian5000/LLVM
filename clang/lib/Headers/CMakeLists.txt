@@ -495,9 +495,14 @@ if(ARM IN_LIST LLVM_TARGETS_TO_BUILD OR AArch64 IN_LIST LLVM_TARGETS_TO_BUILD)
   clang_generate_header(-gen-arm-vector-type arm_neon.td arm_vector_types.h)
 
   # Add headers to target specific lists
+  # arm_neon.h includes both of these generated headers for ARM and AArch64.
+  # Keep them in the shared resource set so ARM-only builds also install
+  # the dependencies required to include arm_neon.h.
   list(APPEND arm_common_generated_files
     "${CMAKE_CURRENT_BINARY_DIR}/arm_neon.h"
     "${CMAKE_CURRENT_BINARY_DIR}/arm_fp16.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/arm_bf16.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/arm_vector_types.h"
     )
 
   list(APPEND arm_only_generated_files
@@ -508,8 +513,6 @@ if(ARM IN_LIST LLVM_TARGETS_TO_BUILD OR AArch64 IN_LIST LLVM_TARGETS_TO_BUILD)
   list(APPEND aarch64_only_generated_files
     "${CMAKE_CURRENT_BINARY_DIR}/arm_sve.h"
     "${CMAKE_CURRENT_BINARY_DIR}/arm_sme.h"
-    "${CMAKE_CURRENT_BINARY_DIR}/arm_bf16.h"
-    "${CMAKE_CURRENT_BINARY_DIR}/arm_vector_types.h"
     )
 endif()
 if(RISCV IN_LIST LLVM_TARGETS_TO_BUILD)
