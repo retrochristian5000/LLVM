@@ -435,8 +435,16 @@ function(copy_header_to_output_dir src_dir file)
   set(src ${src_dir}/${file})
   if("${CMAKE_CFG_INTDIR}" STREQUAL ".")
     set(dst ${output_dir}/${file})
+    set(header_copy_dependencies)
+    if(file STREQUAL "arm_neon.h")
+      # arm_neon.h includes these generated headers unconditionally.
+      # Complete their resource copies before publishing arm_neon.h.
+      list(APPEND header_copy_dependencies
+        "${output_dir}/arm_bf16.h"
+        "${output_dir}/arm_vector_types.h")
+    endif()
     add_custom_command(OUTPUT ${dst}
-      DEPENDS ${src}
+      DEPENDS ${src} ${header_copy_dependencies}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
       COMMENT "Copying clang's ${file}...")
     list(APPEND out_files ${dst})
@@ -445,8 +453,14 @@ function(copy_header_to_output_dir src_dir file)
       # Replace the special string with a per config directory.
       string(REPLACE ${CMAKE_CFG_INTDIR} ${BUILD_MODE} per_conf_output_dir ${output_dir})
       set(dst ${per_conf_output_dir}/${file})
+      set(header_copy_dependencies)
+      if(file STREQUAL "arm_neon.h")
+        list(APPEND header_copy_dependencies
+          "${per_conf_output_dir}/arm_bf16.h"
+          "${per_conf_output_dir}/arm_vector_types.h")
+      endif()
       add_custom_command(OUTPUT ${dst}
-        DEPENDS ${src}
+        DEPENDS ${src} ${header_copy_dependencies}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
         COMMENT "Copying clang's ${file}...")
       list(APPEND out_files ${dst})
