@@ -2057,12 +2057,12 @@ void NeonEmitter::createIntrinsic(const Record *R,
     // correctly.
     std::string NewArchGuard = ArchGuard;
     if (Type(I.first, ".").isMFloat8()) {
-      if (NewArchGuard.empty()) {
+      // An existing guard that merely mentions __aarch64__ (for example in
+      // an OR expression) does not necessarily restrict the intrinsic to it.
+      if (NewArchGuard.empty())
         NewArchGuard = "defined(__aarch64__)";
-      } else if (NewArchGuard.find("defined(__aarch64__)") ==
-                 std::string::npos) {
+      else if (NewArchGuard != "defined(__aarch64__)")
         NewArchGuard = "defined(__aarch64__) && (" + NewArchGuard + ")";
-      }
     }
     Entry.emplace_back(R, Name, Proto, I.first, I.second, CK, Body, *this,
                        NewArchGuard, TargetGuard, IsUnavailable, BigEndianSafe);
@@ -2514,7 +2514,12 @@ void NeonEmitter::run(raw_ostream &OS) {
       I = Defs.erase(I);
     }
   }
-  assert(Defs.empty() && "Some requirements were not satisfied!");
+  // A release-built clang-tblgen must not silently publish an incomplete
+  // header when intrinsic dependencies cannot be ordered.
+  if (!Defs.empty())
+    PrintFatalError(Defs.front()->getRecord()->getLoc(),
+                    "Unresolved NEON intrinsic dependencies: " +
+                        Defs.front()->getName());
   if (!InGuard.empty())
     OS << "#endif\n";
 
@@ -2621,7 +2626,12 @@ void NeonEmitter::runFP16(raw_ostream &OS) {
       I = Defs.erase(I);
     }
   }
-  assert(Defs.empty() && "Some requirements were not satisfied!");
+  // A release-built clang-tblgen must not silently publish an incomplete
+  // header when intrinsic dependencies cannot be ordered.
+  if (!Defs.empty())
+    PrintFatalError(Defs.front()->getRecord()->getLoc(),
+                    "Unresolved FP16 intrinsic dependencies: " +
+                        Defs.front()->getName());
   if (!InGuard.empty())
     OS << "#endif\n";
 
@@ -2784,7 +2794,12 @@ void NeonEmitter::runBF16(raw_ostream &OS) {
       I = Defs.erase(I);
     }
   }
-  assert(Defs.empty() && "Some requirements were not satisfied!");
+  // A release-built clang-tblgen must not silently publish an incomplete
+  // header when intrinsic dependencies cannot be ordered.
+  if (!Defs.empty())
+    PrintFatalError(Defs.front()->getRecord()->getLoc(),
+                    "Unresolved BF16 intrinsic dependencies: " +
+                        Defs.front()->getName());
   if (!InGuard.empty())
     OS << "#endif\n";
 
