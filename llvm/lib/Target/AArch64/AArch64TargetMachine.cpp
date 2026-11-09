@@ -485,8 +485,20 @@ AArch64TargetMachine::getSubtargetImpl(const Function &F) const {
   Key += utostr(IsStreaming);
   Key += "IsStreamingCompatible=";
   Key += utostr(IsStreamingCompatible);
+  // Keep CPU, tuning CPU and feature strings unambiguous.  Without
+  // boundaries, distinct combinations can alias in the subtarget cache,
+  // causing target-feature compatibility checks to see the wrong CPU.
+  Key += "CPU=";
+  Key += utostr(CPU.size());
+  Key += ':';
   Key += CPU;
+  Key += "TuneCPU=";
+  Key += utostr(TuneCPU.size());
+  Key += ':';
   Key += TuneCPU;
+  Key += "Features=";
+  Key += utostr(FS.size());
+  Key += ':';
   Key += FS;
   Key += "HasMinSize=";
   Key += utostr(HasMinSize);
