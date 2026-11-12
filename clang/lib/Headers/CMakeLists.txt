@@ -435,8 +435,16 @@ function(copy_header_to_output_dir src_dir file)
   set(src ${src_dir}/${file})
   if("${CMAKE_CFG_INTDIR}" STREQUAL ".")
     set(dst ${output_dir}/${file})
+    set(header_copy_dependencies)
+    if(file STREQUAL "arm_neon.h")
+      # arm_neon.h includes these generated headers unconditionally.
+      # Complete their resource copies before publishing arm_neon.h.
+      list(APPEND header_copy_dependencies
+        "${output_dir}/arm_bf16.h"
+        "${output_dir}/arm_vector_types.h")
+    endif()
     add_custom_command(OUTPUT ${dst}
-      DEPENDS ${src}
+      DEPENDS ${src} ${header_copy_dependencies}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
       COMMENT "Copying clang's ${file}...")
     list(APPEND out_files ${dst})
@@ -445,8 +453,14 @@ function(copy_header_to_output_dir src_dir file)
       # Replace the special string with a per config directory.
       string(REPLACE ${CMAKE_CFG_INTDIR} ${BUILD_MODE} per_conf_output_dir ${output_dir})
       set(dst ${per_conf_output_dir}/${file})
+      set(header_copy_dependencies)
+      if(file STREQUAL "arm_neon.h")
+        list(APPEND header_copy_dependencies
+          "${per_conf_output_dir}/arm_bf16.h"
+          "${per_conf_output_dir}/arm_vector_types.h")
+      endif()
       add_custom_command(OUTPUT ${dst}
-        DEPENDS ${src}
+        DEPENDS ${src} ${header_copy_dependencies}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
         COMMENT "Copying clang's ${file}...")
       list(APPEND out_files ${dst})
@@ -495,9 +509,14 @@ if(ARM IN_LIST LLVM_TARGETS_TO_BUILD OR AArch64 IN_LIST LLVM_TARGETS_TO_BUILD)
   clang_generate_header(-gen-arm-vector-type arm_neon.td arm_vector_types.h)
 
   # Add headers to target specific lists
+  # arm_neon.h includes both of these generated headers for ARM and AArch64.
+  # Keep them in the shared resource set so ARM-only builds also install
+  # the dependencies required to include arm_neon.h.
   list(APPEND arm_common_generated_files
     "${CMAKE_CURRENT_BINARY_DIR}/arm_neon.h"
     "${CMAKE_CURRENT_BINARY_DIR}/arm_fp16.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/arm_bf16.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/arm_vector_types.h"
     )
 
   list(APPEND arm_only_generated_files
@@ -508,8 +527,6 @@ if(ARM IN_LIST LLVM_TARGETS_TO_BUILD OR AArch64 IN_LIST LLVM_TARGETS_TO_BUILD)
   list(APPEND aarch64_only_generated_files
     "${CMAKE_CURRENT_BINARY_DIR}/arm_sve.h"
     "${CMAKE_CURRENT_BINARY_DIR}/arm_sme.h"
-    "${CMAKE_CURRENT_BINARY_DIR}/arm_bf16.h"
-    "${CMAKE_CURRENT_BINARY_DIR}/arm_vector_types.h"
     )
 endif()
 if(RISCV IN_LIST LLVM_TARGETS_TO_BUILD)

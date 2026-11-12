@@ -324,7 +324,7 @@ public:
 };
 
 void getAppleMachOAArch64Defines(MacroBuilder &Builder, const LangOptions &Opts,
-                                 const llvm::Triple &Triple);
+                                 const llvm::Triple &Triple, bool HasNeon);
 
 class LLVM_LIBRARY_VISIBILITY AppleMachOAArch64TargetInfo
     : public AppleMachOTargetInfo<AArch64leTargetInfo> {

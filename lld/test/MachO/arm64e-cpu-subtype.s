@@ -33,16 +33,31 @@ _foo:
 # RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,int(sys.argv[3],16)); open(sys.argv[2],'wb').write(b)" %t.o %t-kernel.o 0xc0000002
 # RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,int(sys.argv[3],16)); open(sys.argv[2],'wb').write(b)" %t.o %t-legacy.o 0x00000002
 # RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,int(sys.argv[3],16)); open(sys.argv[2],'wb').write(b)" %t.o %t-arm64.o 0x00000000
+## An X1 object must not enter an arm64 link merely because both use
+## CPU_TYPE_ARM64.  This test object has no authenticated relocations, so
+## relocation checks alone cannot catch the PAuth_LR ABI mismatch.
+# RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,0x8000000c); open(sys.argv[2],'wb').write(b)" %t.o %t-x1.o
+# RUN: %python -c "import struct,sys; b=bytearray(open(sys.argv[1],'rb').read()); struct.pack_into('<I',b,8,0x00000003); open(sys.argv[2],'wb').write(b)" %t.o %t-plain-x1.o
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t-v1.o -o %t-v1.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t-kernel.o -o %t-kernel.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t-legacy.o -o %t-legacy.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t-arm64.o -o %t-arm64.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
 # RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib %t.o -o %t-wrong-arch.dylib 2>&1 | FileCheck %s --check-prefix=WRONG-ARCH
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib %t-x1.o -o %t-wrong-x1.dylib 2>&1 | FileCheck %s --check-prefix=X1-ARCH
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib %t-plain-x1.o -o %t-wrong-plain-x1.dylib 2>&1 | FileCheck %s --check-prefix=PLAIN-X1-ARCH
 # UNSUPPORTED: unsupported arm64e pointer-authentication ABI
 # WRONG-ARCH: arm64e object is incompatible with an arm64 output
+# X1-ARCH: arm64e.x1 object requires an arm64e.x1 output
+# PLAIN-X1-ARCH: arm64.x1 object requires an arm64.x1 output
 
 ## Indexing an archive should not reject an incompatible *unused* member.
 ## Extracting that same member must still fail when it is required.
 # RUN: llvm-ar rcs %t-v1.a %t-v1.o
 # RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib %t.o %t-v1.a -o %t-unused.dylib
 # RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 -dylib -u _foo %t-v1.a -o %t-used.dylib 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED
+
+## Lazy archive indexing must accept unused X1 members, then reject them
+## if symbol resolution extracts the member for an ordinary arm64 output.
+# RUN: llvm-ar rcs %t-x1.a %t-x1.o
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib %t-arm64.o %t-x1.a -o %t-unused-x1.dylib
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 -dylib -u _foo %t-x1.a -o %t-used-x1.dylib 2>&1 | FileCheck %s --check-prefix=X1-ARCH

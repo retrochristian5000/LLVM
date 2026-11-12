@@ -1,5 +1,27 @@
 // Check that we can manually enable specific ptrauth features.
 
+// Darwin's -arch spelling must preserve the arm64e ABI across both OS-triple
+// spellings used by the native bootstrap.
+// RUN: %clang -target arm64-apple-darwin27.2.0 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// RUN: %clang -target arm64-apple-macosx27.2 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// RUN: %clang -target arm64e.x1-apple-macosx27.2 -arch arm64e -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-E
+// ARCH-E: "-cc1" "-triple" "arm64e-apple-macosx27.2.0"
+// ARCH-E: "-fptrauth-calls"
+// RUN: %clang -target arm64e-apple-macosx27.2 -arch arm64 -c %s -### 2>&1 | FileCheck %s --check-prefix=ARCH-PLAIN
+// ARCH-PLAIN: "-cc1" "-triple" "arm64-apple-macosx27.2.0"
+// ARCH-PLAIN-NOT: "-fptrauth-calls"
+
+// arm64e.x1 has a distinct PAuth_LR ABI that the Darwin driver and linker
+// cannot emit yet.  A target triple must not be silently downgraded to arm64.
+// RUN: not %clang -target arm64e.x1-apple-darwin27.2.0 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-TARGET
+// RUN: not %clang -target arm64e.x1-apple-macosx27.2 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-TARGET
+// X1-TARGET: error: the target architecture 'arm64e.x1' is not supported by the target 'arm64e.x1-apple-
+// X1-TARGET-NOT: "-cc1"
+
+// An explicit unsupported Mach-O -arch name must also remain an error.
+// RUN: not %clang -target arm64-apple-macosx27.2 -arch arm64e.x1 -c %s -### 2>&1 | FileCheck %s --check-prefix=X1-ARCH
+// X1-ARCH: error: invalid arch name '-arch arm64e.x1'
+
 // RUN: %clang -target arm64-apple-darwin -c %s -### 2>&1 | FileCheck %s --check-prefix NONE
 // NONE: "-cc1"
 
@@ -100,7 +122,21 @@
 //
 // RUN: not %clang -target arm64e-apple-ios -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
 // RUN: %clang -target arm64e-apple-ios -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64e-apple-none-macho -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64e-apple-none-macho -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: not %clang -target arm64e-apple-none-macho -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
+// RUN: not %clang -target arm64-apple-darwin27.2.0 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -mabi=aapcs-soft -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: not %clang -target arm64-apple-macosx27.2 -arch arm64e -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-ABI
+// RUN: not %clang -target arm64e-apple-macosx27.2 -arch arm64 -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=BAD-DARWIN-ABI
+// RUN: %clang -target arm64-apple-darwin27.2.0 -mabi=darwinpcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-ABI
+// RUN: %clang -target arm64-apple-none-macho -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-AAPCS
+// RUN: %clang -target aarch64-unknown-linux-gnu -mabi=aapcs -c %s -### 2>&1 | FileCheck %s --check-prefix=GOOD-AAPCS
 //
 // BAD-ABI: error: unsupported argument 'aapcs' to option '-mabi=' for target '{{.*arm64e.*}}'
+// BAD-DARWIN-ABI: error: unsupported argument '{{aapcs(-soft)?}}' to option '-mabi=' for target '{{.*}}'
 // GOOD-ABI: "-cc1"{{.*}} "-target-abi" "darwinpcs"
 // GOOD-ABI-NOT: error:
+// GOOD-AAPCS: "-cc1"{{.*}} "-target-abi" "aapcs"
+// GOOD-AAPCS-NOT: error:

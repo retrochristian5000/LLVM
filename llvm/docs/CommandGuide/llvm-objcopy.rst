@@ -630,6 +630,25 @@ The following formats are supported by :program:`llvm-objcopy` for the
 Additionally, all targets except `binary`, `ihex`, and `srec` can have
 `-freebsd` as a suffix.
 
+DOS COM OUTPUT (FORK EXTENSION)
+-------------------------------
+
+Specify the output format ``dos-com`` with ``-O`` or ``--output-target`` to
+produce a headerless DOS .COM image from a linked little-endian ELF32
+i386 executable. Its entry and first allocated file-backed byte must
+both be at ``0x100``. DOS creates the PSP and loads the image at CS:0100h.
+The file has no MZ/ELF header or relocation table.
+
+The writer rejects ELF dynamic-loader segments, relocation sections,
+uninitialized allocated memory, overlapping sections, and images larger
+than ``0xFEFE`` bytes. Invalid address/padding ranges are rejected
+before output allocation.
+
+This does not implement native 8086 code generation, OMF linking, an
+MZ executable, or DOS runtime services. The linked input must already
+contain appropriate 16-bit instructions and DOS calling conventions,
+and all references must be resolved before output.
+
 BINARY INPUT AND OUTPUT
 -----------------------
 

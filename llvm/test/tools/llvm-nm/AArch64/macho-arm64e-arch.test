@@ -1,0 +1,150 @@
+# REQUIRES: aarch64-registered-target
+#
+# Versioned arm64e and arm64e.x1, and plain arm64.x1, are different slices.
+# Unknown subtypes must fail with an error, not a null string dereference.
+#
+# RUN: split-file %s %t
+# RUN: yaml2obj %t/arm64e.yaml -o %t/arm64e.o
+# RUN: yaml2obj %t/arm64e-x1.yaml -o %t/arm64e-x1.o
+# RUN: yaml2obj %t/arm64-x1.yaml -o %t/arm64-x1.o
+# RUN: yaml2obj %t/unknown.yaml -o %t/unknown.o
+# RUN: llvm-nm -f just-symbols -arch arm64e %t/arm64e.o | FileCheck %s --check-prefix=E
+# RUN: llvm-nm -f just-symbols -arch arm64e.x1 %t/arm64e-x1.o | FileCheck %s --check-prefix=EX1
+# RUN: llvm-nm -f just-symbols -arch arm64.x1 %t/arm64-x1.o | FileCheck %s --check-prefix=X1
+# RUN: not llvm-nm -arch arm64e %t/arm64e-x1.o 2>&1 | FileCheck %s --check-prefix=DIFFERENT
+# RUN: not llvm-nm -arch arm64e %t/arm64-x1.o 2>&1 | FileCheck %s --check-prefix=DIFFERENT
+# RUN: not llvm-nm -arch arm64e %t/unknown.o 2>&1 | FileCheck %s --check-prefix=DIFFERENT
+# RUN: llvm-lipo -create %t/arm64e.o %t/arm64e-x1.o %t/arm64-x1.o -output %t/universal
+# RUN: llvm-nm -f just-symbols -arch arm64e %t/universal | FileCheck %s --check-prefix=E
+# RUN: llvm-nm -f just-symbols -arch arm64e.x1 %t/universal | FileCheck %s --check-prefix=EX1
+# RUN: llvm-nm -f just-symbols -arch arm64.x1 %t/universal | FileCheck %s --check-prefix=X1
+#
+# E: {{^}}_e{{$}}
+# EX1: {{^}}_ex1{{$}}
+# X1: {{^}}_x1{{$}}
+# DIFFERENT: No architecture specified
+#
+#--- arm64e.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x82000002
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 4
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _e
+    - ''
+...
+
+#--- arm64e-x1.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x8200000C
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 6
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _ex1
+    - ''
+...
+
+#--- arm64-x1.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x00000003
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 5
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _x1
+    - ''
+...
+
+#--- unknown.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x00000014
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 6
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _bad
+    - ''
+...
+

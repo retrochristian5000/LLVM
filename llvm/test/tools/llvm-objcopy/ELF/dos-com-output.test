@@ -33,6 +33,30 @@
 # RUN: not llvm-objcopy -O dos-com %t.nonexec %t.out 2>&1 | FileCheck %s --check-prefix=NONEXEC
 # NONEXEC: DOS COM entry point 0x100 is not in executable file-backed data
 
+# RUN: yaml2obj --docnum=7 %s -o %t.reloc
+# RUN: not llvm-objcopy -O dos-com %t.reloc %t.out 2>&1 | FileCheck %s --check-prefix=RELOC
+# RELOC: DOS COM output cannot contain relocation section '.rel.text'
+
+# RUN: yaml2obj --docnum=8 %s -o %t.overlap
+# RUN: not llvm-objcopy -O dos-com %t.overlap %t.out 2>&1 | FileCheck %s --check-prefix=OVERLAP
+# OVERLAP: DOS COM sections '.text' and '.data' overlap in the load image
+
+# RUN: yaml2obj --docnum=9 %s -o %t.high
+# RUN: not llvm-objcopy -O dos-com %t.high %t.out 2>&1 | FileCheck %s --check-prefix=HIGH
+# HIGH: DOS COM section '.data' exceeds the 0xfffe load image boundary
+
+# RUN: yaml2obj --docnum=10 %s -o %t.dynamic
+# RUN: not llvm-objcopy -O dos-com %t.dynamic %t.out 2>&1 | FileCheck %s --check-prefix=DYNAMIC
+# DYNAMIC: DOS COM output cannot use ELF loader segment 0x2
+
+# RUN: yaml2obj --docnum=11 %s -o %t.be
+# RUN: not llvm-objcopy -O dos-com %t.be %t.out 2>&1 | FileCheck %s --check-prefix=ENDIAN
+# ENDIAN: DOS COM output requires little-endian ELF32 input
+# RUN: yaml2obj --docnum=12 %s -o %t.exit
+# RUN: llvm-objcopy -O dos-com %t.exit %t.exit.com
+# RUN: od -A n -t x1 %t.exit.com | FileCheck %s --check-prefix=EXIT
+# EXIT: b8 00 4c cd 21
+
 --- !ELF
 FileHeader:
   Class:           ELFCLASS32
@@ -128,3 +152,121 @@ Sections:
     Address:       0x100
     AddressAlign:  1
     Content:       "90c3"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+  - Name:          .rel.text
+    Type:          SHT_REL
+    Link:          .symtab
+    Info:          .text
+    Relocations:
+      - Offset: 0x100
+        Symbol: ext
+        Type:   R_386_32
+Symbols:
+  - Name:    ext
+    Binding: STB_GLOBAL
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+  - Name:          .data
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_WRITE ]
+    Address:       0x101
+    AddressAlign:  1
+    Content:       "aabb"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+  - Name:          .data
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_WRITE ]
+    Address:       0xfffffff0
+    AddressAlign:  1
+    Content:       "01"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+ProgramHeaders:
+  - Type:     PT_DYNAMIC
+    Flags:    [ PF_R ]
+    FirstSec: .text
+    LastSec:  .text
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2MSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "90c3"
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_386
+  Entry:           0x100
+Sections:
+  - Name:          .text
+    Type:          SHT_PROGBITS
+    Flags:         [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:       0x100
+    AddressAlign:  1
+    Content:       "b8004ccd21"

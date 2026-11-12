@@ -1104,6 +1104,13 @@ Error objcopy::elf::executeObjcopyOnBinary(const CommonConfig &Config,
                                     ? getOutputElfType(*Config.OutputArch)
                                     : getOutputElfType(In);
 
+  // An EM_386 machine field alone does not ensure little-endian code bytes.
+  if (Config.OutputFormat == FileFormat::DOSCOM &&
+      getOutputElfType(In) != ELFT_ELF32LE)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM output requires little-endian ELF32 input");
+
   if (Error E = handleArgs(Config, ELFConfig, OutputElfType, **Obj))
     return E;
 

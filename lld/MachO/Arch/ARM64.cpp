@@ -84,13 +84,6 @@ static constexpr uint32_t arm64eStubCode[] = {
     0xd71f0a11, // 0c: braa  x16, x17
 };
 
-static constexpr uint32_t arm64eLegacyStubCode[] = {
-    0x90000010, // 00: adrp  x16, __la_symbol_ptr@page
-    0xf9400210, // 04: ldr   x16, [x16, __la_symbol_ptr@pageoff]
-    0xd61f0200, // 08: br    x16
-    0xd503201f, // 0c: nop
-};
-
 void ARM64::writeStub(uint8_t *buf8, const Symbol &sym,
                       uint64_t pointerVA) const {
   if (cpuSubtype != CPU_SUBTYPE_ARM64E) {
@@ -98,8 +91,10 @@ void ARM64::writeStub(uint8_t *buf8, const Symbol &sym,
     return;
   }
 
-  const uint32_t *code =
-      config->emitChainedFixups ? arm64eStubCode : arm64eLegacyStubCode;
+  // A versioned arm64e image may not use the legacy unsigned lazy pointer
+  // path. Driver::shouldEmitChainedFixups rejects -no_pie/-no_fixup_chains.
+  assert(config->emitChainedFixups);
+  const uint32_t *code = arm64eStubCode;
   auto *buf32 = reinterpret_cast<uint32_t *>(buf8);
   SymbolDiagnostic d = {&sym, "stub"};
   uint64_t stubVA = in.stubs->addr + sym.stubsIndex * stubSize;

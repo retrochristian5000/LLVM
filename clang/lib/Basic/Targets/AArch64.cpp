@@ -1891,13 +1891,17 @@ DarwinAArch64TargetInfo::DarwinAArch64TargetInfo(const llvm::Triple &Triple,
 
 void clang::targets::getAppleMachOAArch64Defines(MacroBuilder &Builder,
                                                  const LangOptions &Opts,
-                                                 const llvm::Triple &Triple) {
+                                                 const llvm::Triple &Triple,
+                                                 bool HasNeon) {
   Builder.defineMacro("__AARCH64_SIMD__");
   if (Triple.isArch32Bit())
     Builder.defineMacro("__ARM64_ARCH_8_32__");
   else
     Builder.defineMacro("__ARM64_ARCH_8__");
-  Builder.defineMacro("__ARM_NEON__");
+  // Keep the Apple legacy spelling consistent with the ACLE NEON feature.
+  // An arm64e ABI does not override an explicit -neon/-mgeneral-regs-only.
+  if (HasNeon)
+    Builder.defineMacro("__ARM_NEON__");
   Builder.defineMacro("__REGISTER_PREFIX__", "");
   Builder.defineMacro("__arm64", "1");
   Builder.defineMacro("__arm64__", "1");
@@ -1915,7 +1919,7 @@ void clang::targets::getAppleMachOAArch64Defines(MacroBuilder &Builder,
 void AppleMachOAArch64TargetInfo::getOSDefines(const LangOptions &Opts,
                                                const llvm::Triple &Triple,
                                                MacroBuilder &Builder) const {
-  getAppleMachOAArch64Defines(Builder, Opts, Triple);
+  getAppleMachOAArch64Defines(Builder, Opts, Triple, hasFeature("neon"));
   AppleMachOTargetInfo<AArch64leTargetInfo>::getOSDefines(Opts, Triple,
                                                           Builder);
 }
@@ -1923,7 +1927,7 @@ void AppleMachOAArch64TargetInfo::getOSDefines(const LangOptions &Opts,
 void DarwinAArch64TargetInfo::getOSDefines(const LangOptions &Opts,
                                            const llvm::Triple &Triple,
                                            MacroBuilder &Builder) const {
-  getAppleMachOAArch64Defines(Builder, Opts, Triple);
+  getAppleMachOAArch64Defines(Builder, Opts, Triple, hasFeature("neon"));
   DarwinTargetInfo<AArch64leTargetInfo>::getOSDefines(Opts, Triple, Builder);
 }
 

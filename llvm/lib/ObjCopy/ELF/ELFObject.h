@@ -366,6 +366,9 @@ private:
 
   uint64_t TotalSize = 0;
 
+protected:
+  uint64_t getPadTo() const { return PadTo; }
+
 public:
   ~BinaryWriter() override = default;
   Error finalize() override;

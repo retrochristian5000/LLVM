@@ -10,6 +10,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/iterator_range.h"
@@ -2781,18 +2782,41 @@ Error DOSCOMWriter::finalize() {
     return createStringError(errc::invalid_argument,
                              "DOS COM entry point must be 0x100");
 
+  // COM has no ELF interpreter, dynamic linker, TLS, or runtime relocation.
+  for (const Segment &Seg : Obj.segments()) {
+    if (Seg.Type == PT_INTERP || Seg.Type == PT_DYNAMIC || Seg.Type == PT_TLS)
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM output cannot use ELF loader segment 0x%x", Seg.Type);
+    if (Seg.Type == PT_LOAD && Seg.MemSize > Seg.FileSize)
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM output cannot represent a load segment with uninitialized "
+          "memory");
+  }
+
+  for (const SectionBase &Sec : Obj.sections()) {
+    if (Sec.Size && (Sec.Type == SHT_REL || Sec.Type == SHT_RELA ||
+                     Sec.Type == SHT_RELR || Sec.Type == SHT_CREL))
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM output cannot contain relocation section '%s'",
+          Sec.Name.c_str());
+  }
+
+  constexpr uint64_t COMOrigin = 0x100;
+  constexpr uint64_t MaxCOMSize = 0xFEFE; // Reserve 2 bytes for DOS stack.
+  constexpr uint64_t MaxCOMEnd = COMOrigin + MaxCOMSize;
   bool EntryInExecutableSection = false;
+  uint64_t MinAddr = UINT64_MAX;
+  SmallVector<const SectionBase *, 8> LoadSections;
+
   for (const SectionBase &Sec : Obj.allocSections()) {
     if (Sec.Type == SHT_NOBITS && Sec.Size)
       return createStringError(
           errc::invalid_argument,
           "DOS COM output cannot represent allocated NOBITS section '%s'",
           Sec.Name.c_str());
-
-    if (Sec.Type != SHT_NOBITS && Sec.Size &&
-        (Sec.Flags & SHF_EXECINSTR) && Obj.Entry >= Sec.Addr &&
-        Obj.Entry - Sec.Addr < Sec.Size)
-      EntryInExecutableSection = true;
 
     if (Sec.ParentSegment) {
       uint64_t LoadAddr =
@@ -2803,40 +2827,61 @@ Error DOSCOMWriter::finalize() {
             "DOS COM section '%s' has different virtual and load addresses",
             Sec.Name.c_str());
     }
+    if (Sec.Type == SHT_NOBITS || !Sec.Size)
+      continue;
+
+    MinAddr = std::min(MinAddr, Sec.Addr);
+    // Check first: the generic binary writer would otherwise allocate up to
+    // the last section address before rejecting a huge COM image.
+    if (Sec.Addr > MaxCOMEnd || Sec.Size > MaxCOMEnd - Sec.Addr)
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM section '%s' exceeds the 0xfffe load image boundary",
+          Sec.Name.c_str());
+
+    LoadSections.push_back(&Sec);
+    if ((Sec.Flags & SHF_EXECINSTR) && Obj.Entry >= Sec.Addr &&
+        Obj.Entry - Sec.Addr < Sec.Size)
+      EntryInExecutableSection = true;
   }
+
+  if (MinAddr == UINT64_MAX)
+    return createStringError(errc::invalid_argument,
+                             "DOS COM output contains no loadable data");
+
+  // Diagnose an incorrect ORG before checking for executable entry bytes.
+  if (MinAddr != COMOrigin)
+    return createStringError(
+        errc::invalid_argument,
+        "DOS COM load image must begin at 0x100 (starts at 0x%llx)",
+        static_cast<unsigned long long>(MinAddr));
 
   if (!EntryInExecutableSection)
     return createStringError(
         errc::invalid_argument,
         "DOS COM entry point 0x100 is not in executable file-backed data");
 
-  if (Error E = BinaryWriter::finalize())
-    return E;
+  llvm::sort(LoadSections, [](const SectionBase *A, const SectionBase *B) {
+    return A->Addr < B->Addr;
+  });
+  for (size_t I = 1; I < LoadSections.size(); ++I) {
+    const SectionBase &Previous = *LoadSections[I - 1];
+    const SectionBase &Current = *LoadSections[I];
+    if (Previous.Addr + Previous.Size > Current.Addr)
+      return createStringError(
+          errc::invalid_argument,
+          "DOS COM sections '%s' and '%s' overlap in the load image",
+          Previous.Name.c_str(), Current.Name.c_str());
+  }
 
-  uint64_t MinAddr = UINT64_MAX;
-  for (const SectionBase &Sec : Obj.allocSections())
-    if (Sec.Type != SHT_NOBITS && Sec.Size)
-      MinAddr = std::min(MinAddr, Sec.Addr);
-
-  if (MinAddr == UINT64_MAX)
-    return createStringError(errc::invalid_argument,
-                             "DOS COM output contains no loadable data");
-
-  if (MinAddr != 0x100)
-    return createStringError(
-        errc::invalid_argument,
-        "DOS COM load image must begin at 0x100 (starts at 0x%llx)",
-        static_cast<unsigned long long>(MinAddr));
-
-  constexpr uint64_t MaxCOMSize = 0xFEFE;
-  if (Buf->getBufferSize() > MaxCOMSize)
+  if (getPadTo() > MaxCOMEnd)
     return createStringError(
         errc::invalid_argument,
         "DOS COM image is too large: 0x%llx bytes (maximum 0x%llx)",
-        static_cast<unsigned long long>(Buf->getBufferSize()),
+        static_cast<unsigned long long>(getPadTo() - COMOrigin),
         static_cast<unsigned long long>(MaxCOMSize));
 
-  return Error::success();
+  return BinaryWriter::finalize();
 }
 
 Error ASCIIHexWriter::checkSection(const SectionBase &S) const {

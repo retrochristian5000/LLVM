@@ -453,12 +453,14 @@ def TuneAppleM4 : SubtargetFeature<"apple-m4", "ARMProcFamily", "AppleM4",
                                     [FeatureFuseAppleSMECompute])>;
 
 // A18 (TUPAI) and A18 Pro (TAHITI) have distinct processor identities.
-// Retain conservative M4-derived scheduling until latency measurements exist.
+// Keep the A18 profile's existing tuning behavior for compatibility.
+// A18 Pro does not inherit M4/A18 microarchitectural tuning heuristics:
+// those heuristics do not establish measured behavior on TAHITI.  Its
+// instruction availability remains independently defined by AppleA18Pro.
 def TuneAppleA18 : SubtargetFeature<"apple-a18", "ARMProcFamily", "AppleA18",
                                     "Apple A18", TuneAppleM4.Implies>;
 def TuneAppleA18Pro : SubtargetFeature<"apple-a18-pro", "ARMProcFamily",
-                                       "AppleA18Pro", "Apple A18 Pro",
-                                       TuneAppleA18.Implies>;
+                                       "AppleA18Pro", "Apple A18 Pro", []>;
 
 def TuneAppleM5 : SubtargetFeature<"apple-m5", "ARMProcFamily", "AppleM5",
                                     "Apple M5",
@@ -1109,7 +1111,18 @@ def ProcessorFeatures {
   // Distinct CPU identities; do not infer instruction differences from GPU
   // configurations. Profiles may diverge on proven ISA features later.
   list<SubtargetFeature> AppleA18 = AppleM4;
-  list<SubtargetFeature> AppleA18Pro = AppleA18;
+
+  // Maintain A18 Pro's ISA separately from the non-Pro A18 and M4 profiles.
+  // Sharing their currently known extensions must not silently enable future
+  // A18/M4 additions on A18 Pro. In particular, SME2 does not imply ordinary
+  // non-streaming SVE/SVE2 on Apple processors.
+  list<SubtargetFeature> AppleA18Pro = [
+      HasV9_2aOps, FeatureSHA2, FeatureFPARMv8, FeatureNEON, FeaturePerfMon,
+      FeatureSHA3, FeatureFullFP16, FeatureFP16FML, FeatureAES, FeatureBF16,
+      FeatureSME, FeatureSME2, FeatureSMEF64F64, FeatureSMEI16I64,
+      FeatureComplxNum, FeatureCRC, FeatureJS, FeatureLSE, FeaturePAuth,
+      FeatureFPAC, FeatureRAS, FeatureRCPC, FeatureRDM, FeatureDotProd,
+      FeatureMatMulInt8];
 
   list<SubtargetFeature> AppleM5 = [HasV8_7aOps, FeatureSHA2, FeatureFPARMv8,
                                     FeatureNEON, FeaturePerfMon, FeatureSHA3,
