@@ -1,0 +1,21 @@
+# A universal Mach-O library cannot be edited as one ar archive.
+# The error must be actionable, and failed mutations may not change bytes.
+#
+# RUN: yaml2obj %p/Inputs/macho.yaml -o %t.o
+# RUN: llvm-ar --format=darwin crs %t.thin.a %t.o
+# RUN: llvm-lipo -create %t.thin.a -output %t.fat32.a
+# RUN: llvm-lipo -create -fat64 %t.thin.a -output %t.fat64.a
+# RUN: cp %t.fat32.a %t.fat32.saved
+# RUN: cp %t.fat64.a %t.fat64.saved
+# RUN: not llvm-ar t %t.fat32.a 2>&1 | FileCheck %s --check-prefix=FAT
+# RUN: not llvm-ar r %t.fat32.a %t.o 2>&1 | FileCheck %s --check-prefix=FAT
+# RUN: not llvm-ranlib %t.fat64.a 2>&1 | FileCheck %s --check-prefix=FAT
+# RUN: cmp %t.fat32.a %t.fat32.saved
+# RUN: cmp %t.fat64.a %t.fat64.saved
+# RUN: llvm-lipo %t.fat32.a -thin x86_64 -output %t.extracted.a
+# RUN: cmp %t.thin.a %t.extracted.a
+# RUN: llvm-ar t %t.extracted.a | FileCheck %s --check-prefix=MEMBER
+#
+# FAT: universal Mach-O archive
+# FAT-SAME: must be thinned with llvm-lipo -thin <architecture>
+# MEMBER: {{.*}}.o

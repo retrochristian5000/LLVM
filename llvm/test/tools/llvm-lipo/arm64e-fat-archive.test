@@ -1,0 +1,46 @@
+# ARM64 and ARM64e must remain separately indexed archives inside the
+# universal FAT32/FAT64 Mach-O container, not mixed members of one archive.
+# Reuse the exact ARM64e/ARM64 object fixtures from llvm-nm's subtype test.
+#
+# REQUIRES: aarch64-registered-target
+# RUN: split-file %p/../llvm-nm/AArch64/macho-fat-arm64e-subtype.test %t
+# RUN: yaml2obj %t/arm64.yaml -o %t/arm64.o
+# RUN: yaml2obj %t/arm64e.yaml -o %t/arm64e.o
+# RUN: llvm-ar --format=darwin crS %t/arm64.a %t/arm64.o
+# RUN: llvm-ar --format=darwin crS %t/arm64e.a %t/arm64e.o
+# RUN: llvm-ranlib %t/arm64.a
+# RUN: llvm-ranlib %t/arm64e.a
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols %t/arm64.a | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols %t/arm64e.a | FileCheck %s --check-prefix=AUTH
+# RUN: llvm-lipo -create %t/arm64.a %t/arm64e.a -output %t/fat32.a
+# RUN: llvm-lipo -create -fat64 %t/arm64.a %t/arm64e.a -output %t/fat64.a
+# RUN: llvm-lipo %t/fat32.a -archs | FileCheck %s --check-prefix=ARCHS
+# RUN: llvm-lipo %t/fat64.a -archs | FileCheck %s --check-prefix=ARCHS
+# RUN: llvm-lipo %t/fat32.a -verify_arch arm64 arm64e
+# RUN: llvm-lipo %t/fat64.a -verify_arch arm64 arm64e
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols --arch=arm64 %t/fat32.a | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols --arch=arm64e %t/fat32.a | FileCheck %s --check-prefix=AUTH
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols --arch=arm64 %t/fat64.a | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --defined-only --extern-only --format=just-symbols --arch=arm64e %t/fat64.a | FileCheck %s --check-prefix=AUTH
+# RUN: llvm-lipo %t/fat32.a -thin arm64 -output %t/roundtrip32-arm64.a
+# RUN: llvm-lipo %t/fat32.a -thin arm64e -output %t/roundtrip32-arm64e.a
+# RUN: llvm-lipo %t/fat64.a -thin arm64 -output %t/roundtrip64-arm64.a
+# RUN: llvm-lipo %t/fat64.a -thin arm64e -output %t/roundtrip64-arm64e.a
+# RUN: cmp %t/arm64.a %t/roundtrip32-arm64.a
+# RUN: cmp %t/arm64e.a %t/roundtrip32-arm64e.a
+# RUN: cmp %t/arm64.a %t/roundtrip64-arm64.a
+# RUN: cmp %t/arm64e.a %t/roundtrip64-arm64e.a
+# RUN: llvm-ar t %t/roundtrip64-arm64e.a | FileCheck %s --check-prefix=MEMBER
+# RUN: llvm-nm --print-armap %t/roundtrip64-arm64e.a | FileCheck %s --check-prefix=INDEX
+# RUN: llvm-ar --format=darwin crs %t/mixed.a %t/arm64.o %t/arm64e.o
+# RUN: not llvm-lipo -create %t/mixed.a -output %t/rejected.a 2>&1 | FileCheck %s --check-prefix=MIXED
+#
+# ARCHS: {{^}}arm64 arm64e{{$}}
+# PLAIN: {{^}}_whp_plain{{$}}
+# PLAIN-NOT: _whp_authenticated
+# AUTH: {{^}}_whp_authenticated{{$}}
+# AUTH-NOT: _whp_plain
+# MEMBER: arm64e.o
+# INDEX: Archive map
+# INDEX: _whp_authenticated in arm64e.o
+# MIXED: all members must match

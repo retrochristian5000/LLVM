@@ -302,10 +302,20 @@ static void getArchive() {
   PositionalArgs.erase(PositionalArgs.begin());
 }
 
+// A universal Mach-O library is an outer FAT32/FAT64 container holding
+// independent archives. ar and ranlib operate on one thin slice at a time.
+static void requireSingleArchitectureArchive(const MemoryBuffer &Buffer) {
+  if (identify_magic(Buffer.getBuffer()) == file_magic::macho_universal_binary)
+    fail("universal Mach-O archive '" + Buffer.getBufferIdentifier() +
+         "' must be thinned with llvm-lipo -thin <architecture> before "
+         "using llvm-ar or llvm-ranlib");
+}
+
 static object::Archive &readLibrary(const Twine &Library) {
   auto BufOrErr = MemoryBuffer::getFile(Library, /*IsText=*/false,
                                         /*RequiresNullTerminator=*/false);
   failIfError(BufOrErr.getError(), "could not open library " + Library);
+  requireSingleArchitectureArchive(**BufOrErr);
   ArchiveBuffers.push_back(std::move(*BufOrErr));
   auto LibOrErr =
       object::Archive::create(ArchiveBuffers.back()->getMemBufferRef());
@@ -1175,6 +1185,7 @@ static int performOperation(ArchiveOperation Operation) {
     fail("unable to open '" + ArchiveName + "': " + EC.message());
 
   if (!EC) {
+    requireSingleArchitectureArchive(**Buf);
     Expected<std::unique_ptr<object::Archive>> ArchiveOrError =
         object::Archive::create(Buf.get()->getMemBufferRef());
     if (!ArchiveOrError)
