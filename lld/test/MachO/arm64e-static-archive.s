@@ -68,6 +68,44 @@
 # RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
 # RUN:   -dylib -u _plain %t/libfat.a -o %t/fat-a.dylib
 # RUN: llvm-readobj --file-headers %t/fat-a.dylib | FileCheck %s --check-prefix=ARM64
+## FAT64 static archives must have the same lazy-member semantics and ABI
+## isolation as FAT32. llvm-lipo builds the outer container; llvm-ar and
+## llvm-ranlib index each ordinary archive independently.
+# RUN: llvm-lipo -create -fat64 %t/libplain.a %t/libauth.a -o %t/libfat64.a
+# RUN: llvm-lipo -archs %t/libfat64.a | FileCheck %s --check-prefix=ARCHS
+# RUN: llvm-lipo -thin arm64e %t/libfat64.a -o %t/thin64-auth.a
+# RUN: llvm-lipo -thin arm64 %t/libfat64.a -o %t/thin64-plain.a
+# RUN: cmp %t/thin64-auth.a %t/libauth.a
+# RUN: cmp %t/thin64-plain.a %t/libplain.a
+# RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -fixup_chains %t/client.o %t/libfat64.a -o %t/fat64-e.dylib
+# RUN: llvm-readobj --file-headers %t/fat64-e.dylib | FileCheck %s --check-prefix=ARM64E
+# RUN: llvm-objdump --macho --chained-fixups %t/fat64-e.dylib | FileCheck %s --check-prefix=FIXUPS
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _plain %t/libfat64.a -o %t/fat64-a.dylib
+# RUN: llvm-readobj --file-headers %t/fat64-a.dylib | FileCheck %s --check-prefix=ARM64
+
+## No ARM64e slice: do not allow the plain archive to satisfy an ARM64e
+## reference even when the ARM64 archive has the required symbol.
+# RUN: llvm-lipo -create %t/libplain.a -o %t/only-plain32.a
+# RUN: llvm-lipo -create -fat64 %t/libplain.a -o %t/only-plain64.a
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _plain %t/only-plain32.a -o %t/no-fallback32.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-ARCHIVE-FALLBACK
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _plain %t/only-plain64.a -o %t/no-fallback64.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-ARCHIVE-FALLBACK
+# NO-ARCHIVE-FALLBACK: ignoring file because it is universal (arm64) but does not contain the arm64e architecture
+
+## A forged FAT64 descriptor cannot change the real ABI of an inner archive.
+## The table's ARM64e claim may select a slice, but extracting its plain
+## ARM64 object must still fail before an output is written.
+# RUN: %python -c "import pathlib,struct,sys; b=bytearray(pathlib.Path(sys.argv[1]).read_bytes()); assert struct.unpack_from('>I',b,0)[0]==0xcafebabf; struct.pack_into('>I',b,12,0x80000002); pathlib.Path(sys.argv[2]).write_bytes(b)" %t/only-plain64.a %t/spoofed-arm64e.a
+# RUN: not %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _plain %t/spoofed-arm64e.a -o %t/spoofed.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SPOOFED-ARCHIVE
+# SPOOFED-ARCHIVE: unsupported arm64e pointer-authentication ABI
+
 # ARCHS: arm64 arm64e
 # ARM64: CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
 
