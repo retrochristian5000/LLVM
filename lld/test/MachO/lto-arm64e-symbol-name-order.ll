@@ -50,8 +50,10 @@
 ; RUN: llvm-objdump --syms %t/ref-archive.dylib | FileCheck %s --check-prefix=SYMBOLS
 ; RUN: llvm-objdump --syms %t/archive-first.dylib | FileCheck %s --check-prefix=SYMBOLS
 ;
-; SYMBOLS-DAG: __Z6symboli
-; SYMBOLS-DAG: _main
+;; A bare symbol-name match also accepts an undefined entry. These checks
+;; require the prevailing definition and its caller in __TEXT,__text.
+; SYMBOLS-DAG: {{[[:xdigit:]]+}} g{{[[:space:]]+}}F __TEXT,__text{{.*}} __Z6symboli
+; SYMBOLS-DAG: {{[[:xdigit:]]+}} g{{[[:space:]]+}}F __TEXT,__text{{.*}} _main
 ; ABI: CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
 ; ABI-NEXT: CpuSubTypeCapabilities: 0x80000000
 ; ABI-NEXT: PointerAuthABI: Userland
