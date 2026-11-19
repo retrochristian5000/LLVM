@@ -1558,6 +1558,37 @@ void CodeGenModule::Release() {
                                 "sign-return-address-with-bkey", 2);
   }
   if (T.isAArch64()) {
+    // Arm64e's authenticated pointer representations are part of its ABI,
+    // but the target triple alone does not encode explicit -fno-ptrauth
+    // overrides. Record a versioned, always-present link contract so Full
+    // LTO rejects incompatible Clang bitcode instead of silently choosing
+    // one compilation unit's pointer-signing conventions.
+    //
+    // Only options that affect shared pointer representations belong here.
+    // Return signing, auth traps, and indirect-goto hardening are handled by
+    // per-function attributes and the existing non-conflicting module flags.
+    // This is deliberately independent of the Darwin vendor spelling.
+    if (T.isArm64e()) {
+      uint32_t PAuthABI = LangOpts.PointerAuthCalls ? 1U : 0U;
+      if (LangOpts.PointerAuthCalls) {
+        PAuthABI |= uint32_t(LangOpts.PointerAuthVTPtrAddressDiscrimination)
+                    << 1;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthVTPtrTypeDiscrimination)
+                    << 2;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthObjcIsa) << 3;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthObjcInterfaceSel) << 4;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthBlockDescriptorPointers) << 5;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthTypeInfoVTPtrDiscrimination)
+                    << 6;
+        PAuthABI |= uint32_t(LangOpts.PointerAuthFunctionTypeDiscrimination)
+                    << 7;
+        if (LangOpts.PointerAuthObjcInterfaceSel)
+          PAuthABI |= uint32_t(LangOpts.PointerAuthObjcInterfaceSelKey) << 8;
+      }
+      getModule().addModuleFlag(llvm::Module::Error,
+                                "arm64e-ptrauth-abi-v1", PAuthABI);
+    }
+
     // Emit the following 4 module flags so LLVM can derive corresponding
     // function attributes for synthetically generated functions (e.g.
     // __llvm_gcov_writeout). It is safe to only emit the flags conditionally
