@@ -15,7 +15,7 @@
 // RUN: not %clang -target arm64e-apple-macosx27.2 -Werror=arm64e-abi-override -fno-ptrauth-calls -c %s -### 2>&1 | FileCheck %s --check-prefix=STRICT
 // STRICT: error: option '-fno-ptrauth-calls' changes the arm64e default for indirect calls; verify ABI compatibility [-Werror,-Warm64e-abi-override]
 
-// RUN: %clang -target arm64e-apple-macosx27.2 -Wno-arm64e-abi-override -fno-ptrauth-calls -c %s -### 2>&1 | FileCheck %s --check-prefix=SUPPRESS --implicit-check-not='arm64e-abi-override'
+// RUN: %clang -target arm64e-apple-macosx27.2 -Wno-arm64e-abi-override -fno-ptrauth-calls -c %s -### 2>&1 | FileCheck %s --check-prefix=SUPPRESS --implicit-check-not='warning: option'
 // SUPPRESS: "-cc1"
 
 // The last of each positive/negative pair controls the effective ABI.
