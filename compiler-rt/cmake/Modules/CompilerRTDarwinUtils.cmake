@@ -407,7 +407,10 @@ macro(darwin_add_builtin_library name suffix)
   endif()
 
   list(APPEND ${LIB_OS}_${suffix}_libs ${libname})
-  list(APPEND ${LIB_OS}_${suffix}_lipo_flags -arch ${arch} $<TARGET_FILE:${libname}>)
+  # The universal slice label must come from this library's explicit ARCH,
+  # not an ambient loop variable inherited from the macro caller.
+  list(APPEND ${LIB_OS}_${suffix}_lipo_flags -arch ${LIB_ARCH}
+       $<TARGET_FILE:${libname}>)
   set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT/Libraries")
 endmacro()
 
