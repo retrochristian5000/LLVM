@@ -2528,9 +2528,16 @@ StringMap<bool> sys::getHostCPUFeatures() {
            Size == sizeof(Enabled) && Enabled != 0;
   };
 
-  bool AdvSIMD = Has("hw.optional.AdvSIMD");
+  // Floating point and Advanced SIMD are mandatory for Darwin arm64 userspace
+  // and the architecture's baseline. Older macOS versions may omit the
+  // corresponding optional-feature sysctl keys; interpreting an absent key as
+  // "disabled" would strip both features from -march=native and -mcpu=native,
+  // even for a correctly identified Apple CPU. Keep querying genuinely
+  // optional extensions below, but do not make baseline ISA support depend on
+  // optional sysctl reporting.
+  constexpr bool AdvSIMD = true;
   Features["neon"] = AdvSIMD;
-  Features["fp-armv8"] = Has("hw.optional.floatingpoint");
+  Features["fp-armv8"] = true;
   Features["crc"] = Has("hw.optional.arm.FEAT_CRC32") ||
                     Has("hw.optional.armv8_crc32");
   Features["lse"] = Has("hw.optional.arm.FEAT_LSE");

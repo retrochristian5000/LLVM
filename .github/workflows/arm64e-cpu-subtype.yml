@@ -5,6 +5,10 @@ on:
     paths:
       - 'clang/lib/Driver/Driver.cpp'
       - 'clang/lib/Driver/ToolChains/Arch/AArch64.cpp'
+      - 'llvm/lib/TargetParser/Host.cpp'
+      - 'llvm/unittests/TargetParser/Host.cpp'
+      - 'clang/test/Driver/aarch64-march.c'
+      - 'clang/test/Driver/aarch64-march-native-darwin.c'
       - 'clang/lib/Driver/ToolChains/Clang.cpp'
       - 'clang/test/Driver/arch-arm64e.c'
       - 'clang/test/CodeGen/arm64e-c-driver-abi.c'
@@ -52,6 +56,8 @@ jobs:
         run: |
           build-arm64e-subtype/bin/llvm-lit -sv \
             clang/test/Driver/arch-arm64e.c \
+            clang/test/Driver/aarch64-march.c \
+            clang/test/Driver/aarch64-march-native-darwin.c \
             clang/test/CodeGen/arm64e-c-driver-abi.c \
             clang/test/CodeGen/arm64e-thread-abi.c \
             lld/test/MachO/arm64e-cpu-subtype.s \

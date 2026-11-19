@@ -21,6 +21,20 @@
 // RUN: %clang --target=aarch64_be -mbig-endian -march=armv9-a -### -c %s 2>&1 | FileCheck -check-prefix=GENERICV9A-BE %s
 // GENERICV9A-BE: "-cc1"{{.*}} "-triple" "aarch64_be{{.*}}" "-target-cpu" "generic" "-target-feature" "+v9a"{{.*}} "-target-feature" "+sve" "-target-feature" "+sve2"
 
+// On Darwin, -march selects ISA features, not the Mach-O ABI. The arm64e
+// subtype stays under the target triple's control even when -march and -mcpu
+// name different architecture generations.
+// RUN: %clang --target=arm64-apple-macosx26.0 -march=armv8.3-a -### -c %s 2>&1 | FileCheck %s --check-prefix=DARWIN-ARM64
+// RUN: %clang --target=arm64e-apple-macosx27.2 -march=armv8.3-a -### -c %s 2>&1 | FileCheck %s --check-prefix=DARWIN-ARM64E
+// RUN: %clang --target=arm64e-apple-macosx27.2 -mcpu=apple-a18-pro -march=armv8.3-a -### -c %s 2>&1 | FileCheck %s --check-prefix=DARWIN-ARM64E-A18
+// DARWIN-ARM64: "-cc1"{{.*}} "-triple" "arm64-apple-macosx26.0.0"
+// DARWIN-ARM64-SAME: "-target-feature" "+v8.3a"
+// DARWIN-ARM64E: "-cc1"{{.*}} "-triple" "arm64e-apple-macosx27.2.0"
+// DARWIN-ARM64E-SAME: "-target-feature" "+v8.3a"
+// DARWIN-ARM64E-A18: "-cc1"{{.*}} "-triple" "arm64e-apple-macosx27.2.0"
+// DARWIN-ARM64E-A18-SAME: "-target-cpu" "apple-a18-pro"
+// DARWIN-ARM64E-A18-SAME: "-target-feature" "+v8.3a"
+
 // ================== Check whether -march accepts mixed-case values.
 // RUN: %clang --target=aarch64_be -march=ARMV8.1A -### -c %s 2>&1 | FileCheck -check-prefix=GENERICV81A-BE %s
 // RUN: %clang --target=aarch64_be -march=ARMV8.1-A -### -c %s 2>&1 | FileCheck -check-prefix=GENERICV81A-BE %s

@@ -718,6 +718,10 @@ TEST(getDarwinHostCPUFeatures, MatchesReportedInstructions) {
            Size == sizeof(Enabled) && Enabled != 0;
   };
 
+  // Baseline AArch64/Apple ABI features are guaranteed regardless of whether
+  // the optional sysctl keys exist on this macOS release.
+  EXPECT_TRUE(Features.lookup("neon"));
+  EXPECT_TRUE(Features.lookup("fp-armv8"));
   EXPECT_EQ(Features.lookup("lse"), Has("hw.optional.arm.FEAT_LSE"));
   EXPECT_EQ(Features.lookup("lse2"), Has("hw.optional.arm.FEAT_LSE2"));
   EXPECT_EQ(Features.lookup("bti"), Has("hw.optional.arm.FEAT_BTI"));
@@ -726,15 +730,14 @@ TEST(getDarwinHostCPUFeatures, MatchesReportedInstructions) {
   EXPECT_EQ(Features.lookup("crc"),
             Has("hw.optional.arm.FEAT_CRC32") ||
                 Has("hw.optional.armv8_crc32"));
-  bool AdvSIMD = Has("hw.optional.AdvSIMD");
   EXPECT_EQ(Features.lookup("aes"),
-            AdvSIMD && Has("hw.optional.arm.FEAT_AES") &&
+            Has("hw.optional.arm.FEAT_AES") &&
                 Has("hw.optional.arm.FEAT_PMULL"));
   EXPECT_EQ(Features.lookup("sha2"),
-            AdvSIMD && Has("hw.optional.arm.FEAT_SHA1") &&
+            Has("hw.optional.arm.FEAT_SHA1") &&
                 Has("hw.optional.arm.FEAT_SHA256"));
   EXPECT_EQ(Features.lookup("sha3"),
-            AdvSIMD && Has("hw.optional.arm.FEAT_SHA3") &&
+            Has("hw.optional.arm.FEAT_SHA3") &&
                 Has("hw.optional.arm.FEAT_SHA512"));
   EXPECT_EQ(Features.lookup("dotprod"),
             Has("hw.optional.arm.FEAT_DotProd"));
