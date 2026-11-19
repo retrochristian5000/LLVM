@@ -738,6 +738,14 @@ void LTO::addModuleToGlobalRes(ArrayRef<InputFile::Symbol> Syms,
 
     auto &GlobalRes = (*GlobalResolutions)[SymbolName];
     GlobalRes.UnnamedAddr &= Sym.isUnnamedAddr();
+
+    // Multiple IR spellings can map to the same linker name on Mach-O.
+    // Compare before assigning the prevailing definition's IR name: a
+    // reference-first link would otherwise lose the evidence of a mismatch,
+    // allowing ThinLTO to internalize a still-needed definition.
+    const bool ConflictingIRNames =
+        !GlobalRes.IRName.empty() && !Sym.getIRName().empty() &&
+        GlobalRes.IRName != Sym.getIRName();
     if (Res.Prevailing) {
       assert(!GlobalRes.Prevailing &&
              "Multiple prevailing defs are not allowed");
@@ -765,7 +773,7 @@ void LTO::addModuleToGlobalRes(ArrayRef<InputFile::Symbol> Syms,
     // based on mangled name, but this requires an access to the Target Triple
     // and would be relatively invasive on the codebase.
     // FIXME: use the GUID member of GlobalRes.
-    if (GlobalRes.IRName != Sym.getIRName()) {
+    if (ConflictingIRNames || GlobalRes.IRName != Sym.getIRName()) {
       GlobalRes.Partition = GlobalResolution::External;
       GlobalRes.VisibleOutsideSummary = true;
     }
