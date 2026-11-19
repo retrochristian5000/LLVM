@@ -29,6 +29,7 @@
 #include "lld/Common/LLVM.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Reproduce.h"
+#include "lld/Common/TargetOptionsCommandFlags.h"
 #include "lld/Common/Version.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -51,6 +52,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/TimeProfiler.h"
+#include "llvm/TargetParser/AArch64TargetParser.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TextAPI/Architecture.h"
 #include "llvm/TextAPI/PackedVersion.h"
@@ -799,8 +801,56 @@ static void initLLVM() {
   InitializeAllAsmParsers();
 }
 
+// Clang enforces the arm64e ABI's Armv8.3-A/PAuth feature floor at compile
+// time. LLD accepts an independent -mcpu and -mllvm -mattr for LTO codegen;
+// those must not silently lower the capabilities of the codegen backend.
+// Check only when linking active arm64e bitcode, not for native-only links.
+static bool validateArm64eLTOCodeGen() {
+  std::string CPU = getCPUStr();
+  if (CPU.empty())
+    CPU = "apple-a12"; // AArch64TargetMachine's arm64e default.
+
+  std::optional<AArch64::CpuInfo> CpuInfo = AArch64::parseCpu(CPU);
+  if (!CpuInfo) {
+    error("arm64e LTO CPU '" + CPU + "' is not a recognized AArch64 CPU");
+    return false;
+  }
+
+  AArch64::ExtensionSet Features;
+  Features.addCPUDefaults(*CpuInfo);
+  // Apply the effective linker -mattr features in command-line order.
+  // This also covers -mllvm -mattr=-pauth after a capable -mcpu.
+  for (const std::string &Attr : getMAttrs()) {
+    if (auto Extension = AArch64::targetFeatureToExtension(Attr)) {
+      if (StringRef(Attr).starts_with("-"))
+        Features.disable(Extension->ID);
+      else
+        Features.enable(Extension->ID);
+    }
+  }
+
+  if (!Features.BaseArch ||
+      !Features.BaseArch->is_superset(AArch64::ARMV8_3A) ||
+      !Features.Enabled.test(AArch64::AEK_PAUTH)) {
+    error("arm64e LTO CPU '" + CPU +
+          "' is incompatible with the arm64e ABI: requires Armv8.3-A "
+          "and pointer authentication (check -mcpu and -mllvm -mattr)");
+    return false;
+  }
+  return true;
+}
+
 static bool compileBitcodeFiles() {
   TimeTraceScope timeScope("LTO");
+  if (config->arch() == AK_arm64e) {
+    for (InputFile *file : inputFiles) {
+      if (isa<BitcodeFile>(file) && !file->lazy) {
+        if (!validateArm64eLTOCodeGen())
+          return false;
+        break;
+      }
+    }
+  }
   auto *lto = make<BitcodeCompiler>();
   for (InputFile *file : inputFiles)
     if (auto *bitcodeFile = dyn_cast<BitcodeFile>(file))
