@@ -97,6 +97,18 @@
 # RUN:   | FileCheck %s --check-prefix=NO-ARCHIVE-FALLBACK
 # NO-ARCHIVE-FALLBACK: ignoring file because it is universal (arm64) but does not contain the arm64e architecture
 
+## Reverse fallback is equally invalid: ordinary ARM64 output must never
+## extract ARM64e static archive members, including from a universal file.
+# RUN: llvm-lipo -create %t/libauth.a -o %t/only-auth32.a
+# RUN: llvm-lipo -create -fat64 %t/libauth.a -o %t/only-auth64.a
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _from_archive %t/only-auth32.a -o %t/no-reverse32.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-REVERSE-ARCHIVE
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _from_archive %t/only-auth64.a -o %t/no-reverse64.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-REVERSE-ARCHIVE
+# NO-REVERSE-ARCHIVE: ignoring file because it is universal (arm64e) but does not contain the arm64 architecture
+
 ## A forged FAT64 descriptor cannot change the real ABI of an inner archive.
 ## The table's ARM64e claim may select a slice, but extracting its plain
 ## ARM64 object must still fail before an output is written.

@@ -41,6 +41,26 @@
 # FALLBACK: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
 # FALLBACK: _only_a
 #
+## Ordinary arm64 remains the default target; never promote it merely because
+## a FAT32/FAT64 input carries an arm64e slice. Exact arm64 wins, and an
+## arm64e-only dylib is NOT an acceptable reverse ABI fallback.
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _only_a %t/fat32-both.dylib -o %t/default32.dylib
+# RUN: %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _only_a %t/fat64-both.dylib -o %t/default64.dylib
+# RUN: llvm-readobj --file-headers %t/default32.dylib | FileCheck %s --check-prefix=DEFAULT-ABI
+# RUN: llvm-readobj --file-headers %t/default64.dylib | FileCheck %s --check-prefix=DEFAULT-ABI
+# DEFAULT-ABI: CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
+# RUN: llvm-lipo -create %t/lib-arm64e.dylib -o %t/only-e32.dylib
+# RUN: llvm-lipo -create -fat64 %t/lib-arm64e.dylib -o %t/only-e64.dylib
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _only_e %t/only-e32.dylib -o %t/no-reverse32.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-REVERSE-FALLBACK
+# RUN: not %no-arg-lld -arch arm64 -platform_version macos 13.0 13.0 \
+# RUN:   -dylib -u _only_e %t/only-e64.dylib -o %t/no-reverse64.dylib 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-REVERSE-FALLBACK
+# NO-REVERSE-FALLBACK: ignoring file because it is universal (arm64e) but does not contain the arm64 architecture
+#
 ## Thin or fat arm64 objects remain forbidden from satisfying arm64e symbols.
 # RUN: llvm-lipo -create %t/lib-arm64.o -o %t/fat32-arm64.o
 # RUN: llvm-lipo -create -fat64 %t/lib-arm64.o -o %t/fat64-arm64.o
