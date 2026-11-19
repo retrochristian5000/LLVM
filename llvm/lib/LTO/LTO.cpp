@@ -846,14 +846,15 @@ Error LTO::add(std::unique_ptr<InputFile> InputPtr,
         "cannot mix native Windows ARM64 and ARM64EC bitcode in one LTO link",
         inconvertibleErrorCode());
 
-  // Darwin arm64e signs code and data pointers and carries a versioned
-  // pointer-authentication ABI. A ThinLTO import across arm64 / arm64e would
-  // optimize IR under incompatible pointer semantics; these modules must
-  // remain in separate LTO links even though both use AArch64 instructions.
+  // Darwin arm64e uses authenticated pointers. The arm64e.x1 subtype has
+  // distinct ABI metadata and cannot be silently treated as plain arm64.
+  // Check the subtype identity, not only the isArm64e() boolean.
   if (ExistingTriple.getArch() == Triple::aarch64 &&
       InputTriple.getArch() == Triple::aarch64 &&
       ExistingTriple.isOSDarwin() && InputTriple.isOSDarwin() &&
-      ExistingTriple.isArm64e() != InputTriple.isArm64e())
+      ExistingTriple.getSubArch() != InputTriple.getSubArch() &&
+      (ExistingTriple.isArm64e() || ExistingTriple.isArm64e_x1() ||
+       InputTriple.isArm64e() || InputTriple.isArm64e_x1()))
     return make_error<StringError>(
         "cannot mix Darwin arm64 and arm64e bitcode in one LTO link",
         inconvertibleErrorCode());

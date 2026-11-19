@@ -576,6 +576,18 @@ void ThinLTOCodeGenerator::addModule(StringRef Identifier, StringRef Data) {
   if (Modules.empty())
     initTMBuilder(TMBuilder, Triple(TheTriple));
   else if (TMBuilder.TheTriple != TheTriple) {
+    // Generic triple compatibility currently compares subarches, but that
+    // is not the public pointer-authentication ABI boundary. Enforce it
+    // explicitly before merging any Darwin ARM64-family modules.
+    const Triple &ExistingTriple = TMBuilder.TheTriple;
+    if (ExistingTriple.getArch() == Triple::aarch64 &&
+        TheTriple.getArch() == Triple::aarch64 &&
+        ExistingTriple.isOSDarwin() && TheTriple.isOSDarwin() &&
+        ExistingTriple.getSubArch() != TheTriple.getSubArch() &&
+        (ExistingTriple.isArm64e() || ExistingTriple.isArm64e_x1() ||
+         TheTriple.isArm64e() || TheTriple.isArm64e_x1()))
+      report_fatal_error(
+          "cannot mix Darwin arm64 and arm64e bitcode in one ThinLTO link");
     if (!TMBuilder.TheTriple.isCompatibleWith(TheTriple))
       report_fatal_error("ThinLTO modules with incompatible triples not "
                          "supported");
