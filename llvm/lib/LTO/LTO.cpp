@@ -1238,11 +1238,6 @@ LTO::addThinLTO(BitcodeModule BM, ArrayRef<InputFile::Symbol> Syms,
             auto IT = IRSpecifiedGUIDs.insert({VI.name(), VI.getGUID()});
             (void)IT;
             assert(IT.second);
-            if (auto GRIt = GlobalResolutions->find(VI.name());
-                GRIt != GlobalResolutions->end() &&
-                Prevailing.count(VI.name())) {
-              GRIt->second.setGUID(VI.getGUID());
-            }
           }))
     return Err;
   LLVM_DEBUG(dbgs() << "Module " << BMID << "\n");
@@ -1260,6 +1255,16 @@ LTO::addThinLTO(BitcodeModule BM, ArrayRef<InputFile::Symbol> Syms,
                   GlobalValue::getGlobalIdentifier(
                       Sym.getIRName(), GlobalValue::ExternalLinkage, ""))
             : GUIDIter->second;
+    // GlobalResolutions is keyed by linker symbols, not IR names. On Mach-O
+    // (notably arm64e), the linker name includes the ABI mangling prefix.
+    // Preserve the GUID from the bitcode summary for the prevailing definition
+    // by matching the actual linker symbol instead of the unmangled IR name.
+    if (R.Prevailing && GUIDIter != IRSpecifiedGUIDs.end()) {
+      auto GRIt = GlobalResolutions->find(Sym.getName());
+      if (GRIt != GlobalResolutions->end())
+        GRIt->second.setGUID(GUID);
+    }
+
     if (!Sym.getIRName().empty() &&
         (R.Prevailing || R.FinalDefinitionInLinkageUnit)) {
       if (R.Prevailing) {
