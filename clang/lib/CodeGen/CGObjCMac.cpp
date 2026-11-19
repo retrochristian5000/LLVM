@@ -68,7 +68,8 @@ private:
     // NonLazyBind is profitable on arm64, but bypasses arm64e auth stubs.
     llvm::Type *params[] = {ObjectPtrTy, SelectorPtrTy};
     llvm::AttributeList attrs;
-    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+    if (!CGM.getTriple().isArm64e() &&
+        !CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
       attrs = llvm::AttributeList::get(CGM.getLLVMContext(),
                                        llvm::AttributeList::FunctionIndex,
                                        llvm::Attribute::NonLazyBind);
@@ -558,7 +559,8 @@ public:
     // This is specifically the prototype for x86.
     llvm::Type *params[] = {CGM.DefaultPtrTy};
     llvm::AttributeList attrs;
-    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+    if (!CGM.getTriple().isArm64e() &&
+        !CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
       attrs = llvm::AttributeList::get(CGM.getLLVMContext(),
                                        llvm::AttributeList::FunctionIndex,
                                        llvm::Attribute::NonLazyBind);
@@ -709,7 +711,8 @@ public:
     llvm::Type *params[] = {Int8PtrPtrTy};
     llvm::LLVMContext &C = CGM.getLLVMContext();
     llvm::SmallVector<llvm::Attribute, 3> attrs;
-    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+    if (!CGM.getTriple().isArm64e() &&
+        !CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
       attrs.push_back(llvm::Attribute::get(C, llvm::Attribute::NonLazyBind));
     attrs.push_back(llvm::Attribute::getWithMemoryEffects(
         C, llvm::MemoryEffects::none()));

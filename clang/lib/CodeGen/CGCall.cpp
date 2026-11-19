@@ -2914,7 +2914,9 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     // FIXME: what if we just haven't processed the function definition
     // yet, or if it's an external definition like C99 inline?
     // Inline GOT calls bypass arm64e's authenticated function stubs.
-    if (CodeGenOpts.NoPLT &&
+    // The arm64e ABI requires authenticated linker stubs regardless of
+    // separately selected pointer-authentication options.
+    if (CodeGenOpts.NoPLT && !getTriple().isArm64e() &&
         !CodeGenOpts.PointerAuth.FunctionPointers.isEnabled()) {
       if (auto *Fn = dyn_cast<FunctionDecl>(TargetDecl)) {
         if (!Fn->isDefined() && !AttrOnCallSite) {

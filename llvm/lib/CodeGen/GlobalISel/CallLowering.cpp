@@ -172,7 +172,10 @@ bool CallLowering::lowerCall(MachineIRBuilder &MIRBuilder, const CallBase &CB,
   }
 
   if (const Function *F = dyn_cast<Function>(CalleeV)) {
-    if (F->hasFnAttribute(Attribute::NonLazyBind)) {
+    // The arm64e ABI requires authenticated linker stubs even if an
+    // incoming IR declaration carries an unsafe nonlazybind attribute.
+    if (F->hasFnAttribute(Attribute::NonLazyBind) &&
+        !MF.getTarget().getTargetTriple().isArm64e()) {
       LLT Ty = getLLTForType(*F->getType(), DL);
       Register Reg = MIRBuilder.buildGlobalValue(Ty, F).getReg(0);
       Info.Callee = MachineOperand::CreateReg(Reg, false);

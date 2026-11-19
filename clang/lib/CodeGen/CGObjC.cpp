@@ -2333,7 +2333,8 @@ static llvm::Value *emitObjCValueOperation(CodeGenFunction &CGF,
 
     // Native ARC can use nonlazybind for performance, except when function
     // pointers are authenticated: inline GOT calls bypass auth stubs.
-    if (!CGF.CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+    if (!CGF.CGM.getTriple().isArm64e() &&
+        !CGF.CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
       if (llvm::Function *f = dyn_cast<llvm::Function>(fn.getCallee()))
         if (fnName == "objc_retain")
           f->addFnAttr(llvm::Attribute::NonLazyBind);
@@ -2910,7 +2911,8 @@ void CodeGenFunction::EmitObjCRelease(llvm::Value *value,
     fn = CGM.CreateRuntimeFunction(fnType, "objc_release");
     setARCRuntimeFunctionLinkage(CGM, fn);
     // Preserve authenticated function calls through the arm64e stubs.
-    if (!CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
+    if (!CGM.getTriple().isArm64e() &&
+        !CGM.getCodeGenOpts().PointerAuth.FunctionPointers.isEnabled())
       if (llvm::Function *f = dyn_cast<llvm::Function>(fn.getCallee()))
         f->addFnAttr(llvm::Attribute::NonLazyBind);
   }

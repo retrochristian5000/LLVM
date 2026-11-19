@@ -1786,7 +1786,9 @@ void CodeGenModule::Release() {
     }
   }
 
-  if (CodeGenOpts.NoPLT)
+  // arm64e runtime calls must use the linker's authenticated stubs rather
+  // than direct, unauthenticated GOT loads.
+  if (CodeGenOpts.NoPLT && !getTriple().isArm64e())
     getModule().setRtLibUseGOT();
   if (getTriple().isOSBinFormatELF() &&
       CodeGenOpts.DirectAccessExternalData !=
