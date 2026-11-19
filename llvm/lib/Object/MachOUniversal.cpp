@@ -77,7 +77,24 @@ MachOUniversalBinary::ObjectForArch::getAsObjectFile() const {
   }
   StringRef ObjectName = Parent->getFileName();
   MemoryBufferRef ObjBuffer(ObjectData, ObjectName);
-  return ObjectFile::createMachOObjectFile(ObjBuffer, cputype, Index);
+  Expected<std::unique_ptr<MachOObjectFile>> ObjOrErr =
+      ObjectFile::createMachOObjectFile(ObjBuffer, cputype, Index);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
+
+  // Both arm64 and arm64e use CPU_TYPE_ARM64. The fat header must not
+  // advertise one ABI while the embedded Mach-O header uses another.
+  // Mask only the high capability byte, which encodes arm64e ABI versions.
+  if (cputype == MachO::CPU_TYPE_ARM64) {
+    const uint32_t ObjectSubtype =
+        (*ObjOrErr)->is64Bit() ? (*ObjOrErr)->getHeader64().cpusubtype
+                              : (*ObjOrErr)->getHeader().cpusubtype;
+    if ((ObjectSubtype & ~MachO::CPU_SUBTYPE_MASK) !=
+        (getCPUSubType() & ~MachO::CPU_SUBTYPE_MASK))
+      return malformedError("ARM64 slice CPU subtype does not match its "
+                            "Mach-O header");
+  }
+  return ObjOrErr;
 }
 
 Expected<std::unique_ptr<IRObjectFile>>

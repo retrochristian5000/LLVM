@@ -1,0 +1,122 @@
+# REQUIRES: aarch64-registered-target
+#
+# Arm64 and arm64e have the same CPU type, but distinct CPU subtypes.
+# Check FAT32 and FAT64 and reject a wrong embedded subtype.
+#
+# RUN: split-file %s %t
+# RUN: yaml2obj %t/arm64.yaml -o %t/arm64.o
+# RUN: yaml2obj %t/arm64e.yaml -o %t/arm64e.o
+# RUN: llvm-lipo -create %t/arm64.o %t/arm64e.o -output %t/fat32.o
+# RUN: llvm-lipo -create -fat64 %t/arm64.o %t/arm64e.o -output %t/fat64.o
+# RUN: llvm-nm --format=just-symbols -arch arm64 %t/fat32.o | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --format=just-symbols -arch arm64e %t/fat32.o | FileCheck %s --check-prefix=AUTH
+# RUN: llvm-nm --format=just-symbols -arch arm64 %t/fat64.o | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --format=just-symbols -arch arm64e %t/fat64.o | FileCheck %s --check-prefix=AUTH
+# RUN: %python %t/corrupt.py %t/fat32.o %t/bad32.o
+# RUN: %python %t/corrupt.py %t/fat64.o %t/bad64.o
+# RUN: not llvm-nm -arch arm64e %t/bad32.o 2>&1 | FileCheck %s --check-prefix=BAD
+# RUN: not llvm-nm -arch arm64e %t/bad64.o 2>&1 | FileCheck %s --check-prefix=BAD
+# RUN: not llvm-nm -arch all %t/bad32.o 2>&1 | FileCheck %s --check-prefix=BAD
+# RUN: not llvm-nm -arch all %t/bad64.o 2>&1 | FileCheck %s --check-prefix=BAD
+# RUN: llvm-nm --format=just-symbols -arch arm64 %t/bad32.o | FileCheck %s --check-prefix=PLAIN
+# RUN: llvm-nm --format=just-symbols -arch arm64 %t/bad64.o | FileCheck %s --check-prefix=PLAIN
+#
+# PLAIN: {{^}}_whp_plain{{$}}
+# PLAIN-NOT: _whp_authenticated
+# AUTH: {{^}}_whp_authenticated{{$}}
+# AUTH-NOT: _whp_plain
+# BAD: ARM64 slice CPU subtype does not match its Mach-O header
+
+#--- arm64.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x00000000
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 12
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _whp_plain
+    - ''
+...
+
+#--- arm64e.yaml
+--- !mach-o
+FileHeader:
+  magic:      0xFEEDFACF
+  cputype:    0x0100000C
+  cpusubtype: 0x80000002
+  filetype:   0x00000001
+  ncmds:      1
+  sizeofcmds: 24
+  flags:      0
+  reserved:   0
+LoadCommands:
+  - cmd:     LC_SYMTAB
+    cmdsize: 24
+    symoff:  56
+    nsyms:   1
+    stroff:  72
+    strsize: 20
+LinkEditData:
+  NameList:
+    - n_strx:  1
+      n_type:  0x03
+      n_sect:  0
+      n_desc:  0
+      n_value: 0x10
+  StringTable:
+    - ''
+    - _whp_authenticated
+    - ''
+...
+
+#--- corrupt.py
+import struct
+import sys
+from pathlib import Path
+
+source, destination = map(Path, sys.argv[1:])
+data = bytearray(source.read_bytes())
+magic, count = struct.unpack_from(">II", data)
+assert magic in (0xCAFEBABE, 0xCAFEBABF)
+assert count == 2
+fat64 = magic == 0xCAFEBABF
+entry_size = 32 if fat64 else 20
+changed = 0
+
+for index in range(count):
+    pos = 8 + index * entry_size
+    if fat64:
+        cpu, subtype, offset = struct.unpack_from(">IIQ", data, pos)
+    else:
+        cpu, subtype, offset = struct.unpack_from(">III", data, pos)
+    if cpu != 0x0100000C or subtype & 0x00FFFFFF != 2:
+        continue
+    assert struct.unpack_from("<I", data, offset)[0] == 0xFEEDFACF
+    assert struct.unpack_from("<I", data, offset + 4)[0] == cpu
+    inner_subtype = struct.unpack_from("<I", data, offset + 8)[0]
+    assert inner_subtype & 0x00FFFFFF == 2
+    struct.pack_into("<I", data, offset + 8, inner_subtype & 0xFF000000)
+    changed += 1
+
+assert changed == 1
+destination.write_bytes(data)
