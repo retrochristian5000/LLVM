@@ -8,6 +8,13 @@
 
 let Component = "Driver" in {
 
+// Arm64e pointer-authentication toggles can change object semantics without
+// changing the arm64e target triple. Preserve intentional overrides, but make
+// them visible and promotable to errors in strict native build profiles.
+def warn_drv_arm64e_abi_override : Warning<
+  "option '%0' changes the arm64e default for %1; verify ABI compatibility">,
+  InGroup<DiagGroup<"arm64e-abi-override">>;
+
 def err_drv_no_such_file : Error<"no such file or directory: '%0'">;
 def err_drv_no_such_file_with_suggestion : Error<
   "no such file or directory: '%0'; did you mean '%1'?">;
