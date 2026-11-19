@@ -1,9 +1,9 @@
-# Native Apple-host LLVM default target validation.
+# Native Apple-host LLVM target validation.
 #
-# A Darwin *kernel* triple is valid for LLVM_HOST_TRIPLE, but compiler
-# products should default to an explicit macOS deployment target when the
-# native macOS bootstrap opts into this guard.  Keep it independent of SDK
-# discovery so it can be tested on non-Apple CI hosts.
+# In the opted-in native macOS bootstrap, both LLVM_HOST_TRIPLE and
+# LLVM_DEFAULT_TARGET_TRIPLE must identify macOS at the selected deployment
+# version. Bootstrap compilers may still report Darwin kernel triples.
+# Keep this independent of SDK discovery for non-Apple CMake tests.
 function(llvm_check_native_macos_default_triple target_triple deployment_target)
   # CMake's regex language does not support {1,2} repetition quantifiers.
   # Write both mandatory and optional dot-version components explicitly.
@@ -20,4 +20,13 @@ function(llvm_check_native_macos_default_triple target_triple deployment_target)
       "does not match deployment target (${deployment_target})")
   endif()
   message(STATUS "LLVM native macOS default target: ${target_triple}")
+endfunction()
+
+# Checking only the default leaves LLVM_HOST_TRIPLE free to retain a stale
+# Darwin or iOS value. Validate the independently configured host as well.
+function(llvm_check_native_macos_toolchain_triples host_triple default_triple deployment_target)
+  llvm_check_native_macos_default_triple("${host_triple}" "${deployment_target}")
+  llvm_check_native_macos_default_triple("${default_triple}" "${deployment_target}")
+  message(STATUS "LLVM native macOS host triple: ${host_triple}")
+  message(STATUS "LLVM native macOS default triple: ${default_triple}")
 endfunction()

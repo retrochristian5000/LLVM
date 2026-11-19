@@ -1302,11 +1302,10 @@ set(LLVM_DEFAULT_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE_DEFAULT}" CACHE STR
     "Default target for which LLVM will generate code." )
 message(STATUS "LLVM default target triple: ${LLVM_DEFAULT_TARGET_TRIPLE}")
 
-# When explicitly requested by a native macOS host-tools build, keep the
-# build-host identity (darwin kernel triple) distinct from the default code
-# generation target (macOS deployment triple).  A Darwin kernel version is
-# not an iOS triple, but it should not be used as a substitute for the
-# explicitly selected macOS product/deployment version.
+# When explicitly requested by a native macOS host-tools build, require
+# *both* the configured LLVM host and Clang's default compilation target to
+# name macOS at the selected deployment version. A Darwin kernel triple can
+# describe the bootstrap compiler but is not the installed toolchain ABI.
 if(LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE)
   if(NOT LLVM_MACOS_HOST_SDK_RESOLVE OR NOT CMAKE_HOST_APPLE OR
      NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_CROSSCOMPILING)
@@ -1318,8 +1317,9 @@ if(LLVM_MACOS_EXPLICIT_DEFAULT_TRIPLE)
       "Explicit macOS LLVM default target requires CMAKE_OSX_DEPLOYMENT_TARGET")
   endif()
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/CheckNativeMacOSTriple.cmake")
-  llvm_check_native_macos_default_triple(
-    "${LLVM_DEFAULT_TARGET_TRIPLE}" "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+  llvm_check_native_macos_toolchain_triples(
+    "${LLVM_HOST_TRIPLE}" "${LLVM_DEFAULT_TARGET_TRIPLE}"
+    "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
 set(LLVM_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE}")
