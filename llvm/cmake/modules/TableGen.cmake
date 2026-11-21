@@ -6,10 +6,6 @@ include(LLVMDistributionSupport)
 
 function(tablegen project ofn)
   cmake_parse_arguments(ARG "" "" "DEPENDS;EXTRA_INCLUDES" ${ARGN})
-  # Avoid emitting repeated caller-supplied dependency edges while preserving
-  # the first occurrence and every distinct dependency.
-  list(REMOVE_DUPLICATES ARG_DEPENDS)
-
   # Override ${project} with ${project}_TABLEGEN_PROJECT
   if(NOT "${${project}_TABLEGEN_PROJECT}" STREQUAL "")
     set(project ${${project}_TABLEGEN_PROJECT})
@@ -130,10 +126,19 @@ function(tablegen project ofn)
   # a tablegen change, as cmake does not propagate file-level dependencies
   # of custom targets. See the following ticket for more information:
   # https://cmake.org/Bug/view.php?id=15858
-  # Preserve both edges when they differ, but avoid emitting the same dependency
-  # twice when the target and executable resolve to the same value.
+  # Assemble the complete prerequisite list once. Caller DEPENDS, the
+  # executable/target pair, fallback glob results, and LLVM_TARGET_DEPENDS
+  # can refer to the same file. CMake/Ninja need only one edge for each
+  # distinct prerequisite; preserve the original first-occurrence order.
   set(tablegen_exe ${${project}_TABLEGEN_EXE})
-  set(tablegen_depends ${${project}_TABLEGEN_TARGET} ${tablegen_exe})
+  set(tablegen_depends
+    ${ARG_DEPENDS}
+    ${${project}_TABLEGEN_TARGET}
+    ${tablegen_exe}
+    ${global_tds}
+    ${LLVM_TARGET_DEFINITIONS_ABSOLUTE}
+    ${LLVM_TARGET_DEPENDS})
+  list(REMOVE_ITEM tablegen_depends "")
   list(REMOVE_DUPLICATES tablegen_depends)
 
   if(LLVM_PARALLEL_TABLEGEN_JOBS)
@@ -152,10 +157,7 @@ function(tablegen project ofn)
     # The file in LLVM_TARGET_DEFINITIONS may be not in the current
     # directory and local_tds may not contain it, so we must
     # explicitly list it here:
-    DEPENDS ${ARG_DEPENDS} ${tablegen_depends}
-      ${global_tds}
-    ${LLVM_TARGET_DEFINITIONS_ABSOLUTE}
-    ${LLVM_TARGET_DEPENDS}
+    DEPENDS ${tablegen_depends}
     ${LLVM_TABLEGEN_JOB_POOL}
     COMMENT "Building ${ofn}..."
     )
