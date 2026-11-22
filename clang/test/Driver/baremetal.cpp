@@ -11,8 +11,8 @@
 // CHECK-I386-ELF-SAME: "-mregparm" "3"
 // CHECK-I386-ELF-SAME: "-mframe-pointer=none"
 // CHECK-I386-ELF-SAME: "-ffreestanding"
-// CHECK-I386-ELF-SAME: "-target-cpu" "i386"
 // CHECK-I386-ELF-SAME: "-nostdsysteminc"
+// CHECK-I386-ELF-SAME: "-target-cpu" "i386"
 
 // RUN: %clang -### -c %s --target=i386-none-elf -m16 -march=i386 \
 // RUN:   -mregparm=3 -mstack-alignment=4 -ffreestanding -fno-pic -fno-pie \
@@ -23,8 +23,8 @@
 // CHECK-I386-CODE16-SAME: "-mregparm" "3"
 // CHECK-I386-CODE16-SAME: "-mframe-pointer=none"
 // CHECK-I386-CODE16-SAME: "-ffreestanding"
-// CHECK-I386-CODE16-SAME: "-target-cpu" "i386"
 // CHECK-I386-CODE16-SAME: "-nostdsysteminc"
+// CHECK-I386-CODE16-SAME: "-target-cpu" "i386"
 
 // RUN: %clang -### %s --target=armv6-none-eabi --emit-static-lib 2>&1 \
 // RUN:   | FileCheck -check-prefixes=CHECK-STATIC-LIB %s
