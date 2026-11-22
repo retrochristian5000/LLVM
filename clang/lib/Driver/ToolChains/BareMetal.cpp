@@ -50,10 +50,15 @@ static bool isPPCBareMetal(const llvm::Triple &Triple) {
           Triple.getEnvironmentName() == "elf");
 }
 
-/// Is the triple {ix86,x86_64}-*-none-elf?
+/// Is the triple {ix86,x86_64}-*-none-elf, including -m16?
 static bool isX86BareMetal(const llvm::Triple &Triple) {
-  return Triple.isX86() && Triple.getOS() == llvm::Triple::UnknownOS &&
-         Triple.getEnvironmentName() == "elf";
+  if (!Triple.isX86() || Triple.getOS() != llvm::Triple::UnknownOS)
+    return false;
+
+  // The driver changes the ELF environment to CODE16 for -m16. Preserve
+  // the bare-metal toolchain, not just the ELF object format, in that mode.
+  return Triple.getEnvironmentName() == "elf" ||
+         Triple.getEnvironment() == llvm::Triple::CODE16;
 }
 
 static bool findRISCVMultilibs(const Driver &D,

@@ -53,6 +53,27 @@ TEST(TripleTest, TriMediaFirmwareIdentity) {
             Triple::normalize("trimediaeb-unknown-none"));
 }
 
+TEST(TripleTest, X86FirmwareELFAndCode16) {
+  EXPECT_EQ("i386-unknown-none-elf", Triple::normalize("i386-none-elf"));
+  Triple Firmware("i386-unknown-none-elf");
+  EXPECT_EQ(Triple::x86, Firmware.getArch());
+  EXPECT_EQ(Triple::UnknownVendor, Firmware.getVendor());
+  EXPECT_EQ(Triple::UnknownOS, Firmware.getOS());
+  EXPECT_EQ("elf", Firmware.getEnvironmentName());
+  EXPECT_EQ(Triple::ELF, Firmware.getObjectFormat());
+  EXPECT_TRUE(Firmware.isArch32Bit());
+  EXPECT_EQ(32U, Firmware.getArchPointerBitWidth());
+
+  // -m16 changes the environment, but cannot change the object format.
+  Triple Code16("i386-unknown-none-code16");
+  EXPECT_EQ(Triple::x86, Code16.getArch());
+  EXPECT_EQ(Triple::UnknownOS, Code16.getOS());
+  EXPECT_EQ(Triple::CODE16, Code16.getEnvironment());
+  EXPECT_EQ(Triple::ELF, Code16.getObjectFormat());
+  EXPECT_TRUE(Code16.isOSBinFormatELF());
+  EXPECT_EQ(32U, Code16.getArchPointerBitWidth());
+}
+
 TEST(TripleTest, BasicParsing) {
   Triple T;
 

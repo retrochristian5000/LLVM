@@ -1,5 +1,31 @@
 // UNSUPPORTED: system-windows
 
+// A -m16 x86 freestanding compile must retain the bare-metal toolchain
+// after the driver rewrites its environment from elf to code16.
+// RUN: %clang -### -c %s --target=i386-none-elf -m32 -march=i386 \\
+// RUN:   -mregparm=3 -mstack-alignment=4 -ffreestanding -fno-pic -fno-pie \\
+// RUN:   -fomit-frame-pointer -Os 2>&1 \\
+// RUN:   | FileCheck --check-prefix=CHECK-I386-ELF %s
+// CHECK-I386-ELF: "-cc1" "-triple" "i386-unknown-none-elf"
+// CHECK-I386-ELF-SAME: "-mrelocation-model" "static"
+// CHECK-I386-ELF-SAME: "-mregparm" "3"
+// CHECK-I386-ELF-SAME: "-mframe-pointer=none"
+// CHECK-I386-ELF-SAME: "-ffreestanding"
+// CHECK-I386-ELF-SAME: "-target-cpu" "i386"
+// CHECK-I386-ELF-SAME: "-nostdsysteminc"
+
+// RUN: %clang -### -c %s --target=i386-none-elf -m16 -march=i386 \\
+// RUN:   -mregparm=3 -mstack-alignment=4 -ffreestanding -fno-pic -fno-pie \\
+// RUN:   -fomit-frame-pointer -Os 2>&1 \\
+// RUN:   | FileCheck --check-prefix=CHECK-I386-CODE16 %s
+// CHECK-I386-CODE16: "-cc1" "-triple" "i386-unknown-none-code16"
+// CHECK-I386-CODE16-SAME: "-mrelocation-model" "static"
+// CHECK-I386-CODE16-SAME: "-mregparm" "3"
+// CHECK-I386-CODE16-SAME: "-mframe-pointer=none"
+// CHECK-I386-CODE16-SAME: "-ffreestanding"
+// CHECK-I386-CODE16-SAME: "-target-cpu" "i386"
+// CHECK-I386-CODE16-SAME: "-nostdsysteminc"
+
 // RUN: %clang -### %s --target=armv6-none-eabi --emit-static-lib 2>&1 \
 // RUN:   | FileCheck -check-prefixes=CHECK-STATIC-LIB %s
 // CHECK-STATIC-LIB: {{.*}}llvm-ar{{.*}}" "rcsD"
