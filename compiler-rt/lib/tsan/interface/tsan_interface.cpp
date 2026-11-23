@@ -12,11 +12,21 @@
 
 #include "tsan_interface.h"
 #include "tsan_interface_ann.h"
+#include "tsan_interface_aarch64.h"
 #include "../rtl/tsan_rtl.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_ptrauth.h"
 
 #define CALLERPC ((uptr)__builtin_return_address(0))
+
+#if defined(__aarch64__) && !SANITIZER_GO
+// Fiber calls are relatively infrequent. Normalize their caller PCs at the
+// AArch64 ABI boundary without slowing down memory-access instrumentation.
+#  define FIBER_CALLERPC \
+    ((uptr)__tsan_interface_aarch64_strip_pc(__builtin_return_address(0)))
+#else
+#  define FIBER_CALLERPC CALLERPC
+#endif
 
 using namespace __tsan;
 
@@ -64,17 +74,17 @@ void *__tsan_get_current_fiber() {
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void *__tsan_create_fiber(unsigned flags) {
-  return FiberCreate(cur_thread(), CALLERPC, flags);
+  return FiberCreate(cur_thread(), FIBER_CALLERPC, flags);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void __tsan_destroy_fiber(void *fiber) {
-  FiberDestroy(cur_thread(), CALLERPC, static_cast<ThreadState *>(fiber));
+  FiberDestroy(cur_thread(), FIBER_CALLERPC, static_cast<ThreadState *>(fiber));
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void __tsan_switch_to_fiber(void *fiber, unsigned flags) {
-  FiberSwitch(cur_thread(), CALLERPC, static_cast<ThreadState *>(fiber), flags);
+  FiberSwitch(cur_thread(), FIBER_CALLERPC, static_cast<ThreadState *>(fiber), flags);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
@@ -82,6 +92,8 @@ void __tsan_set_fiber_name(void *fiber, const char *name) {
   ThreadSetName(static_cast<ThreadState *>(fiber), name);
 }
 }  // extern "C"
+
+#undef FIBER_CALLERPC
 
 void __tsan_acquire(void *addr) {
   Acquire(cur_thread(), CALLERPC, (uptr)addr);

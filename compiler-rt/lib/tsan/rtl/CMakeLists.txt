@@ -132,6 +132,7 @@ set(TSAN_HEADERS
   ../interface/tsan_interface.h
   ../interface/tsan_interface.inc
   ../interface/tsan_interface_ann.h
+  ../interface/tsan_interface_aarch64.h
   ../interface/tsan_interface_java.h
   tsan_macho.h
   tsan_mman.h
@@ -177,6 +178,7 @@ if(APPLE)
     ../got/tsan_got_aarch64.S
     ../buff/tsan_buff_aarch64.S
     ../array/tsan_array_aarch64.S
+    ../interface/tsan_interface_aarch64.S
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
@@ -239,6 +241,7 @@ else()
         ../cpu/tsan_cpu_aarch64.S
         ../buff/tsan_buff_aarch64.S
         ../array/tsan_array_aarch64.S
+        ../interface/tsan_interface_aarch64.S
         tsan_ignore_aarch64.S
         tsan_interceptors_aarch64.S
         )

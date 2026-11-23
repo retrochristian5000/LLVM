@@ -74,6 +74,7 @@ target(tsan_target_type, "rtl") {
     "../interface/tsan_interface.inc",
     "../interface/tsan_interface_ann.cpp",
     "../interface/tsan_interface_ann.h",
+    "../interface/tsan_interface_aarch64.h",
     "../interface/tsan_interface_atomic.cpp",
     "../interface/tsan_interface_java.cpp",
     "../interface/tsan_interface_java.h",
@@ -160,6 +161,7 @@ target(tsan_target_type, "rtl") {
       "../cpu/tsan_cpu_aarch64.S",
       "../buff/tsan_buff_aarch64.S",
       "../array/tsan_array_aarch64.S",
+      "../interface/tsan_interface_aarch64.S",
       "tsan_interceptors_aarch64.S",
     ]
     if (target_os == "mac") {
