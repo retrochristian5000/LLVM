@@ -23,7 +23,7 @@
 #include "tsan_macho.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
-#include "tsan_flags.h"
+#include "../flags/tsan_flags.h"
 
 #include <limits.h>
 #include <pthread.h>

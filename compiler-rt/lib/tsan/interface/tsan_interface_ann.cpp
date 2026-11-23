@@ -17,7 +17,7 @@
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "sanitizer_common/sanitizer_vector.h"
 #include "../rtl/tsan_adaptive_delay.h"
-#include "../rtl/tsan_flags.h"
+#include "../flags/tsan_flags.h"
 #include "../rtl/tsan_mman.h"
 #include "../rtl/tsan_platform.h"
 #include "../rtl/tsan_report.h"

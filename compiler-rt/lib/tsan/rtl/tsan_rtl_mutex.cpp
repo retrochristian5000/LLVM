@@ -14,7 +14,7 @@
 #include <sanitizer_common/sanitizer_placement_new.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
 
-#include "tsan_flags.h"
+#include "../flags/tsan_flags.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"
 #include "tsan_rtl.h"

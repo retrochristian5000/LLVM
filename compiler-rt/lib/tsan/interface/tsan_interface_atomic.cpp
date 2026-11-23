@@ -22,7 +22,7 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "../rtl/tsan_adaptive_delay.h"
-#include "../rtl/tsan_flags.h"
+#include "../flags/tsan_flags.h"
 #include "tsan_interface.h"
 #include "../rtl/tsan_rtl.h"
 

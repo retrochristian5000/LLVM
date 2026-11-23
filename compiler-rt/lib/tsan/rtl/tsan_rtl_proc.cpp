@@ -13,7 +13,7 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "tsan_rtl.h"
 #include "tsan_mman.h"
-#include "tsan_flags.h"
+#include "../flags/tsan_flags.h"
 
 namespace __tsan {
 

@@ -14,7 +14,7 @@
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
-#include "tsan_flags.h"
+#include "../flags/tsan_flags.h"
 #include "tsan_report.h"
 #include "tsan_rtl.h"
 #include "tsan_suppressions.h"

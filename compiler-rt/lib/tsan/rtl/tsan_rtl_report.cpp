@@ -19,7 +19,7 @@
 #include "tsan_buff.h"
 #include "tsan_defs.h"
 #include "tsan_fd.h"
-#include "tsan_flags.h"
+#include "../flags/tsan_flags.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"

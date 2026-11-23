@@ -32,7 +32,7 @@
 #include "sanitizer_common/sanitizer_vector.h"
 #include "tsan_fd.h"
 #if SANITIZER_APPLE && !SANITIZER_GO
-#  include "tsan_flags.h"
+#  include "../flags/tsan_flags.h"
 #endif
 #include "tsan_adaptive_delay.h"
 #include "tsan_interceptors.h"
