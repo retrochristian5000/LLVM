@@ -42,7 +42,7 @@
 #include "tsan_mman.h"
 #include "tsan_mutexset.h"
 #include "tsan_platform.h"
-#include "tsan_pragma.h"
+#include "tsan_ignore.h"
 #include "tsan_report.h"
 #include "tsan_shadow.h"
 #include "tsan_stack.h"

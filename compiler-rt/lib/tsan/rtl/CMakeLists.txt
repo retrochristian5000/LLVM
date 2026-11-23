@@ -41,7 +41,7 @@ set(TSAN_SOURCES
   tsan_md5.cpp
   tsan_mman.cpp
   tsan_mutexset.cpp
-  tsan_pragma.cpp
+  tsan_ignore.cpp
   tsan_report.cpp
   tsan_rtl.cpp
   tsan_rtl_access.cpp
@@ -136,7 +136,7 @@ set(TSAN_HEADERS
   tsan_mman.h
   tsan_mutexset.h
   tsan_platform.h
-  tsan_pragma.h
+  tsan_ignore.h
   tsan_ppc_regs.h
   tsan_report.h
   tsan_rtl.h
@@ -170,6 +170,7 @@ if(APPLE)
   set(TSAN_ASM_SOURCES
     tsan_interceptors_amd64.S
     tsan_cpu_aarch64.S
+    tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S
     )
 
@@ -231,6 +232,7 @@ else()
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
         tsan_cpu_aarch64.S
+        tsan_ignore_aarch64.S
         tsan_interceptors_aarch64.S
         )
       # Check for Go runtime.

@@ -1,4 +1,4 @@
-//===-- tsan_pragma.cpp ---------------------------------------------------===//
+//===-- tsan_ignore.cpp ---------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,20 +6,38 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Runtime suppression scopes used by TSan annotations and interceptors.
-// Clang's no_sanitize("thread") pragma affects compiler instrumentation;
-// runtime annotations affect the current thread's ignore state separately.
+// Runtime ignore scopes used by TSan annotations and interceptors. Compiler
+// pragmas are handled by Clang, not by this module.
 
-#include "tsan_pragma.h"
+#include "tsan_ignore.h"
 
 #include "tsan_rtl.h"
 
 namespace __tsan {
 
+// The counters are thread-local: no atomic operation or extra memory
+// barrier is needed for scope nesting on the calling thread.
+static void UpdateIgnoreDepth(int *depth, bool entering) {
+#if defined(__aarch64__) && !SANITIZER_GO
+  static_assert(sizeof(int) == sizeof(u32),
+                "AArch64 ignore depth requires a 32-bit int");
+  // Invalid transitions leave the counter unmodified.
+  CHECK(__tsan_ignore_aarch64_depth_step(depth, entering ? 1 : -1));
+#else
+  if (entering) {
+    CHECK_GE(*depth, 0);
+    CHECK_LT(*depth, 0x7fffffff);
+    ++*depth;
+  } else {
+    CHECK_GT(*depth, 0);
+    --*depth;
+  }
+#endif
+}
+
 void ThreadIgnoreBegin(ThreadState* thr, uptr pc) {
   DPrintf("#%d: ThreadIgnoreBegin\n", thr->tid);
-  thr->ignore_reads_and_writes++;
-  CHECK_GT(thr->ignore_reads_and_writes, 0);
+  UpdateIgnoreDepth(&thr->ignore_reads_and_writes, true);
   thr->fast_state.SetIgnoreBit();
 #if !SANITIZER_GO
   if (pc && !ctx->after_multithreaded_fork)
@@ -29,8 +47,7 @@ void ThreadIgnoreBegin(ThreadState* thr, uptr pc) {
 
 void ThreadIgnoreEnd(ThreadState *thr) {
   DPrintf("#%d: ThreadIgnoreEnd\n", thr->tid);
-  CHECK_GT(thr->ignore_reads_and_writes, 0);
-  thr->ignore_reads_and_writes--;
+  UpdateIgnoreDepth(&thr->ignore_reads_and_writes, false);
   if (thr->ignore_reads_and_writes == 0) {
     thr->fast_state.ClearIgnoreBit();
 #if !SANITIZER_GO
@@ -39,11 +56,9 @@ void ThreadIgnoreEnd(ThreadState *thr) {
   }
 }
 
-
 void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc) {
   DPrintf("#%d: ThreadIgnoreSyncBegin\n", thr->tid);
-  thr->ignore_sync++;
-  CHECK_GT(thr->ignore_sync, 0);
+  UpdateIgnoreDepth(&thr->ignore_sync, true);
 #if !SANITIZER_GO
   if (pc && !ctx->after_multithreaded_fork)
     thr->sync_ignore_set.Add(CurrentStackId(thr, pc));
@@ -52,8 +67,7 @@ void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc) {
 
 void ThreadIgnoreSyncEnd(ThreadState *thr) {
   DPrintf("#%d: ThreadIgnoreSyncEnd\n", thr->tid);
-  CHECK_GT(thr->ignore_sync, 0);
-  thr->ignore_sync--;
+  UpdateIgnoreDepth(&thr->ignore_sync, false);
 #if !SANITIZER_GO
   if (thr->ignore_sync == 0)
     thr->sync_ignore_set.Reset();

@@ -1,4 +1,4 @@
-//===-- tsan_pragma_test.cpp ----------------------------------------------===//
+//===-- tsan_ignore_test.cpp ----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "tsan_pragma.h"
+#include "tsan_ignore.h"
 #include "tsan_rtl.h"
 #include "gtest/gtest.h"
 
 namespace __tsan {
 
-TEST(PragmaScope, NestedMemoryIgnore) {
+TEST(IgnoreScope, NestedMemoryIgnore) {
   ThreadState thr(kMainTid);
   thr.ignore_reads_and_writes = 0;
   EXPECT_FALSE(thr.fast_state.GetIgnoreBit());
@@ -33,7 +33,7 @@ TEST(PragmaScope, NestedMemoryIgnore) {
   DestroyShadowStack(&thr);
 }
 
-TEST(PragmaScope, NestedSynchronizationIgnore) {
+TEST(IgnoreScope, NestedSynchronizationIgnore) {
   ThreadState thr(kMainTid);
   thr.ignore_sync = 0;
 
@@ -48,7 +48,7 @@ TEST(PragmaScope, NestedSynchronizationIgnore) {
   DestroyShadowStack(&thr);
 }
 
-TEST(PragmaScope, MemoryAndSynchronizationScopesAreIndependent) {
+TEST(IgnoreScope, MemoryAndSynchronizationScopesAreIndependent) {
   ThreadState thr(kMainTid);
   thr.ignore_reads_and_writes = 0;
   thr.ignore_sync = 0;
@@ -64,5 +64,31 @@ TEST(PragmaScope, MemoryAndSynchronizationScopesAreIndependent) {
   EXPECT_EQ(0, thr.ignore_sync);
   DestroyShadowStack(&thr);
 }
+
+#if defined(__aarch64__) && !SANITIZER_GO
+TEST(IgnoreScope, AArch64CheckedDepthTransitions) {
+  int depth = 0;
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, -1));
+  EXPECT_EQ(0, depth);
+  EXPECT_EQ(1, __tsan_ignore_aarch64_depth_step(&depth, 1));
+  EXPECT_EQ(1, depth);
+  EXPECT_EQ(1, __tsan_ignore_aarch64_depth_step(&depth, -1));
+  EXPECT_EQ(0, depth);
+
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, 0));
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, 2));
+  EXPECT_EQ(0, depth);
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(nullptr, 1));
+
+  depth = 0x7fffffff;
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, 1));
+  EXPECT_EQ(0x7fffffff, depth);
+
+  depth = -1;
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, 1));
+  EXPECT_EQ(0, __tsan_ignore_aarch64_depth_step(&depth, -1));
+  EXPECT_EQ(-1, depth);
+}
+#endif
 
 }  // namespace __tsan
