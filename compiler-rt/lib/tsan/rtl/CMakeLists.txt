@@ -138,7 +138,7 @@ if(APPLE)
 
   set(TSAN_ASM_SOURCES
     tsan_rtl_amd64.S
-    tsan_rtl_aarch64.S
+    tsan_interceptors_aarch64.S
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
@@ -198,7 +198,7 @@ else()
         VERBATIM)
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
-        tsan_rtl_aarch64.S
+        tsan_interceptors_aarch64.S
         )
       # Check for Go runtime.
       set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../go/buildgo.sh)

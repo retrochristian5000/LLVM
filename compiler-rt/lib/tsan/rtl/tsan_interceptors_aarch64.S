@@ -1,4 +1,7 @@
-// The content of this file is AArch64-only:
+// AArch64 setjmp/sigsetjmp interceptors (ELF and Darwin).
+// Keep register and stack-frame handling ISA-specific; the signal-mask
+// semantics belong to the target C library. On arm64e, leave libc tail
+// branches to the Mach-O linker so it can generate authenticated stubs.
 #if defined(__aarch64__)
 
 #include "sanitizer_common/sanitizer_asm.h"
@@ -10,7 +13,9 @@ TEXT_SECTION
 #endif
 
 ASM_HIDDEN(__tsan_setjmp)
+#if !defined(__APPLE__)
 .comm _ZN14__interception11real_setjmpE,8,8
+#endif
 .globl ASM_SYMBOL_INTERCEPTOR(setjmp)
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(setjmp))
 ASM_SYMBOL_INTERCEPTOR(setjmp):
@@ -61,7 +66,9 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(setjmp))
 
+#if !defined(__APPLE__)
 .comm _ZN14__interception12real__setjmpE,8,8
+#endif
 .globl ASM_SYMBOL_INTERCEPTOR(_setjmp)
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(_setjmp))
 ASM_SYMBOL_INTERCEPTOR(_setjmp):
@@ -111,7 +118,9 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(_setjmp))
 
+#if !defined(__APPLE__)
 .comm _ZN14__interception14real_sigsetjmpE,8,8
+#endif
 .globl ASM_SYMBOL_INTERCEPTOR(sigsetjmp)
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(sigsetjmp))
 ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
