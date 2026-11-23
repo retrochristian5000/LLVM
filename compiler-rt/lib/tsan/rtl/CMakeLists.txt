@@ -67,6 +67,7 @@ set(TSAN_PREINIT_SOURCES
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
+    tsan_array_darwin.cpp
     tsan_cpu_darwin.cpp
     tsan_fd_darwin.cpp
     tsan_got.cpp
@@ -106,6 +107,7 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
 endif()
 
 set(TSAN_HEADERS
+  tsan_array_darwin.h
   tsan_aarch64_regs.h
   tsan_defs.h
   tsan_dense_alloc.h

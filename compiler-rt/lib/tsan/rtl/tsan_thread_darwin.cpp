@@ -138,16 +138,6 @@ void InitializeDarwinThreadSupport() {
   InstallPthreadIntrospectionHook(callbacks);
 }
 
-extern "C" void __tsan_tls_initialization() {}
-
-void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {
-  const uptr pc = StackTrace::GetNextInstructionPc(
-      reinterpret_cast<uptr>(__tsan_tls_initialization));
-  // Unlike Linux, we only store a pointer to the ThreadState object in TLS;
-  // just mark the entire range as written to.
-  MemoryRangeImitateWrite(thr, pc, tls_addr, tls_size);
-}
-
 #endif  // !SANITIZER_GO
 
 }  // namespace __tsan
