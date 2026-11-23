@@ -1,4 +1,4 @@
-//===-- tsan_aarch64_regs.h -------------------------------------*- C -*-===//
+//===-- tsan_reg_aarch64.h -------------------------------------*- C -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,8 +13,8 @@
 // Keep ARM64e pointer-authentication unwind handling separate from the
 // register numbering. Do not reinterpret SP (DWARF 31) as an X31 register.
 
-#ifndef TSAN_AARCH64_REGS_H
-#define TSAN_AARCH64_REGS_H
+#ifndef TSAN_REG_AARCH64_H
+#define TSAN_REG_AARCH64_H
 
 #if defined(__aarch64__)
 
@@ -93,4 +93,4 @@
 
 #endif  // defined(__aarch64__)
 
-#endif  // TSAN_AARCH64_REGS_H
+#endif  // TSAN_REG_AARCH64_H

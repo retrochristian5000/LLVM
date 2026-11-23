@@ -1,4 +1,4 @@
-#include "tsan_ppc_regs.h"
+#include "../reg/tsan_reg_ppc.h"
 
         .section .text
         .hidden __tsan_setjmp

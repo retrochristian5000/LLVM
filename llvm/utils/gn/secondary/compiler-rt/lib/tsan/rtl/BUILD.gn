@@ -46,7 +46,7 @@ target(tsan_target_type, "rtl") {
   cflags = [ "-fPIE" ]
 
   sources = [
-    "tsan_aarch64_regs.h",
+    "../reg/tsan_reg_aarch64.h",
     "../buff/tsan_buff.cpp",
     "../array/tsan_array.cpp",
     "../buff/tsan_buff.h",
@@ -84,7 +84,7 @@ target(tsan_target_type, "rtl") {
     "tsan_mutexset.cpp",
     "tsan_mutexset.h",
     "tsan_platform.h",
-    "tsan_ppc_regs.h",
+    "../reg/tsan_reg_ppc.h",
     "tsan_preinit.cpp",
     "tsan_report.cpp",
     "tsan_report.h",

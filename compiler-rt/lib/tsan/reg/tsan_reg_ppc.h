@@ -1,3 +1,17 @@
+//===-- tsan_reg_ppc.h ------------------------------------------*- C -*-===//
+// 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// PowerPC register aliases for TSan assembly. Preserve the assembler's
+// numeric register operands and keep this header out of unrelated C++ code.
+
+#ifndef TSAN_REG_PPC_H
+#define TSAN_REG_PPC_H
+
 #define r0 0
 #define r1 1
 #define r2 2
@@ -94,3 +108,5 @@
 #define v29 29
 #define v30 30
 #define v31 31
+
+#endif  // TSAN_REG_PPC_H

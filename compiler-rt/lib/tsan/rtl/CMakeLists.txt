@@ -1,4 +1,4 @@
-include_directories(../.. ../array ../buff ../flags ../endian ../got)
+include_directories(../.. ../array ../buff ../flags ../endian ../got ../reg)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -115,7 +115,7 @@ endif()
 set(TSAN_HEADERS
   ../buff/tsan_buff.h
   ../array/tsan_array_darwin.h
-  tsan_aarch64_regs.h
+  ../reg/tsan_reg_aarch64.h
   tsan_defs.h
   tsan_dense_alloc.h
   ../endian/tsan_endian.h
@@ -137,7 +137,7 @@ set(TSAN_HEADERS
   tsan_mutexset.h
   tsan_platform.h
   tsan_ignore.h
-  tsan_ppc_regs.h
+  ../reg/tsan_reg_ppc.h
   tsan_report.h
   tsan_rtl.h
   tsan_shadow.h

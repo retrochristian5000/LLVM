@@ -6,7 +6,7 @@
 
 #include "sanitizer_common/sanitizer_asm.h"
 #include "builtins/assembly.h"
-#include "tsan_aarch64_regs.h"
+#include "../reg/tsan_reg_aarch64.h"
 
 TEXT_SECTION
 #if defined(__APPLE__)
