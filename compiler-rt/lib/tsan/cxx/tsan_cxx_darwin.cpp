@@ -20,6 +20,7 @@
 #include "interception/interception.h"
 #include "../rtl/tsan_interceptors.h"
 #include "../interface/tsan_interface.h"
+#include "../interface/tsan_interface_ann.h"
 
 namespace __tsan {
 
