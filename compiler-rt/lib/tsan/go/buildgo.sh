@@ -177,6 +177,7 @@ elif [ "$GOOS" = "darwin" ]; then
 	OSLDFLAGS="-lpthread -fPIC -fpie -mmacosx-version-min=10.7 -Wl,-U,__dyld_get_dyld_header"
 	SRCS="
 		$SRCS
+		../interface/tsan_interface_darwin.cpp
 		../rtl/tsan_platform_mac.cpp
 		../../sanitizer_common/sanitizer_mac.cpp
 		../../sanitizer_common/sanitizer_mac_libcdep.cpp

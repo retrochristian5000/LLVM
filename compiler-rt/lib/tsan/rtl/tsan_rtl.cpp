@@ -35,18 +35,6 @@ extern "C" void __tsan_resume() {
   __tsan_resumed = 1;
 }
 
-#if SANITIZER_APPLE
-SANITIZER_WEAK_DEFAULT_IMPL
-void __tsan_test_only_on_fork() {}
-#endif
-
-#if SANITIZER_APPLE && !SANITIZER_GO
-// Override weak symbol from sanitizer_common
-extern void __tsan_set_in_internal_write_call(bool value) {
-  __tsan::cur_thread_init()->in_internal_write_call = value;
-}
-#endif
-
 namespace __tsan {
 
 #if !SANITIZER_GO

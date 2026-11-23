@@ -122,6 +122,7 @@ target(tsan_target_type, "rtl") {
       "../warn/tsan_warn_darwin.h",
       "../endian/tsan_endian_darwin.cpp",
       "../endian/tsan_endian_darwin.h",
+      "../interface/tsan_interface_darwin.cpp",
       "../interface/tsan_interface_got.cpp",
       "../interface/tsan_interface_got.h",
       "tsan_macho.cpp",
