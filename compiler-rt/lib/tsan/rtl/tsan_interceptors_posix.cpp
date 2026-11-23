@@ -574,8 +574,17 @@ static void LongJmp(ThreadState *thr, uptr *env) {
       ThreadSignalContext *sctx = SigCtx(thr);
       if (sctx) {
         sctx->int_signal_send = buf->int_signal_send;
-        while (sctx->oldset.Size() > buf->oldset_stack_size)
+        // A deferred handler runs with TSan's temporary all-blocked mask.
+        // A non-local jump bypasses ProcessPendingSignalsImpl's epilogue, so
+        // undo each temporary mask before returning to libc. In particular,
+        // siglongjmp after sigsetjmp(env, 0) will not restore the OS mask.
+        while (sctx->oldset.Size() > buf->oldset_stack_size) {
+          const __sanitizer_sigset_t oldset =
+              sctx->oldset[sctx->oldset.Size() - 1];
+          const int res = REAL(pthread_sigmask)(SIG_SETMASK, &oldset, nullptr);
+          CHECK_EQ(res, 0);
           sctx->oldset.PopBack();
+        }
       }
       atomic_store(&thr->in_blocking_func, buf->in_blocking_func,
           memory_order_relaxed);
