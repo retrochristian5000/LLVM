@@ -530,6 +530,9 @@ MBlock *JavaHeapBlock(uptr addr, uptr *start);
 
 void Initialize(ThreadState *thr);
 void MaybeSpawnBackgroundThread();
+// Emit the final warning count and matched suppressions after reports settle.
+// Returns true if any warnings were emitted.
+bool PrintWarningSummary();
 int Finalize(ThreadState *thr);
 
 void OnUserAlloc(ThreadState *thr, uptr pc, uptr p, uptr sz, bool write);

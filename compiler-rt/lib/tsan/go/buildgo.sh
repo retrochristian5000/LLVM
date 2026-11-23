@@ -62,6 +62,7 @@ SRCS="
 	../rtl/tsan_suppressions.cpp
 	../rtl/tsan_sync.cpp
 	../rtl/tsan_vector_clock.cpp
+	../rtl/tsan_warn.cpp
 	../../sanitizer_common/sanitizer_allocator.cpp
 	../../sanitizer_common/sanitizer_common.cpp
 	../../sanitizer_common/sanitizer_common_libcdep.cpp

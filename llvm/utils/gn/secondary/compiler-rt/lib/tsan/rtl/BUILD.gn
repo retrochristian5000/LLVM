@@ -102,6 +102,7 @@ target(tsan_target_type, "rtl") {
     "tsan_update_shadow_word.inc",
     "tsan_vector_clock.cpp",
     "tsan_vector_clock.h",
+    "tsan_warn.cpp",
   ]
   if (target_os == "mac") {
     sources += [

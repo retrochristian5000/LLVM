@@ -50,6 +50,7 @@ set(TSAN_SOURCES
   tsan_symbolize.cpp
   tsan_sync.cpp
   tsan_vector_clock.cpp
+  tsan_warn.cpp
   )
 
 set(TSAN_CXX_SOURCES

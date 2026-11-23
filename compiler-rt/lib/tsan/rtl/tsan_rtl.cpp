@@ -798,7 +798,6 @@ void MaybeSpawnBackgroundThread() {
 }
 
 int Finalize(ThreadState *thr) {
-  bool failed = false;
 
 #if !SANITIZER_GO
   if (common_flags()->print_module_map == 1)
@@ -819,17 +818,7 @@ int Finalize(ThreadState *thr) {
 
   ThreadFinalize(thr);
 
-  if (ctx->nreported) {
-    failed = true;
-#if !SANITIZER_GO
-    Printf("ThreadSanitizer: reported %d warnings\n", ctx->nreported);
-#else
-    Printf("Found %d data race(s)\n", ctx->nreported);
-#endif
-  }
-
-  if (common_flags()->print_suppressions)
-    PrintMatchedSuppressions();
+  bool failed = PrintWarningSummary();
 
   failed = OnFinalize(failed);
 
