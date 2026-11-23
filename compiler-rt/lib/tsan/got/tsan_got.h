@@ -28,6 +28,12 @@ struct MachOGOTSlots {
 // The counts are only meaningful on success.
 bool GetMainExecutableMachOGOTSlots(MachOGOTSlots *slots);
 
+#if defined(__aarch64__)
+// Verifies a link-time AArch64 Mach-O GOT data relocation without mutation.
+// The data address is not an authenticated function pointer.
+bool VerifyAArch64GOTAnchor();
+#endif
+
 }  // namespace __tsan
 
 #endif  // SANITIZER_APPLE

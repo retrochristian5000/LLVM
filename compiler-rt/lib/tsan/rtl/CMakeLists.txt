@@ -1,4 +1,4 @@
-include_directories(../.. ../flags ../endian)
+include_directories(../.. ../flags ../endian ../got)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -74,7 +74,7 @@ if(APPLE)
     ../cpu/tsan_cpu_darwin.cpp
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
-    tsan_got.cpp
+    ../got/tsan_got.cpp
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
@@ -123,7 +123,7 @@ set(TSAN_HEADERS
   tsan_fd.h
   ../flags/tsan_flags.h
   ../flags/tsan_flags.inc
-  tsan_got.h
+  ../got/tsan_got.h
   tsan_ignoreset.h
   tsan_ilist.h
   tsan_interceptors.h
@@ -172,6 +172,7 @@ if(APPLE)
     ../cpu/tsan_cpu_aarch64.S
     tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S
+    ../got/tsan_got_aarch64.S
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})

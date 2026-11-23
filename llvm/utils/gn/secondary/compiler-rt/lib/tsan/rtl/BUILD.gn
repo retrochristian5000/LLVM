@@ -111,6 +111,8 @@ target(tsan_target_type, "rtl") {
       "../cpu/tsan_cpu_darwin.cpp",
       "../endian/tsan_endian_darwin.cpp",
       "../endian/tsan_endian_darwin.h",
+      "../got/tsan_got.cpp",
+      "../got/tsan_got.h",
       "tsan_macho.cpp",
       "tsan_macho.h",
       "tsan_fd_darwin.cpp",
@@ -151,6 +153,9 @@ target(tsan_target_type, "rtl") {
       "../cpu/tsan_cpu_aarch64.S",
       "tsan_interceptors_aarch64.S",
     ]
+    if (target_os == "mac") {
+      sources += [ "../got/tsan_got_aarch64.S" ]
+    }
   } else if (target_cpu == "loongarch64") {
     sources += [ "tsan_rtl_loongarch64.S" ]
   } else if (target_cpu == "mips64") {

@@ -19,7 +19,7 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_procmaps.h"
-#include "tsan_got.h"
+#include "../got/tsan_got.h"
 #include "tsan_macho.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -82,6 +82,10 @@ void InitializePlatform() {
               "ThreadSanitizer: main Mach-O symbol-pointer slots: "
               "lazy=%zu, non-lazy=%zu\n",
               slots.lazy, slots.non_lazy);
+#if defined(__aarch64__) && !SANITIZER_GO
+    VPrintf(2, "ThreadSanitizer: AArch64 Mach-O GOT data relocation: %s\n",
+            VerifyAArch64GOTAnchor() ? "resolved" : "mismatch");
+#endif
   }
 #if !SANITIZER_GO
   if (!CheckAndProtect(true, true, true)) {

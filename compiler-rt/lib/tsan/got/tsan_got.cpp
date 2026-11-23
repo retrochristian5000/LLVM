@@ -12,15 +12,27 @@
 // rewrite dyld's pointers, especially authenticated ARM64e pointers.
 
 #include "tsan_got.h"
-#include "tsan_endian_darwin.h"
+#include "../endian/tsan_endian_darwin.h"
 
 #if SANITIZER_APPLE
 
-#include "tsan_macho.h"
+#include "../rtl/tsan_macho.h"
 
 namespace __tsan {
 
 using __sanitizer::uptr;
+
+#if defined(__aarch64__)
+// A data anchor exercises a Mach-O AArch64 GOT relocation without reading
+// or changing any dyld-owned symbol pointer or ARM64e function pointer.
+extern "C" const unsigned char __tsan_got_aarch64_anchor = 0;
+extern "C" const unsigned char *__tsan_got_aarch64_anchor_via_got();
+
+bool VerifyAArch64GOTAnchor() {
+  return __tsan_got_aarch64_anchor_via_got() == &__tsan_got_aarch64_anchor;
+}
+#endif
+
 
 bool GetMainExecutableMachOGOTSlots(MachOGOTSlots *slots) {
   if (!slots)
