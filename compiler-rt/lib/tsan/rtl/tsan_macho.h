@@ -12,7 +12,14 @@
 #include "sanitizer_common/sanitizer_platform.h"
 
 #if SANITIZER_APPLE
+
+#include <mach-o/loader.h>
+
 namespace __tsan {
+
+// Shared read-only access to the main executable's dyld image header.
+// Other TSan image-format helpers must not duplicate dyld enumeration.
+const mach_header *MachOExecutableHeader();
 
 // The main executable's Mach-O architecture; not the architecture of the
 // TSan runtime dylib or of other images loaded into the process.

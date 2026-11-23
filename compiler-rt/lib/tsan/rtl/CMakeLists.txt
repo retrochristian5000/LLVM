@@ -67,6 +67,7 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     tsan_cpu_darwin.cpp
     tsan_fd_darwin.cpp
+    tsan_got.cpp
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
@@ -110,6 +111,7 @@ set(TSAN_HEADERS
   tsan_fd.h
   tsan_flags.h
   tsan_flags.inc
+  tsan_got.h
   tsan_ignoreset.h
   tsan_ilist.h
   tsan_interceptors.h

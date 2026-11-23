@@ -20,8 +20,12 @@
 
 namespace __tsan {
 
+const mach_header *MachOExecutableHeader() {
+  return _dyld_get_image_header(0);
+}
+
 const char *MachOExecutableArchitecture() {
-  const mach_header *header = _dyld_get_image_header(0);
+  const mach_header *header = MachOExecutableHeader();
   if (!header || header->magic != MH_MAGIC_64)
     return "unknown";
 
