@@ -44,6 +44,7 @@
 #include "../warn/tsan_warn_runtime.h"
 #if SANITIZER_APPLE
 #include "../warn/tsan_warn_darwin.h"
+#include "../stack/tsan_stack_jmp_darwin.h"
 #endif
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -511,7 +512,8 @@ TSAN_INTERCEPTOR(int, on_exit, void(*f)(int, void*), void *arg) {
 #define TSAN_MAYBE_INTERCEPT_ON_EXIT
 #endif
 
-// Cleanup old bufs.
+#if !SANITIZER_APPLE
+// Non-Darwin ABIs still expose the original SP-only setjmp hook.
 static void JmpBufGarbageCollect(ThreadState *thr, uptr sp) {
   for (uptr i = 0; i < thr->jmp_bufs.Size(); i++) {
     JmpBuf *buf = &thr->jmp_bufs[i];
@@ -523,8 +525,9 @@ static void JmpBufGarbageCollect(ThreadState *thr, uptr sp) {
     }
   }
 }
+#endif  // !SANITIZER_APPLE
 
-static void SetJmp(ThreadState *thr, uptr sp) {
+static void SetJmp(ThreadState *thr, uptr sp, uptr env) {
   if (!thr->is_inited)  // called from libc guts during bootstrap
     return;
 #if defined(__aarch64__) && !SANITIZER_GO
@@ -533,11 +536,19 @@ static void SetJmp(ThreadState *thr, uptr sp) {
     Die();
   }
 #endif
-  // Cleanup old bufs.
+#if SANITIZER_APPLE
+  // Keep same-depth frames for distinct live buffers; discard an overwritten
+  // buffer's old record and frames already unwound by the native stack.
+  RetireDarwinJmpBufFrames(thr, sp, env);
+#else
   JmpBufGarbageCollect(thr, sp);
-  // Remember the buf.
+  (void)env;
+#endif
   JmpBuf *buf = thr->jmp_bufs.PushBack();
   buf->sp = sp;
+#if SANITIZER_APPLE
+  buf->env = env;
+#endif
   buf->shadow_stack_pos = thr->shadow_stack_pos;
   ThreadSignalContext *sctx = SigCtx(thr);
   buf->int_signal_send = sctx ? sctx->int_signal_send : 0;
@@ -553,11 +564,20 @@ static void LongJmp(ThreadState *thr, uptr *env) {
   if (!thr->is_inited)
     return;
   uptr sp = ExtractLongJmpSp(env);
-  // Find the saved buf with matching sp.
-  for (uptr i = 0; i < thr->jmp_bufs.Size(); i++) {
-    JmpBuf *buf = &thr->jmp_bufs[i];
-    if (buf->sp == sp) {
-      CHECK_GE(thr->shadow_stack_pos, buf->shadow_stack_pos);
+  JmpBuf *buf = nullptr;
+#if SANITIZER_APPLE
+  const DarwinJmpBufLookup status =
+      FindDarwinJmpBufFrame(thr, reinterpret_cast<uptr>(env), sp, &buf);
+#else
+  for (uptr i = 0; i < thr->jmp_bufs.Size(); ++i) {
+    if (thr->jmp_bufs[i].sp == sp) {
+      buf = &thr->jmp_bufs[i];
+      break;
+    }
+  }
+#endif
+  if (buf) {
+    CHECK_GE(thr->shadow_stack_pos, buf->shadow_stack_pos);
       // Unwind the stack.
       while (thr->shadow_stack_pos > buf->shadow_stack_pos)
         FuncExit(thr);
@@ -580,20 +600,33 @@ static void LongJmp(ThreadState *thr, uptr *env) {
           memory_order_relaxed);
       atomic_store(&thr->in_signal_handler, buf->in_signal_handler,
           memory_order_relaxed);
-      JmpBufGarbageCollect(thr, buf->sp - 1);  // do not collect buf->sp
+#if SANITIZER_APPLE
+      RetireDarwinJmpBufFrames(thr, buf->sp, 0);
+#else
+      JmpBufGarbageCollect(thr, buf->sp - 1);
+#endif
       return;
-    }
   }
 #if SANITIZER_APPLE
-  ReportDarwinUnmatchedLongJmp(sp, thr->jmp_bufs.Size());
+  ReportDarwinUnmatchedLongJmp(sp, thr->jmp_bufs.Size(),
+                               reinterpret_cast<uptr>(env), status);
 #else
   Printf("ThreadSanitizer: can't find longjmp buf\n");
 #endif
   Die();
 }
 
-// FIXME: put everything below into a common extern "C" block?
-extern "C" void __tsan_setjmp(uptr sp) { SetJmp(cur_thread_init(), sp); }
+// Darwin uses a separate ABI so the SP-only hook used by other ISAs remains
+// compatible with their existing assembly entry points.
+#if SANITIZER_APPLE
+extern "C" void __tsan_setjmp_darwin(uptr sp, uptr env) {
+  SetJmp(cur_thread_init(), sp, env);
+}
+#else
+extern "C" void __tsan_setjmp(uptr sp) {
+  SetJmp(cur_thread_init(), sp, 0);
+}
+#endif
 
 #if SANITIZER_APPLE
 TSAN_INTERCEPTOR(int, setjmp, void *env);

@@ -23,7 +23,11 @@
 .section __TEXT,__text
 #endif
 
+#if defined(__APPLE__)
+ASM_HIDDEN(__tsan_setjmp_darwin)
+#else
 ASM_HIDDEN(__tsan_setjmp)
+#endif
 #if defined(__NetBSD__)
 .comm _ZN14__interception15real___setjmp14E,8,8
 #elif !defined(__APPLE__)
@@ -52,8 +56,13 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
 #else
 # error "Unknown platform"
 #endif
-  // call tsan interceptor
+  // The env pointer was saved by push %rdi.
+#if defined(__APPLE__)
+  movq (%rsp), %rsi
+  call ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   call ASM_SYMBOL(__tsan_setjmp)
+#endif
   // restore env parameter
   pop %rdi
   CFI_ADJUST_CFA_OFFSET(-8)
@@ -96,8 +105,13 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
 #else
 # error "Unknown platform"
 #endif
-  // call tsan interceptor
+  // The env pointer was saved by push %rdi.
+#if defined(__APPLE__)
+  movq (%rsp), %rsi
+  call ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   call ASM_SYMBOL(__tsan_setjmp)
+#endif
   // restore env parameter
   pop %rdi
   CFI_ADJUST_CFA_OFFSET(-8)
@@ -147,8 +161,13 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
 #else
 # error "Unknown platform"
 #endif
-  // call tsan interceptor
+  // push(env), push(savesigs), and the alignment slot leave env at +16.
+#if defined(__APPLE__)
+  movq 16(%rsp), %rsi
+  call ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   call ASM_SYMBOL(__tsan_setjmp)
+#endif
   // unalign stack frame
   add $8, %rsp
   CFI_ADJUST_CFA_OFFSET(-8)
@@ -202,8 +221,13 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
 #else
   lea 32(%rsp), %rdi
 #endif
-  // call tsan interceptor
+  // push(env), push(savesigs), and the alignment slot leave env at +16.
+#if defined(__APPLE__)
+  movq 16(%rsp), %rsi
+  call ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   call ASM_SYMBOL(__tsan_setjmp)
+#endif
   // unalign stack frame
   add $8, %rsp
   CFI_ADJUST_CFA_OFFSET(-8)

@@ -17,6 +17,7 @@
 #if SANITIZER_APPLE && !SANITIZER_GO
 
 #include "../rtl/tsan_defs.h"
+#include "../stack/tsan_stack_jmp_darwin.h"
 
 namespace __tsan {
 
@@ -27,7 +28,9 @@ void ReportDarwinIncompatibleMemoryLayout();
 void ReportDarwinRejectedFixedMachVmRange(uptr address, uptr size, int flags);
 void ReportDarwinUnsupportedMachVmResult(uptr address, uptr size, int flags);
 void ReportDarwinInvalidLongJmpStackPointer(uptr stack_pointer);
-void ReportDarwinUnmatchedLongJmp(uptr stack_pointer, uptr saved_frames);
+void ReportDarwinUnmatchedLongJmp(uptr stack_pointer, uptr saved_frames,
+                                  uptr environment,
+                                  DarwinJmpBufLookup lookup);
 
 }  // namespace __tsan
 

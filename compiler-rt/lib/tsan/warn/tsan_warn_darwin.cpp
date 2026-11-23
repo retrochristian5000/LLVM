@@ -95,17 +95,20 @@ void ReportDarwinInvalidLongJmpStackPointer(uptr stack_pointer) {
       reinterpret_cast<void *>(stack_pointer));
 }
 
-void ReportDarwinUnmatchedLongJmp(uptr stack_pointer, uptr saved_frames) {
+void ReportDarwinUnmatchedLongJmp(uptr stack_pointer, uptr saved_frames,
+                                  uptr environment,
+                                  DarwinJmpBufLookup lookup) {
   Report(
       "FATAL: ThreadSanitizer [TSAN-JMP-003]: longjmp has no matching "
-      "recorded setjmp frame\n"
-      "  operation=longjmp decoded_stack_pointer=%p saved_frame_count=%zu\n"
+      "live setjmp frame\n"
+      "  operation=longjmp environment=%p decoded_stack_pointer=%p "
+      "saved_frame_count=%zu\n"
       "  reason=%s\n"
-      "  action=inspect setjmp interception, frame lifetime, and the Darwin "
-      "jump-buffer ABI; check pointer authentication on arm64e\n",
+      "  action=inspect jump-buffer identity, frame lifetime, and Darwin "
+      "jump-buffer ABI; verify arm64e pointer authentication if applicable\n",
+      reinterpret_cast<void *>(environment),
       reinterpret_cast<void *>(stack_pointer), saved_frames,
-      saved_frames == 0 ? "no setjmp frames are recorded for this thread"
-                        : "decoded stack pointer matches none of the recorded frames");
+      DarwinJmpBufLookupDescription(lookup));
 }
 
 }  // namespace __tsan

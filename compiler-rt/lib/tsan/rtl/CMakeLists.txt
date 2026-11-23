@@ -79,6 +79,7 @@ if(APPLE)
     ../array/tsan_array_darwin.cpp
     ../stack/tsan_stack_darwin.cpp
     ../stack/tsan_stack_mac.cpp
+    ../stack/tsan_stack_jmp_darwin.cpp
     ../warn/tsan_warn_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
     ../cxx/tsan_cxx_darwin.cpp
@@ -162,6 +163,7 @@ set(TSAN_HEADERS
   tsan_shadow.h
   ../stack/tsan_stack.h
   ../stack/tsan_stack_aarch64.h
+  ../stack/tsan_stack_jmp_darwin.h
   ../stack/tsan_stack_trace.h
   tsan_suppressions.h
   tsan_symbolize.h

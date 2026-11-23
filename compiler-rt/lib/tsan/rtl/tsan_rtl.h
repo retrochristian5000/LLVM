@@ -101,6 +101,10 @@ struct ThreadSignalContext;
 
 struct JmpBuf {
   uptr sp;
+#if SANITIZER_APPLE
+  // Distinguish live jump buffers in one native stack frame.
+  uptr env;
+#endif
   int int_signal_send;
   bool in_blocking_func;
   uptr oldset_stack_size;

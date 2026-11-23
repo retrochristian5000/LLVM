@@ -13,7 +13,11 @@ TEXT_SECTION
 .align 3
 #endif
 
+#if defined(__APPLE__)
+ASM_HIDDEN(__tsan_setjmp_darwin)
+#else
 ASM_HIDDEN(__tsan_setjmp)
+#endif
 #if !defined(__APPLE__)
 .comm _ZN14__interception11real_setjmpE,8,8
 #endif
@@ -37,11 +41,16 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
   str     x0, [sp, 16]
   CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
 
-  // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
+  // Darwin supplies env in x1; restore libc arguments after the helper.
+#if defined(__APPLE__)
+  ldr     x1, [sp, 16]
+#endif
   add     x0, x29, 32
-
-  // call tsan interceptor
+#if defined(__APPLE__)
+  bl      ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   bl      ASM_SYMBOL(__tsan_setjmp)
+#endif
 
   // Restore env parameter
   ldr     x0, [sp, 16]
@@ -90,11 +99,16 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
   str     x0, [sp, 16]
   CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
 
-  // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
+  // Darwin supplies env in x1; restore libc arguments after the helper.
+#if defined(__APPLE__)
+  ldr     x1, [sp, 16]
+#endif
   add     x0, x29, 32
-
-  // call tsan interceptor
+#if defined(__APPLE__)
+  bl      ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   bl      ASM_SYMBOL(__tsan_setjmp)
+#endif
 
   // Restore env parameter
   ldr     x0, [sp, 16]
@@ -143,11 +157,16 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
   CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
   CFI_OFFSET (TSAN_AARCH64_DWARF_X1, -8)
 
-  // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
+  // Darwin supplies env in x1; restore libc arguments after the helper.
+#if defined(__APPLE__)
+  ldr     x1, [sp, 16]
+#endif
   add     x0, x29, 32
-
-  // call tsan interceptor
+#if defined(__APPLE__)
+  bl      ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   bl      ASM_SYMBOL(__tsan_setjmp)
+#endif
 
   // Restore env and savesigs parameter
   ldp     x0, x1, [sp, 16]
@@ -195,11 +214,16 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
   CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
   CFI_OFFSET (TSAN_AARCH64_DWARF_X1, -8)
 
-  // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
+  // Darwin supplies env in x1; restore libc arguments after the helper.
+#if defined(__APPLE__)
+  ldr     x1, [sp, 16]
+#endif
   add     x0, x29, 32
-
-  // call tsan interceptor
+#if defined(__APPLE__)
+  bl      ASM_SYMBOL(__tsan_setjmp_darwin)
+#else
   bl      ASM_SYMBOL(__tsan_setjmp)
+#endif
 
   // Restore env and savesigs parameter
   ldp     x0, x1, [sp, 16]

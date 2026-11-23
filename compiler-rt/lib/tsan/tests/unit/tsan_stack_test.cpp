@@ -14,6 +14,9 @@
 #include "../../stack/tsan_stack.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "gtest/gtest.h"
+#if SANITIZER_APPLE && !SANITIZER_GO
+#include "../../stack/tsan_stack_jmp_darwin.h"
+#endif
 #include <string.h>
 
 namespace __tsan {
@@ -63,6 +66,63 @@ static void TestTrim(StackTraceTy *trace) {
   }
   EXPECT_EQ(42U, trace->trace[kStackTraceMax - 1]);
 }
+
+#if SANITIZER_APPLE && !SANITIZER_GO
+TEST(Stack, DarwinSameDepthJmpBuffersAreIndependent) {
+  ThreadState thr(kMainTid);
+  JmpBuf *a = thr.jmp_bufs.PushBack();
+  a->sp = 0x10000;
+  a->env = 0x20000;
+  a->shadow_stack_pos = thr.shadow_stack_pos;
+  JmpBuf *b = thr.jmp_bufs.PushBack();
+  b->sp = 0x10000;
+  b->env = 0x30000;
+  b->shadow_stack_pos = thr.shadow_stack_pos;
+
+  RetireDarwinJmpBufFrames(&thr, 0x10000, 0);
+  ASSERT_EQ(2U, thr.jmp_bufs.Size());
+  JmpBuf *found = nullptr;
+  EXPECT_EQ(DarwinJmpBufLookup::kFound,
+            FindDarwinJmpBufFrame(&thr, 0x20000, 0x10000, &found));
+  ASSERT_NE(nullptr, found);
+  EXPECT_EQ(0x20000U, found->env);
+  EXPECT_EQ(DarwinJmpBufLookup::kEnvironmentMismatch,
+            FindDarwinJmpBufFrame(&thr, 0x40000, 0x10000, &found));
+  EXPECT_EQ(nullptr, found);
+  EXPECT_EQ(DarwinJmpBufLookup::kStackPointerMismatch,
+            FindDarwinJmpBufFrame(&thr, 0x30000, 0x11000, &found));
+  EXPECT_EQ(DarwinJmpBufLookup::kNotRecorded,
+            FindDarwinJmpBufFrame(&thr, 0x40000, 0x11000, &found));
+
+  RetireDarwinJmpBufFrames(&thr, 0x10000, 0x20000);
+  ASSERT_EQ(1U, thr.jmp_bufs.Size());
+  EXPECT_EQ(0x30000U, thr.jmp_bufs[0].env);
+}
+
+TEST(Stack, DarwinJmpFrameLifetimeAndShadowDepth) {
+  ThreadState thr(kMainTid);
+  JmpBuf *outer = thr.jmp_bufs.PushBack();
+  outer->sp = 0x20000;
+  outer->env = 0x30000;
+  outer->shadow_stack_pos = thr.shadow_stack_pos;
+  JmpBuf *inner = thr.jmp_bufs.PushBack();
+  inner->sp = 0x1f000;
+  inner->env = 0x31000;
+  inner->shadow_stack_pos = thr.shadow_stack_pos + 2;
+
+  JmpBuf *found = nullptr;
+  EXPECT_EQ(DarwinJmpBufLookup::kExpiredShadowFrame,
+            FindDarwinJmpBufFrame(&thr, 0x31000, 0x1f000, &found));
+  EXPECT_EQ(nullptr, found);
+
+  RetireDarwinJmpBufFrames(&thr, 0x20000, 0);
+  ASSERT_EQ(1U, thr.jmp_bufs.Size());
+  EXPECT_EQ(DarwinJmpBufLookup::kFound,
+            FindDarwinJmpBufFrame(&thr, 0x30000, 0x20000, &found));
+  ASSERT_NE(nullptr, found);
+  EXPECT_EQ(0x30000U, found->env);
+}
+#endif
 
 TEST(Stack, ShadowStackAllocationAndRelease) {
   ThreadState thr(kMainTid);
