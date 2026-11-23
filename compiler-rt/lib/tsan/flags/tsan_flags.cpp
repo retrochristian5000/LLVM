@@ -16,7 +16,7 @@
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "../interface/tsan_interface.h"
-#include "../rtl/tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "../rtl/tsan_rtl.h"
 #include "ubsan/ubsan_flags.h"
 

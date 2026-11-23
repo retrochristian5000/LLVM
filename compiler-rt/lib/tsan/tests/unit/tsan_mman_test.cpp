@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include <limits>
 #include <sanitizer/allocator_interface.h>
-#include "tsan_mman.h"
+#include "../../mman/tsan_mman.h"
 #include "tsan_rtl.h"
 #include "gtest/gtest.h"
 

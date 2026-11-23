@@ -20,8 +20,8 @@
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "../flags/tsan_flags.h"
 #include "../interface/tsan_interface.h"
-#include "tsan_report.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_report.h"
+#include "../rtl/tsan_rtl.h"
 
 namespace __tsan {
 
@@ -323,23 +323,6 @@ void *user_memalign(ThreadState *thr, uptr pc, uptr align, uptr sz) {
     ReportInvalidAllocationAlignment(align, &stack);
   }
   return SetErrnoOnNull(user_alloc_internal(thr, pc, sz, align));
-}
-
-int user_posix_memalign(ThreadState *thr, uptr pc, void **memptr, uptr align,
-                        uptr sz) {
-  if (UNLIKELY(!CheckPosixMemalignAlignment(align))) {
-    if (AllocatorMayReturnNull())
-      return errno_EINVAL;
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportInvalidPosixMemalignAlignment(align, &stack);
-  }
-  void *ptr = user_alloc_internal(thr, pc, sz, align);
-  if (UNLIKELY(!ptr))
-    // OOM error is already taken care of by user_alloc_internal.
-    return errno_ENOMEM;
-  CHECK(IsAligned((uptr)ptr, align));
-  *memptr = ptr;
-  return 0;
 }
 
 void *user_aligned_alloc(ThreadState *thr, uptr pc, uptr align, uptr sz) {

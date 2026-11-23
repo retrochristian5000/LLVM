@@ -1,5 +1,5 @@
 include_directories(
-  ../.. ../array ../buff ../flags ../endian ../interface ../reg ../stack
+  ../.. ../array ../buff ../flags ../endian ../interface ../mman ../reg ../stack
   ../vector ../warn)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
@@ -43,7 +43,8 @@ set(TSAN_SOURCES
   ../interface/tsan_interface_java.cpp
   ../interface/tsan_interface_mmap.cpp
   tsan_md5.cpp
-  tsan_mman.cpp
+  ../mman/tsan_mman.cpp
+  ../mman/tsan_mman_posix.cpp
   tsan_mutexset.cpp
   tsan_ignore.cpp
   tsan_report.cpp
@@ -89,8 +90,8 @@ if(APPLE)
     tsan_interceptors_mach_vm.cpp
     tsan_macho.cpp
     tsan_malloc_mac.cpp
-    tsan_mman_darwin.cpp
-    tsan_mman_mac.cpp
+    ../mman/tsan_mman_darwin.cpp
+    ../mman/tsan_mman_mac.cpp
     tsan_platform_darwin.cpp
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp
@@ -148,7 +149,7 @@ set(TSAN_HEADERS
   ../interface/tsan_interface_java.h
   ../interface/tsan_interface_mmap.h
   tsan_macho.h
-  tsan_mman.h
+  ../mman/tsan_mman.h
   tsan_mutexset.h
   tsan_platform.h
   tsan_ignore.h

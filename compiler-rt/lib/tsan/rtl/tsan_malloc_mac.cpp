@@ -17,7 +17,7 @@
 #include "sanitizer_common/sanitizer_errno.h"
 #include "tsan_interceptors.h"
 #include "tsan_stack_trace.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 
 using namespace __tsan;
 #define COMMON_MALLOC_ZONE_NAME "tsan"

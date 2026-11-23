@@ -17,7 +17,7 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_suppressions.h"
 #include "../flags/tsan_flags.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
 

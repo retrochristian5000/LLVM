@@ -224,7 +224,7 @@ for F in $SRCS; do
 	cat $F
 done > $DIR/gotsan.cpp
 
-FLAGS=" -I../interface -I../rtl -I../vector -I../buff -I../stack -I../warn -I../flags -I../endian -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
+FLAGS=" -I../interface -I../rtl -I../vector -I../buff -I../stack -I../warn -I../flags -I../endian -I../mman -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
 DEBUG_FLAGS="$FLAGS -DSANITIZER_DEBUG=1 -g"
 FLAGS="$FLAGS -DSANITIZER_DEBUG=0 -O3 -fomit-frame-pointer"
 

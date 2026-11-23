@@ -20,7 +20,7 @@
 #include "tsan_defs.h"
 #include "tsan_fd.h"
 #include "../flags/tsan_flags.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"
 #include "tsan_rtl.h"

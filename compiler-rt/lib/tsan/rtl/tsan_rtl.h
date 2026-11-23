@@ -39,7 +39,7 @@
 #include "../flags/tsan_flags.h"
 #include "tsan_ignoreset.h"
 #include "tsan_ilist.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "tsan_mutexset.h"
 #include "tsan_platform.h"
 #include "tsan_ignore.h"

@@ -14,7 +14,7 @@
 #if SANITIZER_APPLE
 
 #include "sanitizer_common/sanitizer_addrhashmap.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "tsan_rtl.h"
 #include "tsan_sync.h"
 

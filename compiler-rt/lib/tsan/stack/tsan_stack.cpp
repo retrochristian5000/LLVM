@@ -13,7 +13,7 @@
 #include "tsan_stack.h"
 
 #include "sanitizer_common/sanitizer_stackdepot.h"
-#include "../rtl/tsan_mman.h"
+#include "../mman/tsan_mman.h"
 #include "../rtl/tsan_rtl.h"
 
 namespace __tsan {

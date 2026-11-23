@@ -1,5 +1,5 @@
 include_directories(
-  ../rtl ../array ../buff ../interface ../flags ../endian ../reg ../stack
+  ../rtl ../array ../buff ../interface ../flags ../endian ../mman ../reg ../stack
   ../vector ../warn)
 
 add_custom_target(TsanUnitTests)
@@ -18,6 +18,7 @@ set(TSAN_UNITTEST_CFLAGS
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/flags
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/endian
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/reg
+  -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/mman
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/stack
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/warn
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/vector

@@ -12,7 +12,7 @@
 #ifndef TSAN_MMAN_H
 #define TSAN_MMAN_H
 
-#include "tsan_defs.h"
+#include "../rtl/tsan_defs.h"
 
 namespace __tsan {
 

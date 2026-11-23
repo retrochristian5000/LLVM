@@ -12,7 +12,7 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "tsan_sync.h"
 #include "tsan_rtl.h"
-#include "tsan_mman.h"
+#include "../mman/tsan_mman.h"
 
 namespace __tsan {
 
