@@ -69,13 +69,20 @@ if(APPLE)
     tsan_platform_posix.cpp
     )
 elseif(UNIX)
-  # The glibc source is empty on other Linux libcs (e.g. musl).
+  # tsan_platform_linux.cpp also contains BSD support.
   list(APPEND TSAN_SOURCES
-    tsan_interceptors_glibc.cpp
-    tsan_interceptors_linux.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
     )
+  if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    list(APPEND TSAN_SOURCES tsan_interceptors_freebsd.cpp)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Only Linux builds need these sources; glibc internals are guarded in C++.
+    list(APPEND TSAN_SOURCES
+      tsan_interceptors_glibc.cpp
+      tsan_interceptors_linux.cpp
+      )
+  endif()
 endif()
 
 if(COMPILER_RT_INTERCEPT_LIBDISPATCH)

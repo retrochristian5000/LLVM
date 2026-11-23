@@ -9,6 +9,11 @@
 
 namespace __tsan {
 
+// FreeBSD-specific libthr aliases and thread-exit interception.
+#if SANITIZER_FREEBSD
+void InitializeFreeBSDInterceptors();
+#endif
+
 // Linux-only interceptors are initialized separately from shared POSIX code.
 #if SANITIZER_LINUX
 void InitializeLinuxInterceptors();
@@ -124,14 +129,6 @@ inline bool MustIgnoreInterceptor(ThreadState *thr) {
     si.EnableIgnores();
 
 #define TSAN_INTERCEPTOR(ret, func, ...) INTERCEPTOR(ret, func, __VA_ARGS__)
-
-#if SANITIZER_FREEBSD
-#  define TSAN_INTERCEPTOR_FREEBSD_ALIAS(ret, func, ...) \
-    TSAN_INTERCEPTOR(ret, _pthread_##func, __VA_ARGS__)  \
-    ALIAS(WRAP(pthread_##func));
-#else
-#  define TSAN_INTERCEPTOR_FREEBSD_ALIAS(ret, func, ...)
-#endif
 
 #if SANITIZER_NETBSD
 # define TSAN_INTERCEPTOR_NETBSD_ALIAS(ret, func, ...) \

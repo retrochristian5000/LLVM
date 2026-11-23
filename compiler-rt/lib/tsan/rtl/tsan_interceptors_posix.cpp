@@ -342,12 +342,6 @@ void ScopedInterceptor::DisableIgnoresImpl() {
 }
 
 #define TSAN_INTERCEPT(func) INTERCEPT_FUNCTION(func)
-#if SANITIZER_FREEBSD
-#  define TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(func) \
-    INTERCEPT_FUNCTION(_pthread_##func)
-#else
-#  define TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(func)
-#endif
 #if SANITIZER_NETBSD
 #  define TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(func) \
     INTERCEPT_FUNCTION(__libc_##func)
@@ -2767,36 +2761,6 @@ TSAN_INTERCEPTOR(void, _lwp_exit) {
 #define TSAN_MAYBE_INTERCEPT__LWP_EXIT
 #endif
 
-#if SANITIZER_FREEBSD
-TSAN_INTERCEPTOR(void, thr_exit, ThreadID *state) {
-  SCOPED_TSAN_INTERCEPTOR(thr_exit, state);
-  DestroyThreadState();
-  REAL(thr_exit(state));
-}
-#  define TSAN_MAYBE_INTERCEPT_THR_EXIT TSAN_INTERCEPT(thr_exit)
-#else
-#define TSAN_MAYBE_INTERCEPT_THR_EXIT
-#endif
-
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, cond_init, void *c, void *a)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, cond_destroy, void *c)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, cond_signal, void *c)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, cond_broadcast, void *c)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, cond_wait, void *c, void *m)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, mutex_init, void *m, void *a)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, mutex_destroy, void *m)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, mutex_lock, void *m)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, mutex_trylock, void *m)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, mutex_unlock, void *m)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_init, void *l, void *a)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_destroy, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_rdlock, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_tryrdlock, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_wrlock, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_trywrlock, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, rwlock_unlock, void *l)
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, once, void *o, void (*i)())
-TSAN_INTERCEPTOR_FREEBSD_ALIAS(int, sigmask, int f, void *n, void *o)
 
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, cond_init, void *c, void *a)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, cond_signal, void *c)
@@ -3023,7 +2987,6 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(_exit);
 
   TSAN_MAYBE_INTERCEPT__LWP_EXIT;
-  TSAN_MAYBE_INTERCEPT_THR_EXIT;
 
 #if !SANITIZER_APPLE && !SANITIZER_ANDROID
   // Need to setup it, because interceptors check that the function is resolved.
@@ -3047,25 +3010,10 @@ void InitializeInterceptors() {
   }
 #endif
 
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_init);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_destroy);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_signal);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_broadcast);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_wait);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(mutex_init);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(mutex_destroy);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(mutex_lock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(mutex_trylock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(mutex_unlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_init);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_destroy);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_rdlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_tryrdlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_wrlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_trywrlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(rwlock_unlock);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(once);
-  TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(sigmask);
+#if SANITIZER_FREEBSD
+  InitializeFreeBSDInterceptors();
+#endif
+
 
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(cond_init);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(cond_signal);
