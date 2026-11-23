@@ -407,6 +407,8 @@ uptr user_alloc_usable_size_fast(const void *p) {
   return b->siz;
 }
 
+#if !SANITIZER_APPLE
+// Apple malloc-zone hooks are implemented in tsan_mman_mac.cpp.
 void invoke_malloc_hook(void *ptr, uptr size) {
   ThreadState *thr = cur_thread();
   if (ctx == 0 || !ctx->initialized || thr->ignore_interceptors)
@@ -420,6 +422,7 @@ void invoke_free_hook(void *ptr) {
     return;
   RunFreeHooks(ptr);
 }
+#endif  // !SANITIZER_APPLE
 
 void *Alloc(uptr sz) {
   ThreadState *thr = cur_thread();

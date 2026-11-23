@@ -37,7 +37,6 @@ set(TSAN_SOURCES
   ../interface/tsan_interface_ann.cpp
   ../interface/tsan_interface_atomic.cpp
   ../interface/tsan_interface_java.cpp
-  tsan_malloc_mac.cpp
   tsan_md5.cpp
   tsan_mman.cpp
   tsan_mutexset.cpp
@@ -78,7 +77,9 @@ if(APPLE)
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
     tsan_macho.cpp
+    tsan_malloc_mac.cpp
     tsan_mman_darwin.cpp
+    tsan_mman_mac.cpp
     tsan_platform_darwin.cpp
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp
