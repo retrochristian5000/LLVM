@@ -1,4 +1,4 @@
-include_directories(../..)
+include_directories(../.. ../flags)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -30,7 +30,7 @@ set(TSAN_SOURCES
   tsan_endian_little.cpp
   tsan_external.cpp
   tsan_fd.cpp
-  tsan_flags.cpp
+  ../flags/tsan_flags.cpp
   tsan_ignoreset.cpp
   tsan_interceptors_memintrinsics.cpp
   tsan_interceptors_posix.cpp
@@ -121,8 +121,8 @@ set(TSAN_HEADERS
   tsan_endian.h
   tsan_endian_darwin.h
   tsan_fd.h
-  tsan_flags.h
-  tsan_flags.inc
+  ../flags/tsan_flags.h
+  ../flags/tsan_flags.inc
   tsan_got.h
   tsan_ignoreset.h
   tsan_ilist.h

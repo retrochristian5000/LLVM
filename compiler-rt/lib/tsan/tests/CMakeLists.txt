@@ -1,4 +1,4 @@
-include_directories(../rtl ../interface)
+include_directories(../rtl ../interface ../flags)
 
 add_custom_target(TsanUnitTests)
 set_target_properties(TsanUnitTests PROPERTIES
@@ -11,6 +11,7 @@ set(TSAN_UNITTEST_CFLAGS
   -I${COMPILER_RT_SOURCE_DIR}/include
   -I${COMPILER_RT_SOURCE_DIR}/lib
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/rtl
+  -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/flags
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/interface
   -DSANITIZER_COMMON_NO_REDEFINE_BUILTINS
   -DGTEST_HAS_RTTI=0
@@ -62,7 +63,7 @@ endif()
 
 set(TSAN_RTL_HEADERS)
 foreach (header ${TSAN_HEADERS})
-  list(APPEND TSAN_RTL_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../${header})
+  list(APPEND TSAN_RTL_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../rtl/${header})
 endforeach()
 
 set(TSAN_DEPS tsan)
