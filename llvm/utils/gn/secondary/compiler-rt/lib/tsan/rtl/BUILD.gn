@@ -104,6 +104,8 @@ target(tsan_target_type, "rtl") {
   ]
   if (target_os == "mac") {
     sources += [
+      "tsan_interceptors_darwin.cpp",
+      "tsan_interceptors_darwin.h",
       "tsan_interceptors_libdispatch.cpp",
       "tsan_interceptors_mac.cpp",
       "tsan_interceptors_mach_vm.cpp",
@@ -112,16 +114,25 @@ target(tsan_target_type, "rtl") {
     ]
     cflags += [ "-fblocks" ]
   } else {
-    # Assume Linux
+    # tsan_platform_linux.cpp also supports FreeBSD and NetBSD.
     sources += [
       "tsan_platform_linux.cpp",
       "tsan_platform_posix.cpp",
     ]
+    if (target_os == "freebsd") {
+      sources += [ "tsan_interceptors_freebsd.cpp" ]
+    } else if (target_os == "linux" || target_os == "android") {
+      # The glibc source is guarded by SANITIZER_GLIBC on musl/Android.
+      sources += [
+        "tsan_interceptors_glibc.cpp",
+        "tsan_interceptors_linux.cpp",
+      ]
+    }
   }
   if (target_cpu == "x64") {
     sources += [ "tsan_rtl_amd64.S" ]
   } else if (target_cpu == "arm64") {
-    sources += [ "tsan_rtl_aarch64.S" ]
+    sources += [ "tsan_interceptors_aarch64.S" ]
   } else if (target_cpu == "loongarch64") {
     sources += [ "tsan_rtl_loongarch64.S" ]
   } else if (target_cpu == "mips64") {
