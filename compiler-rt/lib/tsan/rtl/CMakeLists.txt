@@ -70,6 +70,7 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     tsan_array_darwin.cpp
     tsan_cpu_darwin.cpp
+    tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
     tsan_got.cpp
     tsan_interceptors_darwin.cpp
@@ -113,6 +114,7 @@ set(TSAN_HEADERS
   tsan_defs.h
   tsan_dense_alloc.h
   tsan_endian.h
+  tsan_endian_darwin.h
   tsan_fd.h
   tsan_flags.h
   tsan_flags.inc

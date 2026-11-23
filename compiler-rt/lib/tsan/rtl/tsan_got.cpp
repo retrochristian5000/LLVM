@@ -12,6 +12,7 @@
 // rewrite dyld's pointers, especially authenticated ARM64e pointers.
 
 #include "tsan_got.h"
+#include "tsan_endian_darwin.h"
 
 #if SANITIZER_APPLE
 
@@ -28,7 +29,9 @@ bool GetMainExecutableMachOGOTSlots(MachOGOTSlots *slots) {
   slots->non_lazy = 0;
 
   const mach_header *image = MachOExecutableHeader();
-  if (!image || image->magic != MH_MAGIC_64)
+  // Dyld supplies native-endian, in-memory images. Never interpret swapped
+  // load commands as native pointer-bearing section data.
+  if (MachO64ByteOrder(image) != MachOByteOrder::kNative)
     return false;
 
   const auto *header = reinterpret_cast<const mach_header_64 *>(image);

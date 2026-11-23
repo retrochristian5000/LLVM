@@ -14,5 +14,9 @@ set(TSAN_UNIT_TEST_SOURCES
   tsan_vector_clock_test.cpp
   )
 
+if(APPLE)
+  list(APPEND TSAN_UNIT_TEST_SOURCES tsan_endian_darwin_test.cpp)
+endif()
+
 add_tsan_unittest(TsanUnitTest
   SOURCES ${TSAN_UNIT_TEST_SOURCES})

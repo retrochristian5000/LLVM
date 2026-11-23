@@ -11,6 +11,7 @@
 // Mach VM accounting and Darwin jump-buffer ABI handling belong elsewhere.
 
 #include "tsan_macho.h"
+#include "tsan_endian_darwin.h"
 
 #if SANITIZER_APPLE
 
@@ -26,17 +27,16 @@ const mach_header *MachOExecutableHeader() {
 
 const char *MachOExecutableArchitecture() {
   const mach_header *header = MachOExecutableHeader();
-  if (!header || header->magic != MH_MAGIC_64)
+  cpu_type_t cpu_type;
+  cpu_subtype_t cpu_subtype;
+  if (!DecodeMachO64Architecture(header, &cpu_type, &cpu_subtype))
     return "unknown";
 
-  if (header->cputype == CPU_TYPE_X86_64)
+  if (cpu_type == CPU_TYPE_X86_64)
     return "x86_64";
 
-  if (header->cputype == CPU_TYPE_ARM64) {
-    // CPU_SUBTYPE_MASK contains optional capability flags, not the subtype.
-    const cpu_subtype_t subtype = header->cpusubtype & ~CPU_SUBTYPE_MASK;
-    return subtype == CPU_SUBTYPE_ARM64E ? "arm64e" : "arm64";
-  }
+  if (cpu_type == CPU_TYPE_ARM64)
+    return cpu_subtype == CPU_SUBTYPE_ARM64E ? "arm64e" : "arm64";
 
   return "unknown";
 }
