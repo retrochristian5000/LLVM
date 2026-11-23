@@ -55,7 +55,7 @@ void (*on_initialize)(void);
 int (*on_finalize)(int);
 #endif
 
-#if !SANITIZER_GO && !SANITIZER_APPLE
+#if !SANITIZER_GO && !SANITIZER_APPLE && !SANITIZER_POSIX
 alignas(SANITIZER_CACHE_LINE_SIZE) THREADLOCAL __attribute__((tls_model(
     "initial-exec"))) char cur_thread_placeholder[sizeof(ThreadState)];
 #endif

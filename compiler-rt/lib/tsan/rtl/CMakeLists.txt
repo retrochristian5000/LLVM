@@ -47,6 +47,7 @@ set(TSAN_SOURCES
   tsan_rtl_proc.cpp
   tsan_rtl_report.cpp
   tsan_thread.cpp
+  tsan_thread_posix.cpp
   tsan_stack_trace.cpp
   tsan_suppressions.cpp
   tsan_symbolize.cpp

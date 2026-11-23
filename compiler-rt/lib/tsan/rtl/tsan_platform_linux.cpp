@@ -40,7 +40,6 @@
 #endif
 
 #include <fcntl.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -555,35 +554,6 @@ static void InitializeLongjmpSpMangling() {
 }
 #endif
 
-extern "C" void __tsan_tls_initialization() {}
-
-void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {
-  // Check that the thr object is in tls;
-  const uptr thr_beg = (uptr)thr;
-  const uptr thr_end = (uptr)thr + sizeof(*thr);
-  CHECK_GE(thr_beg, tls_addr);
-  CHECK_LE(thr_beg, tls_addr + tls_size);
-  CHECK_GE(thr_end, tls_addr);
-  CHECK_LE(thr_end, tls_addr + tls_size);
-  // Since the thr object is huge, skip it.
-  const uptr pc = StackTrace::GetNextInstructionPc(
-      reinterpret_cast<uptr>(__tsan_tls_initialization));
-  MemoryRangeImitateWrite(thr, pc, tls_addr, thr_beg - tls_addr);
-  MemoryRangeImitateWrite(thr, pc, thr_end, tls_addr + tls_size - thr_end);
-}
-
-// Note: this function runs with async signals enabled,
-// so it must not touch any tsan state.
-int call_pthread_cancel_with_cleanup(int (*fn)(void *arg),
-                                     void (*cleanup)(void *arg), void *arg) {
-  // pthread_cleanup_push/pop are hardcore macros mess.
-  // We can't intercept nor call them w/o including pthread.h.
-  int res;
-  pthread_cleanup_push(cleanup, arg);
-  res = fn(arg);
-  pthread_cleanup_pop(0);
-  return res;
-}
 #endif  // !SANITIZER_GO
 
 #if !SANITIZER_GO
