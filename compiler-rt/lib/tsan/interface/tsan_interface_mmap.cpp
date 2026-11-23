@@ -23,6 +23,7 @@
 #include "../rtl/tsan_fd.h"
 #include "../rtl/tsan_platform.h"
 #include "../rtl/tsan_rtl.h"
+#include "../warn/tsan_warn_runtime.h"
 
 namespace __tsan {
 namespace {
@@ -48,8 +49,8 @@ bool PrepareMmapAddress(void **addr, uptr size, bool fixed) {
 void RecordMmapResult(ThreadState *thr, uptr pc, void *requested_addr,
                       void *mapped_addr, uptr size, int fd) {
   if (!IsValidAppRange(reinterpret_cast<uptr>(mapped_addr), size)) {
-    Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
-           requested_addr, reinterpret_cast<void *>(size), mapped_addr);
+    ReportUnexpectedMmapRange(reinterpret_cast<uptr>(requested_addr),
+                              reinterpret_cast<uptr>(mapped_addr), size);
     Die();
   }
   // Preserve the interceptor's FD accounting convention.

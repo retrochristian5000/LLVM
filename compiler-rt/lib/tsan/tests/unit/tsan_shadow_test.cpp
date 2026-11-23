@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
+#include "tsan_warn_runtime.h"
 #include "gtest/gtest.h"
 
 #if SANITIZER_APPLE && !SANITIZER_GO
@@ -114,6 +115,15 @@ TEST(Shadow, ApplicationMemoryRangeValidation) {
   };
   EXPECT_FALSE(IsValidAppMemoryRange(0, 0));
   EXPECT_FALSE(IsValidAppMemoryRange(~(uptr)0 - 1, 4));
+  EXPECT_EQ(AppMemoryRangeError::kEmpty, DiagnoseAppMemoryRange(0, 0));
+  EXPECT_EQ(AppMemoryRangeError::kOverflow,
+            DiagnoseAppMemoryRange(~(uptr)0 - 1, 4));
+  uptr first_unsupported = 1;
+  EXPECT_EQ(AppMemoryRangeError::kOutsideAppMemory,
+            DiagnoseAppMemoryRange(0, 1, &first_unsupported));
+  EXPECT_EQ(0U, first_unsupported);
+  EXPECT_STREQ("range crosses a gap between instrumentable memory windows",
+               AppMemoryRangeErrorDescription(AppMemoryRangeError::kCrossesGap));
 
   for (const auto &window : windows) {
     if (window[0] == window[1])
@@ -126,6 +136,13 @@ TEST(Shadow, ApplicationMemoryRangeValidation) {
       has_adjacent_window |= other[0] == window[1] && other[0] < other[1];
     EXPECT_EQ(has_adjacent_window,
               IsValidAppMemoryRange(window[1] - 1, 2));
+    if (!has_adjacent_window) {
+      first_unsupported = 0;
+      EXPECT_EQ(AppMemoryRangeError::kCrossesGap,
+                DiagnoseAppMemoryRange(window[1] - 1, 2,
+                                       &first_unsupported));
+      EXPECT_EQ(window[1], first_unsupported);
+    }
   }
 }
 
@@ -137,6 +154,12 @@ TEST(Shadow, DarwinMachVmPageRounding) {
   EXPECT_TRUE(DarwinArrayRangeIsSupported(heap_end - page_size, page_size));
   // The final byte in the heap plus one byte outside it spans two pages.
   EXPECT_FALSE(DarwinArrayRangeIsSupported(heap_end - 1, 2));
+  const DarwinArrayRangeDiagnosis diagnosis =
+      DiagnoseDarwinArrayRange(heap_end - 1, 2);
+  EXPECT_EQ(AppMemoryRangeError::kCrossesGap, diagnosis.error);
+  EXPECT_EQ(heap_end - page_size, diagnosis.page_begin);
+  EXPECT_EQ(heap_end + page_size, diagnosis.page_end);
+  EXPECT_EQ(heap_end, diagnosis.first_unsupported);
 }
 #endif
 

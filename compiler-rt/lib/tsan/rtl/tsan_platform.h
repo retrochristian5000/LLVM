@@ -984,13 +984,26 @@ uptr MetaShadowBeg(void) { return SelectMapping<MappingField>(kMetaShadowBeg); }
 ALWAYS_INLINE
 uptr MetaShadowEnd(void) { return SelectMapping<MappingField>(kMetaShadowEnd); }
 
-// Validate a complete application-memory interval, not just its endpoints.
-// The four instrumentable windows may be adjacent (for example, the low and
-// heap windows on Darwin AArch64), but shadow-memory gaps must be rejected.
-// Keep raw mmap/Mach VM addresses intact; do not strip pointer authentication.
-ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
-  if (!size || size > ~(uptr)0 - addr)
-    return false;
+// Keep raw mmap/Mach VM addresses intact. Do not strip pointer authentication
+// or reinterpret unsupported addresses as valid application memory.
+enum class AppMemoryRangeError {
+  kNone,
+  kEmpty,
+  kOverflow,
+  kOutsideAppMemory,
+  kCrossesGap,
+};
+
+// Validate the complete interval, not just its endpoints. Adjacent application
+// windows may be combined; a shadow-memory gap cannot be skipped.
+ALWAYS_INLINE AppMemoryRangeError DiagnoseAppMemoryRange(
+    uptr addr, uptr size, uptr *first_unsupported = nullptr) {
+  if (first_unsupported)
+    *first_unsupported = 0;
+  if (!size)
+    return AppMemoryRangeError::kEmpty;
+  if (size > ~(uptr)0 - addr)
+    return AppMemoryRangeError::kOverflow;
 
   const uptr end = addr + size;
   const uptr windows[][2] = {
@@ -1005,11 +1018,19 @@ ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
       if (current >= window[0] && current < window[1])
         covered = Max(covered, window[1]);
     }
-    if (covered == current)
-      return false;
+    if (covered == current) {
+      if (first_unsupported)
+        *first_unsupported = current;
+      return current == addr ? AppMemoryRangeError::kOutsideAppMemory
+                             : AppMemoryRangeError::kCrossesGap;
+    }
     current = covered;
   }
-  return true;
+  return AppMemoryRangeError::kNone;
+}
+
+ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
+  return DiagnoseAppMemoryRange(addr, size) == AppMemoryRangeError::kNone;
 }
 
 struct IsAppMemImpl {

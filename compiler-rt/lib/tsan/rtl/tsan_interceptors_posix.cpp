@@ -41,6 +41,10 @@
 #include "../interface/tsan_interface_mmap.h"
 #include "../stack/tsan_stack_aarch64.h"
 #include "../mman/tsan_mman.h"
+#include "../warn/tsan_warn_runtime.h"
+#if SANITIZER_APPLE
+#include "../warn/tsan_warn_darwin.h"
+#endif
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
 #include "tsan_suppressions.h"
@@ -525,8 +529,7 @@ static void SetJmp(ThreadState *thr, uptr sp) {
     return;
 #if defined(__aarch64__) && !SANITIZER_GO
   if (UNLIKELY(!__tsan_stack_aarch64_valid_sp(sp))) {
-    Report("FATAL: ThreadSanitizer: AArch64 setjmp captured a null or "
-           "misaligned stack pointer\n");
+    ReportInvalidSetJmpStackPointer(sp);
     Die();
   }
 #endif
@@ -582,14 +585,7 @@ static void LongJmp(ThreadState *thr, uptr *env) {
     }
   }
 #if SANITIZER_APPLE
-  if (thr->jmp_bufs.Size() == 0) {
-    Printf("FATAL: ThreadSanitizer: Darwin longjmp has no recorded setjmp "
-           "frame; check setjmp interception\n");
-  } else {
-    Printf("FATAL: ThreadSanitizer: Darwin longjmp stack pointer does not "
-           "match a recorded setjmp frame; check libc jump-buffer ABI "
-           "and pointer authentication\n");
-  }
+  ReportDarwinUnmatchedLongJmp(sp, thr->jmp_bufs.Size());
 #else
   Printf("ThreadSanitizer: can't find longjmp buf\n");
 #endif

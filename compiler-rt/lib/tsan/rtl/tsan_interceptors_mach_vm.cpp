@@ -15,6 +15,7 @@
 #include "tsan_array_darwin.h"
 #include "tsan_interceptors.h"
 #include "tsan_platform.h"
+#include "../warn/tsan_warn_darwin.h"
 
 #include <mach/mach.h>
 
@@ -27,14 +28,15 @@ TSAN_INTERCEPTOR(kern_return_t, mach_vm_allocate, vm_map_t target,
     return REAL(mach_vm_allocate)(target, address, size, flags);
   // Fixed mappings may not overlap TSan's reserved shadow regions.
   if (address && !(flags & VM_FLAGS_ANYWHERE) &&
-      !DarwinArrayRangeIsSupported(*address, size))
+      !DarwinArrayRangeIsSupported(*address, size)) {
+    ReportDarwinRejectedFixedMachVmRange(*address, size, flags);
     return KERN_NO_SPACE;
+  }
   kern_return_t kr = REAL(mach_vm_allocate)(target, address, size, flags);
   if (kr == KERN_SUCCESS && address && size != 0) {
     // Anywhere allocations must also stay inside instrumented app memory.
     if (!DarwinArrayRangeIsSupported(*address, size)) {
-      Printf("FATAL: ThreadSanitizer: mach_vm_allocate returned an "
-             "unsupported application-memory range.\n");
+      ReportDarwinUnsupportedMachVmResult(*address, size, flags);
       Die();
     }
     MemoryRangeImitateWriteOrResetRange(thr, pc, *address, size);

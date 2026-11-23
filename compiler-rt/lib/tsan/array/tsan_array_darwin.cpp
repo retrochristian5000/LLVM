@@ -22,22 +22,33 @@
 
 namespace __tsan {
 
-bool DarwinArrayRangeIsSupported(uptr addr, uptr size) {
+DarwinArrayRangeDiagnosis DiagnoseDarwinArrayRange(uptr addr, uptr size) {
+  DarwinArrayRangeDiagnosis result = {AppMemoryRangeError::kNone, 0, 0, 0};
   if (!size)
-    return true;
-  // Mach VM uses page-granular ranges. Round the complete [addr, addr+size)
-  // interval; rounding size alone misses a second page for unaligned starts.
+    return result;
+
   const uptr page_size = GetPageSizeCached();
   CHECK(IsPowerOfTwo(page_size));
   const uptr max_addr = ~(uptr)0;
-  if (size > max_addr - addr)
-    return false;
+  if (size > max_addr - addr) {
+    result.error = AppMemoryRangeError::kOverflow;
+    return result;
+  }
   const uptr end = addr + size;
-  if (end > max_addr - (page_size - 1))
-    return false;
-  const uptr page_begin = RoundDownTo(addr, page_size);
-  const uptr page_end = RoundUpTo(end, page_size);
-  return IsValidAppMemoryRange(page_begin, page_end - page_begin);
+  if (end > max_addr - (page_size - 1)) {
+    result.error = AppMemoryRangeError::kOverflow;
+    return result;
+  }
+  result.page_begin = RoundDownTo(addr, page_size);
+  result.page_end = RoundUpTo(end, page_size);
+  result.error = DiagnoseAppMemoryRange(
+      result.page_begin, result.page_end - result.page_begin,
+      &result.first_unsupported);
+  return result;
+}
+
+bool DarwinArrayRangeIsSupported(uptr addr, uptr size) {
+  return DiagnoseDarwinArrayRange(addr, size).error == AppMemoryRangeError::kNone;
 }
 
 extern "C" void __tsan_tls_initialization() {}

@@ -20,6 +20,7 @@
 #include "tsan_cpu_arm64e.h"
 #include "../rtl/tsan_platform.h"
 #include "../stack/tsan_stack_aarch64.h"
+#include "../warn/tsan_warn_darwin.h"
 
 #include <pthread.h>
 
@@ -59,8 +60,7 @@ uptr ExtractLongJmpSp(uptr *env) {
 #endif
 #if defined(__aarch64__) && !SANITIZER_GO
   if (UNLIKELY(!__tsan_stack_aarch64_valid_sp(sp))) {
-    Report("FATAL: ThreadSanitizer: decoded Darwin AArch64 longjmp "
-           "stack pointer is null or not 16-byte aligned\n");
+    ReportDarwinInvalidLongJmpStackPointer(sp);
     Die();
   }
 #endif

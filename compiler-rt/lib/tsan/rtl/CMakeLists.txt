@@ -63,6 +63,7 @@ set(TSAN_SOURCES
   tsan_sync.cpp
   ../vector/tsan_vector_clock.cpp
   ../warn/tsan_warn.cpp
+  ../warn/tsan_warn_runtime.cpp
   )
 
 set(TSAN_CXX_SOURCES
@@ -169,6 +170,7 @@ set(TSAN_HEADERS
   tsan_type.h
   ../vector/tsan_vector_clock.h
   ../warn/tsan_warn_darwin.h
+  ../warn/tsan_warn_runtime.h
   )
 
 set(TSAN_RUNTIME_LIBRARIES)

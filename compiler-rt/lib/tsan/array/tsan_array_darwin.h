@@ -13,12 +13,21 @@
 
 #if SANITIZER_APPLE
 
-#include "../rtl/tsan_defs.h"
+#include "../rtl/tsan_platform.h"
 
 namespace __tsan {
 
-// Verify the full page-rounded Mach VM range is in instrumentable app memory.
-// Leave zero-sized requests to the kernel.
+struct DarwinArrayRangeDiagnosis {
+  AppMemoryRangeError error;
+  uptr page_begin;
+  uptr page_end;
+  uptr first_unsupported;
+};
+
+// Diagnose the entire page-rounded Mach VM interval, including alignment and
+// address overflow. Zero-sized requests are left to the Darwin kernel.
+DarwinArrayRangeDiagnosis DiagnoseDarwinArrayRange(uptr addr, uptr size);
+
 bool DarwinArrayRangeIsSupported(uptr addr, uptr size);
 
 }  // namespace __tsan

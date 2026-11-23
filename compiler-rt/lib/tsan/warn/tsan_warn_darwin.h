@@ -24,6 +24,11 @@ void ReportDarwinVirtualMemoryLimit(uptr limit, uptr expected);
 void ReportDarwinOccupiedShadowAddress(uptr address);
 void ReportDarwinIncompatibleMemoryLayout();
 
+void ReportDarwinRejectedFixedMachVmRange(uptr address, uptr size, int flags);
+void ReportDarwinUnsupportedMachVmResult(uptr address, uptr size, int flags);
+void ReportDarwinInvalidLongJmpStackPointer(uptr stack_pointer);
+void ReportDarwinUnmatchedLongJmp(uptr stack_pointer, uptr saved_frames);
+
 }  // namespace __tsan
 
 #endif  // SANITIZER_APPLE && !SANITIZER_GO
