@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 #include "tsan_sync.h"
 #include "tsan_rtl.h"
+#include "../../stack/tsan_stack.h"
+#include "sanitizer_common/sanitizer_common.h"
 #include "gtest/gtest.h"
 #include <string.h>
 
@@ -86,6 +88,54 @@ TEST(Stack, DarwinEmptyInitializationIsNoOp) {
   thr.stk_addr = 4096;
   thr.stk_size = 0;
   ImitateDarwinStackInitialization(&thr);
+}
+#endif
+
+#if SANITIZER_OSX && !SANITIZER_GO
+TEST(Stack, MacCachedStackBoundsValidation) {
+  const uptr begin = 0x10000;
+  const uptr size = 0x4000;
+  uptr top = 0;
+  uptr bottom = 0;
+
+  EXPECT_TRUE(TryMacCachedStackBounds(begin, size, begin + 0x1000,
+                                     begin + 0x2000, &top, &bottom));
+  EXPECT_EQ(begin, bottom);
+  EXPECT_EQ(begin + size, top);
+
+  // A frame or currently executing stack outside this pthread stack must
+  // use the generic query instead (signals and fibers may switch stacks).
+  EXPECT_FALSE(TryMacCachedStackBounds(begin, size, begin + size,
+                                      begin + 0x2000, &top, &bottom));
+  EXPECT_FALSE(TryMacCachedStackBounds(begin, size, begin + 0x1000,
+                                      begin - 1, &top, &bottom));
+  EXPECT_FALSE(TryMacCachedStackBounds(begin, size, 0,
+                                      begin + 0x2000, &top, &bottom));
+  EXPECT_FALSE(TryMacCachedStackBounds(0, size, begin + 0x1000,
+                                      begin + 0x2000, &top, &bottom));
+  EXPECT_FALSE(TryMacCachedStackBounds(begin, 0, begin + 0x1000,
+                                      begin + 0x2000, &top, &bottom));
+  EXPECT_FALSE(TryMacCachedStackBounds(~static_cast<uptr>(0) - 7, 16,
+                                      begin + 0x1000, begin + 0x2000,
+                                      &top, &bottom));
+  // Failed fast-path checks must not modify the fallback's output slots.
+  EXPECT_EQ(begin, bottom);
+  EXPECT_EQ(begin + size, top);
+}
+
+TEST(Stack, MacStackBoundsMatchPthreadFallback) {
+  uptr expected_top = 0;
+  uptr expected_bottom = 0;
+  GetThreadStackTopAndBottom(false, &expected_top, &expected_bottom);
+
+  uptr cached_top = 0;
+  uptr cached_bottom = 0;
+  // The main thread deliberately uses the OS query, matching its historical
+  // initialization behavior. Other non-cached cases use the same fallback.
+  GetMacStackBounds(reinterpret_cast<uptr>(&cached_top), &cached_top,
+                    &cached_bottom);
+  EXPECT_EQ(expected_top, cached_top);
+  EXPECT_EQ(expected_bottom, cached_bottom);
 }
 #endif
 

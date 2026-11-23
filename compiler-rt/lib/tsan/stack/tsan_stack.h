@@ -25,6 +25,17 @@ void DestroyShadowStack(ThreadState *thr);
 void ImitateDarwinStackInitialization(ThreadState *thr);
 #endif
 
+#if SANITIZER_OSX && !SANITIZER_GO
+// Use a worker thread's cached pthread stack only when the frame and active
+// execution stack are inside it. This helper also supports bounds testing.
+bool TryMacCachedStackBounds(uptr cached_begin, uptr cached_size,
+                             uptr frame_pointer, uptr current_sp,
+                             uptr *stack_top, uptr *stack_bottom);
+// Fallback to sanitizer_common when the cached range is not applicable.
+void GetMacStackBounds(uptr frame_pointer, uptr *stack_top,
+                       uptr *stack_bottom);
+#endif
+
 StackID CurrentStackId(ThreadState *thr, uptr pc);
 
 #if SANITIZER_GO

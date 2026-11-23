@@ -77,6 +77,7 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     ../array/tsan_array_darwin.cpp
     ../stack/tsan_stack_darwin.cpp
+    ../stack/tsan_stack_mac.cpp
     ../warn/tsan_warn_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
     ../cxx/tsan_cxx_darwin.cpp

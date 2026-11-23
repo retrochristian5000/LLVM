@@ -126,6 +126,7 @@ target(tsan_target_type, "rtl") {
       "../array/tsan_array_darwin.cpp",
       "../array/tsan_array_darwin.h",
       "../stack/tsan_stack_darwin.cpp",
+      "../stack/tsan_stack_mac.cpp",
       "../warn/tsan_warn_darwin.cpp",
       "../warn/tsan_warn_darwin.h",
       "../endian/tsan_endian_darwin.cpp",
