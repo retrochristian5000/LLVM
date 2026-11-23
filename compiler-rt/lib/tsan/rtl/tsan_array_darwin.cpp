@@ -66,7 +66,10 @@ bool DarwinArrayRangeIsSupported(uptr addr, uptr size) {
 extern "C" void __tsan_tls_initialization() {}
 
 void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {
-  if (!tls_size)\n    return;\n  const uptr pc = StackTrace::GetNextInstructionPc(
+  if (!tls_size)
+    return;
+
+  const uptr pc = StackTrace::GetNextInstructionPc(
       reinterpret_cast<uptr>(__tsan_tls_initialization));
   // Unlike Linux, we only store a pointer to the ThreadState object in TLS;
   // just mark the entire range as written to.
