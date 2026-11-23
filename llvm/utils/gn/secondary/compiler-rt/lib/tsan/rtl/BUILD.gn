@@ -52,6 +52,7 @@ target(tsan_target_type, "rtl") {
     "tsan_defs.h",
     "tsan_dense_alloc.h",
     "tsan_endian.cpp",
+    "tsan_endian_little.cpp",
     "tsan_endian.h",
     "tsan_external.cpp",
     "tsan_fd.cpp",

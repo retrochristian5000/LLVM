@@ -21,6 +21,22 @@ TEST(Endian, LittleEndian32WordsUnaligned) {
   EXPECT_EQ(0x90abcdefu, words[1]);
 }
 
+TEST(Endian, LittleEndian32WordsFullBlock) {
+  // Exercise the 16-word MD5 block path with a deliberately unaligned source.
+  u8 input[65] = {};
+  for (uptr i = 1; i < sizeof(input); ++i)
+    input[i] = static_cast<u8>(i);
+
+  u32 words[16] = {};
+  ReadLittleEndian32Words(words, input + 1, 16);
+  for (uptr i = 0; i < 16; ++i) {
+    const u32 first = static_cast<u32>(4 * i + 1);
+    const u32 expected = first | ((first + 1) << 8) |
+                         ((first + 2) << 16) | ((first + 3) << 24);
+    EXPECT_EQ(expected, words[i]);
+  }
+}
+
 static void CheckMD5(const char *text, uptr length,
                      const char *expected_hex) {
   const MD5Hash result = md5_hash(text, length);

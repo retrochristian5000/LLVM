@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Decode fixed little-endian data independently of host byte order or input
-// alignment. MD5 uses this to read message words on PPC64/s390x big-endian
-// hosts without relying on unaligned or aliasing 32-bit pointer casts.
+// Decode little-endian data on big-endian hosts or with a portable fallback.
+// The native little-endian fast path lives in tsan_endian_little.cpp.
+// Exactly one translation unit defines ReadLittleEndian32Words per target.
 
 #include "tsan_endian.h"
 
@@ -16,11 +16,12 @@
 
 namespace __tsan {
 
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || \
+    __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+
 void ReadLittleEndian32Words(u32 *dst, const void *src, uptr count) {
-#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-  // Word values already match their representation in memory.
-  internal_memcpy(dst, src, count * sizeof(*dst));
-#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   // Copy first: source alignment is not guaranteed by the caller.
   internal_memcpy(dst, src, count * sizeof(*dst));
   for (uptr i = 0; i < count; ++i)
@@ -38,5 +39,7 @@ void ReadLittleEndian32Words(u32 *dst, const void *src, uptr count) {
   }
 #endif
 }
+
+#endif  // not a known little-endian host
 
 }  // namespace __tsan
