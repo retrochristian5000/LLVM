@@ -140,6 +140,7 @@ if(APPLE)
 
   set(TSAN_ASM_SOURCES
     tsan_rtl_amd64.S
+    tsan_cpu_aarch64.S
     tsan_interceptors_aarch64.S
     )
 
@@ -200,6 +201,7 @@ else()
         VERBATIM)
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
+        tsan_cpu_aarch64.S
         tsan_interceptors_aarch64.S
         )
       # Check for Go runtime.

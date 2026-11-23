@@ -19,11 +19,22 @@
 
 namespace __tsan {
 
+#if defined(__aarch64__)
+// A64 CLZ helper from tsan_cpu_aarch64.S (separate from ISA interceptors).
+extern "C" uptr __tsan_cpu_aarch64_vma_bits(uptr frame);
+#endif
+
 // Capture the caller's stack address in InitializePlatformEarly(), preserving
 // the original VMA-width probe across the translation-unit boundary.
 void InitializeCpuVmaSize(uptr current_frame) {
-  vmaSize =
-    (MostSignificantSetBitIndex(current_frame) + 1);
+#if defined(__aarch64__)
+  // Match the nonzero precondition of MostSignificantSetBitIndex().
+  CHECK_NE(current_frame, 0U);
+  vmaSize = __tsan_cpu_aarch64_vma_bits(current_frame);
+#else
+  vmaSize = MostSignificantSetBitIndex(current_frame) + 1;
+#endif
+
 #if defined(__aarch64__)
 # if !SANITIZER_GO
   if (vmaSize != 39 && vmaSize != 42 && vmaSize != 47 && vmaSize != 48) {
