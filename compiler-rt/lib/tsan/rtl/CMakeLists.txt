@@ -62,6 +62,7 @@ set(TSAN_PREINIT_SOURCES
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
+    tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
     tsan_platform_mac.cpp
@@ -90,6 +91,7 @@ set(TSAN_HEADERS
   tsan_ignoreset.h
   tsan_ilist.h
   tsan_interceptors.h
+  tsan_interceptors_darwin.h
   tsan_interface.h
   tsan_interface.inc
   tsan_interface_ann.h
