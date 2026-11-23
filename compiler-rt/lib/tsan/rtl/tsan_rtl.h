@@ -49,7 +49,7 @@
 #include "../stack/tsan_stack_trace.h"
 #include "tsan_sync.h"
 #include "tsan_trace.h"
-#include "tsan_vector_clock.h"
+#include "../vector/tsan_vector_clock.h"
 
 #if SANITIZER_WORDSIZE != 64
 # error "ThreadSanitizer is supported only on 64-bit platforms"

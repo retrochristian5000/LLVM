@@ -108,8 +108,8 @@ target(tsan_target_type, "rtl") {
     "tsan_sync.cpp",
     "tsan_sync.h",
     "tsan_trace.h",
-    "tsan_vector_clock.cpp",
-    "tsan_vector_clock.h",
+    "../vector/tsan_vector_clock.cpp",
+    "../vector/tsan_vector_clock.h",
     "../warn/tsan_warn.cpp",
   ]
   if (target_os == "mac") {

@@ -1,4 +1,6 @@
-include_directories(../.. ../array ../buff ../flags ../endian ../interface ../reg ../stack ../warn)
+include_directories(
+  ../.. ../array ../buff ../flags ../endian ../interface ../reg ../stack
+  ../vector ../warn)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -56,7 +58,7 @@ set(TSAN_SOURCES
   tsan_suppressions.cpp
   tsan_symbolize.cpp
   tsan_sync.cpp
-  tsan_vector_clock.cpp
+  ../vector/tsan_vector_clock.cpp
   ../warn/tsan_warn.cpp
   )
 
@@ -152,7 +154,7 @@ set(TSAN_HEADERS
   tsan_sync.h
   tsan_trace.h
   tsan_type.h
-  tsan_vector_clock.h
+  ../vector/tsan_vector_clock.h
   ../warn/tsan_warn_darwin.h
   )
 

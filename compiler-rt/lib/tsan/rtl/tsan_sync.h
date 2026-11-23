@@ -19,7 +19,7 @@
 #include "tsan_defs.h"
 #include "tsan_dense_alloc.h"
 #include "tsan_shadow.h"
-#include "tsan_vector_clock.h"
+#include "../vector/tsan_vector_clock.h"
 
 namespace __tsan {
 

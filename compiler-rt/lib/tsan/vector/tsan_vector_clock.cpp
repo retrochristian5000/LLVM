@@ -12,7 +12,7 @@
 #include "tsan_vector_clock.h"
 
 #include "sanitizer_common/sanitizer_placement_new.h"
-#include "tsan_mman.h"
+#include "../rtl/tsan_mman.h"
 
 namespace __tsan {
 
