@@ -124,6 +124,7 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
 endif()
 
 set(TSAN_HEADERS
+  ../cxx/tsan_cxx_aarch64.h
   ../cpu/tsan_cpu_posix.h
   ../cpu/tsan_cpu_arm64e.h
   ../buff/tsan_buff.h
@@ -189,6 +190,7 @@ if(APPLE)
     tsan_interceptors_amd64.S
     ../cpu/tsan_cpu_aarch64.S
     ../cpu/tsan_cpu_arm64e.S
+    ../cxx/tsan_cxx_aarch64.S
     ../stack/tsan_stack_aarch64.S
     tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S
@@ -256,6 +258,7 @@ else()
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
         ../cpu/tsan_cpu_aarch64.S
+        ../cxx/tsan_cxx_aarch64.S
         ../stack/tsan_stack_aarch64.S
         ../buff/tsan_buff_aarch64.S
         ../array/tsan_array_aarch64.S

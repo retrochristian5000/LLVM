@@ -2,6 +2,7 @@ set(TSAN_UNIT_TEST_SOURCES
   tsan_buff_test.cpp
   tsan_array_test.cpp
   tsan_interface_aarch64_test.cpp
+  tsan_cxx_aarch64_test.cpp
   tsan_dense_alloc_test.cpp
   tsan_endian_test.cpp
   tsan_flags_test.cpp

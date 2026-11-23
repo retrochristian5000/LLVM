@@ -49,6 +49,7 @@ target(tsan_target_type, "rtl") {
     "../reg/tsan_reg_aarch64.h",
     "../buff/tsan_buff.cpp",
     "../array/tsan_array.cpp",
+    "../cxx/tsan_cxx_aarch64.h",
     "../buff/tsan_buff.h",
     "tsan_adaptive_delay.cpp",
     "tsan_debugging.cpp",
@@ -175,6 +176,7 @@ target(tsan_target_type, "rtl") {
   } else if (target_cpu == "arm64") {
     sources += [
       "../cpu/tsan_cpu_aarch64.S",
+      "../cxx/tsan_cxx_aarch64.S",
       "../cpu/tsan_cpu_arm64e.S",
       "../stack/tsan_stack_aarch64.S",
       "../buff/tsan_buff_aarch64.S",
