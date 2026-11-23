@@ -9,6 +9,27 @@
 
 namespace __tsan {
 
+// Signal-aware blocking calls are shared by POSIX interceptors and Linux's
+// epoll wait interceptors. Keep the transition logic in one place.
+void EnterBlockingFunc(ThreadState *thr);
+
+struct BlockingCall {
+  explicit BlockingCall(ThreadState *thr) : thr_(thr) {
+    EnterBlockingFunc(thr);
+    // A blocking libc call can receive synchronous signal delivery. It
+    // must not reenter instrumented user code while interceptors are ignored.
+    thr_->ignore_interceptors++;
+  }
+
+  ~BlockingCall() {
+    thr_->ignore_interceptors--;
+    atomic_store(&thr_->in_blocking_func, 0, memory_order_relaxed);
+  }
+
+ private:
+  ThreadState *const thr_;
+};
+
 class ScopedInterceptor {
  public:
   ScopedInterceptor(ThreadState *thr, const char *fname, uptr pc);
@@ -55,6 +76,8 @@ inline bool MustIgnoreInterceptor(ThreadState *thr) {
 }
 
 }  // namespace __tsan
+
+#define BLOCK_REAL(name) (BlockingCall(thr), REAL(name))
 
 #define SCOPED_INTERCEPTOR_RAW(func, ...)            \
   ThreadState *thr = cur_thread_init();              \
