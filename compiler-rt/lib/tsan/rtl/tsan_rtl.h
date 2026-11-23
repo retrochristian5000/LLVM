@@ -42,6 +42,7 @@
 #include "tsan_mman.h"
 #include "tsan_mutexset.h"
 #include "tsan_platform.h"
+#include "tsan_pragma.h"
 #include "tsan_report.h"
 #include "tsan_shadow.h"
 #include "tsan_stack.h"
@@ -563,11 +564,6 @@ void MemoryResetRange(ThreadState *thr, uptr pc, uptr addr, uptr size);
 void MemoryRangeImitateWrite(ThreadState *thr, uptr pc, uptr addr, uptr size);
 void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
                                          uptr size);
-
-void ThreadIgnoreBegin(ThreadState *thr, uptr pc);
-void ThreadIgnoreEnd(ThreadState *thr);
-void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc);
-void ThreadIgnoreSyncEnd(ThreadState *thr);
 
 Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached);
 void ThreadStart(ThreadState *thr, Tid tid, ThreadID os_id,

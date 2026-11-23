@@ -41,6 +41,7 @@ set(TSAN_SOURCES
   tsan_md5.cpp
   tsan_mman.cpp
   tsan_mutexset.cpp
+  tsan_pragma.cpp
   tsan_report.cpp
   tsan_rtl.cpp
   tsan_rtl_access.cpp
@@ -135,6 +136,7 @@ set(TSAN_HEADERS
   tsan_mman.h
   tsan_mutexset.h
   tsan_platform.h
+  tsan_pragma.h
   tsan_ppc_regs.h
   tsan_report.h
   tsan_rtl.h
