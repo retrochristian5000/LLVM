@@ -68,6 +68,7 @@ if(APPLE)
     tsan_platform_darwin.cpp
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp
+    tsan_sync_darwin.cpp
     )
 elseif(UNIX)
   # CPU VMA validation and platform initialization support Linux and BSD.

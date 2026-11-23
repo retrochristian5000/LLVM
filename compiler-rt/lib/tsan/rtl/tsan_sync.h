@@ -13,6 +13,7 @@
 #define TSAN_SYNC_H
 
 #include "sanitizer_common/sanitizer_atomic.h"
+#include "sanitizer_common/sanitizer_platform.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_deadlock_detector_interface.h"
 #include "tsan_defs.h"
@@ -21,6 +22,13 @@
 #include "tsan_vector_clock.h"
 
 namespace __tsan {
+
+#if SANITIZER_APPLE
+// Map Objective-C objects, including tagged pointers without backing storage,
+// to stable addresses usable by TSan's mutex synchronization model.
+uptr SyncAddressForObjCObject(uptr obj, ThreadState *thr, uptr pc);
+#endif
+
 
 // These need to match __tsan_mutex_* flags defined in tsan_interface.h.
 // See documentation there as well.
