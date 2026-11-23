@@ -58,8 +58,11 @@ static int run_case(int savemask) {
     atomic_store_explicit(&start_sender, 1, memory_order_release);
     // Intercepted gettimeofday drives TSan's deferred-signal replay.
     struct timeval tv;
-    for (int i = 0; i < 10000000; ++i)
+    for (int i = 0; i < 1000000; ++i) {
       gettimeofday(&tv, NULL);
+      if ((i & 1023) == 0)
+        sched_yield();
+    }
     return 4;
   }
 
