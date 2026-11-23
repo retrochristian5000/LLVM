@@ -537,6 +537,10 @@ static void SetJmp(ThreadState *thr, uptr sp) {
 }
 
 static void LongJmp(ThreadState *thr, uptr *env) {
+  // SetJmp skips libc bootstrap calls before TSan is initialized.
+  // A matching longjmp has no TSan state to restore in that case.
+  if (!thr->is_inited)
+    return;
   uptr sp = ExtractLongJmpSp(env);
   // Find the saved buf with matching sp.
   for (uptr i = 0; i < thr->jmp_bufs.Size(); i++) {
@@ -569,8 +573,19 @@ static void LongJmp(ThreadState *thr, uptr *env) {
       return;
     }
   }
+#if SANITIZER_APPLE
+  if (thr->jmp_bufs.Size() == 0) {
+    Printf("FATAL: ThreadSanitizer: Darwin longjmp has no recorded setjmp "
+           "frame; check setjmp interception\n");
+  } else {
+    Printf("FATAL: ThreadSanitizer: Darwin longjmp stack pointer does not "
+           "match a recorded setjmp frame; check libc jump-buffer ABI "
+           "and pointer authentication\n");
+  }
+#else
   Printf("ThreadSanitizer: can't find longjmp buf\n");
-  CHECK(0);
+#endif
+  Die();
 }
 
 // FIXME: put everything below into a common extern "C" block?
