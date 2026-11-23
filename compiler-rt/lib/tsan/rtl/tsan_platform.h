@@ -1127,6 +1127,10 @@ inline uptr RestoreAddr(uptr addr) {
 }
 
 void InitializePlatform();
+#if SANITIZER_APPLE
+// Darwin libc jump-buffer decoding, including ARM64e pointer authentication.
+void InitializeDarwinLongJmp();
+#endif
 void InitializePlatformEarly();
 bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings);
 void InitializeShadowMemoryPlatform();
