@@ -19,7 +19,7 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_procmaps.h"
-#include "../got/tsan_got.h"
+#include "../got/tsan_interface_got.h"
 #include "tsan_macho.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"

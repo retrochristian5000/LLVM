@@ -76,7 +76,7 @@ if(APPLE)
     ../cpu/tsan_cpu_darwin.cpp
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
-    ../got/tsan_got.cpp
+    ../got/tsan_interface_got.cpp
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
@@ -125,7 +125,7 @@ set(TSAN_HEADERS
   tsan_fd.h
   ../flags/tsan_flags.h
   ../flags/tsan_flags.inc
-  ../got/tsan_got.h
+  ../got/tsan_interface_got.h
   tsan_ignoreset.h
   tsan_ilist.h
   tsan_interceptors.h

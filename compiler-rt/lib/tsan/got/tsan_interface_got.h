@@ -1,4 +1,4 @@
-//===-- tsan_got.h ----------------------------------------------*- C++ -*-===//
+//===-- tsan_interface_got.h ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TSAN_GOT_H
-#define TSAN_GOT_H
+#ifndef TSAN_INTERFACE_GOT_H
+#define TSAN_INTERFACE_GOT_H
 
 #include "sanitizer_common/sanitizer_platform.h"
 
@@ -37,4 +37,4 @@ bool VerifyAArch64GOTAnchor();
 }  // namespace __tsan
 
 #endif  // SANITIZER_APPLE
-#endif  // TSAN_GOT_H
+#endif  // TSAN_INTERFACE_GOT_H

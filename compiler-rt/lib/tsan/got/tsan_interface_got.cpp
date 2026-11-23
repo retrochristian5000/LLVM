@@ -1,4 +1,4 @@
-//===-- tsan_got.cpp ------------------------------------------------------===//
+//===-- tsan_interface_got.cpp ------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,7 @@
 // system loader and the shared interception/symbolizer libraries. Do not
 // rewrite dyld's pointers, especially authenticated ARM64e pointers.
 
-#include "tsan_got.h"
+#include "tsan_interface_got.h"
 #include "../endian/tsan_endian_darwin.h"
 
 #if SANITIZER_APPLE
