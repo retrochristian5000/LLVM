@@ -25,17 +25,25 @@ int main(void) {
   if (pthread_mutex_destroy(&mutex) != 0)
     return 3;
 
-  struct stat st;
-  if (fstat(STDIN_FILENO, &st) != 0)
+  int pipefd[2];
+  if (pipe(pipefd) != 0)
     return 4;
+  struct stat st;
+  if (fstat(pipefd[0], &st) != 0)
+    return 5;
+  if (close(pipefd[0]) != 0 || close(pipefd[1]) != 0)
+    return 6;
 
+  // Avoid DNS/network dependencies: exercise glibc's resolver-facing API
+  // with an entirely numeric address and service.
   struct addrinfo hints = {0};
   struct addrinfo *result = NULL;
-  hints.ai_family = AF_UNSPEC;
+  hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
-  int rc = getaddrinfo("localhost", "80", &hints, &result);
+  hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
+  int rc = getaddrinfo("127.0.0.1", "80", &hints, &result);
   if (rc != 0)
-    return 5;
+    return 7;
   freeaddrinfo(result);
   puts("glibc interceptors: OK");
 #endif
