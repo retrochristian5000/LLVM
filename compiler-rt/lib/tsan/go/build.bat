@@ -2,6 +2,7 @@ type ^
   tsan_go.cpp ^
   ..\interface\tsan_interface_atomic.cpp ^
   ..\rtl\tsan_flags.cpp ^
+  ..\rtl\tsan_endian.cpp ^
   ..\rtl\tsan_md5.cpp ^
   ..\rtl\tsan_report.cpp ^
   ..\rtl\tsan_rtl.cpp ^

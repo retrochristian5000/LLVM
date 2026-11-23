@@ -24,6 +24,7 @@ append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread TSAN_DYNAMIC_LINK_LIBS)
 set(TSAN_SOURCES
   tsan_adaptive_delay.cpp
   tsan_debugging.cpp
+  tsan_endian.cpp
   tsan_external.cpp
   tsan_fd.cpp
   tsan_flags.cpp
@@ -103,6 +104,7 @@ set(TSAN_HEADERS
   tsan_aarch64_regs.h
   tsan_defs.h
   tsan_dense_alloc.h
+  tsan_endian.h
   tsan_fd.h
   tsan_flags.h
   tsan_flags.inc

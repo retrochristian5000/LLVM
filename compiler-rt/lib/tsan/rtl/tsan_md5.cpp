@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "tsan_defs.h"
+#include "tsan_endian.h"
 
 namespace __tsan {
 
@@ -23,10 +24,8 @@ namespace __tsan {
   (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s)))); \
   (a) += (b);
 
-#define SET(n) \
-  (*(const MD5_u32plus *)&ptr[(n) * 4])
-#define GET(n) \
-  SET(n)
+#define SET(n) (ctx->block[n])
+#define GET(n) SET(n)
 
 typedef unsigned int MD5_u32plus;
 typedef unsigned long ulong_t;
@@ -49,6 +48,9 @@ static const void *body(MD5_CTX *ctx, const void *data, ulong_t size) {
   d = ctx->d;
 
   do {
+    // MD5 message words are little-endian even on big-endian hosts.
+    ReadLittleEndian32Words(ctx->block, ptr, 16);
+
     saved_a = a;
     saved_b = b;
     saved_c = c;
