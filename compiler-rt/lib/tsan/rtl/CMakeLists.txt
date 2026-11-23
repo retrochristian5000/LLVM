@@ -49,6 +49,7 @@ set(TSAN_SOURCES
   tsan_rtl_report.cpp
   tsan_thread.cpp
   tsan_thread_posix.cpp
+  tsan_type.cpp
   tsan_stack_trace.cpp
   tsan_suppressions.cpp
   tsan_symbolize.cpp
@@ -137,6 +138,7 @@ set(TSAN_HEADERS
   tsan_symbolize.h
   tsan_sync.h
   tsan_trace.h
+  tsan_type.h
   tsan_vector_clock.h
   )
 

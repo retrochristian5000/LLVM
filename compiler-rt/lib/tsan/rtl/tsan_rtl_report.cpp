@@ -23,6 +23,7 @@
 #include "tsan_platform.h"
 #include "tsan_report.h"
 #include "tsan_rtl.h"
+#include "tsan_type.h"
 #include "tsan_suppressions.h"
 #include "tsan_symbolize.h"
 #include "tsan_sync.h"
@@ -706,13 +707,7 @@ void ReportRace(ThreadState *thr, RawShadow *shadow_mem, Shadow cur, Shadow old,
   if (IsExpectedReport(addr_min, addr_max - addr_min))
     return;
 
-  ReportType rep_typ = ReportTypeRace;
-  if ((typ0 & kAccessVptr) && (typ1 & kAccessFree))
-    rep_typ = ReportTypeVptrUseAfterFree;
-  else if (typ0 & kAccessVptr)
-    rep_typ = ReportTypeVptrRace;
-  else if (typ1 & kAccessFree)
-    rep_typ = ReportTypeUseAfterFree;
+  ReportType rep_typ = RaceReportType(typ0, typ1);
 
   if (IsFiredSuppression(ctx, rep_typ, addr))
     return;
