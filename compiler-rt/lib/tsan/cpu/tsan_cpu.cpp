@@ -15,7 +15,7 @@
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD
 
 #include "sanitizer_common/sanitizer_common.h"
-#include "tsan_platform.h"
+#include "../rtl/tsan_platform.h"
 
 namespace __tsan {
 

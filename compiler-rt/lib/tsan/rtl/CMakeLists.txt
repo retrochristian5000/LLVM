@@ -71,7 +71,7 @@ set(TSAN_PREINIT_SOURCES
 if(APPLE)
   list(APPEND TSAN_SOURCES
     tsan_array_darwin.cpp
-    tsan_cpu_darwin.cpp
+    ../cpu/tsan_cpu_darwin.cpp
     tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
     tsan_got.cpp
@@ -91,7 +91,7 @@ if(APPLE)
 elseif(UNIX)
   # CPU VMA validation and platform initialization support Linux and BSD.
   list(APPEND TSAN_SOURCES
-    tsan_cpu.cpp
+    ../cpu/tsan_cpu.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
     )
@@ -169,7 +169,7 @@ if(APPLE)
 
   set(TSAN_ASM_SOURCES
     tsan_interceptors_amd64.S
-    tsan_cpu_aarch64.S
+    ../cpu/tsan_cpu_aarch64.S
     tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S
     )
@@ -231,7 +231,7 @@ else()
         VERBATIM)
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
-        tsan_cpu_aarch64.S
+        ../cpu/tsan_cpu_aarch64.S
         tsan_ignore_aarch64.S
         tsan_interceptors_aarch64.S
         )

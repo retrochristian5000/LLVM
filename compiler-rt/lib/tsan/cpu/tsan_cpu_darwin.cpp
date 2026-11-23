@@ -17,7 +17,7 @@
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_mac.h"
 #include "sanitizer_common/sanitizer_ptrauth.h"
-#include "tsan_platform.h"
+#include "../rtl/tsan_platform.h"
 
 #include <pthread.h>
 
