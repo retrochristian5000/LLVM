@@ -1130,6 +1130,10 @@ void InitializePlatform();
 #if SANITIZER_APPLE
 // Darwin libc jump-buffer decoding, including ARM64e pointer authentication.
 void InitializeDarwinLongJmp();
+#if !SANITIZER_GO
+// Set up Darwin pthread TLS and lifecycle callbacks after memory layout checks.
+void InitializeDarwinThreadSupport();
+#endif
 #endif
 void InitializePlatformEarly();
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD

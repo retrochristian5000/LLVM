@@ -44,7 +44,7 @@ set(TSAN_SOURCES
   tsan_rtl_mutex.cpp
   tsan_rtl_proc.cpp
   tsan_rtl_report.cpp
-  tsan_rtl_thread.cpp
+  tsan_thread.cpp
   tsan_stack_trace.cpp
   tsan_suppressions.cpp
   tsan_symbolize.cpp
@@ -71,6 +71,7 @@ if(APPLE)
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp
     tsan_sync_darwin.cpp
+    tsan_thread_darwin.cpp
     )
 elseif(UNIX)
   # CPU VMA validation and platform initialization support Linux and BSD.

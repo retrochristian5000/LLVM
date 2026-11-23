@@ -56,7 +56,7 @@ SRCS="
 	../rtl/tsan_rtl_access.cpp
 	../rtl/tsan_rtl_mutex.cpp
 	../rtl/tsan_rtl_report.cpp
-	../rtl/tsan_rtl_thread.cpp
+	../rtl/tsan_thread.cpp
 	../rtl/tsan_rtl_proc.cpp
 	../rtl/tsan_stack_trace.cpp
 	../rtl/tsan_suppressions.cpp

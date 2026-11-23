@@ -87,7 +87,7 @@ target(tsan_target_type, "rtl") {
     "tsan_rtl_mutex.cpp",
     "tsan_rtl_proc.cpp",
     "tsan_rtl_report.cpp",
-    "tsan_rtl_thread.cpp",
+    "tsan_thread.cpp",
     "tsan_shadow.h",
     "tsan_stack_trace.cpp",
     "tsan_stack_trace.h",
@@ -115,6 +115,7 @@ target(tsan_target_type, "rtl") {
       "tsan_platform_mac.cpp",
       "tsan_platform_posix.cpp",
       "tsan_sync_darwin.cpp",
+      "tsan_thread_darwin.cpp",
     ]
     cflags += [ "-fblocks" ]
   } else {
