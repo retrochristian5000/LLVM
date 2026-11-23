@@ -13,6 +13,7 @@
 #if SANITIZER_APPLE
 
 #include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_mac.h"
 #include "sanitizer_common/sanitizer_ptrauth.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
