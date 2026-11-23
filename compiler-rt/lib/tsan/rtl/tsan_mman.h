@@ -24,6 +24,8 @@ void ReplaceSystemMalloc();
 void AllocatorProcStart(Processor *proc);
 void AllocatorProcFinish(Processor *proc);
 void AllocatorPrintStats();
+// Allocation warnings in signal handlers use OS-specific report lock scopes.
+void SignalUnsafeCall(ThreadState *thr, uptr pc);
 void AllocatorLockBeforeFork();
 void AllocatorUnlockAfterFork(bool child);
 void GlobalProcessorLock();

@@ -65,6 +65,7 @@ if(APPLE)
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
+    tsan_mman_darwin.cpp
     tsan_platform_darwin.cpp
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp

@@ -174,7 +174,8 @@ void AllocatorPrintStats() {
   allocator()->PrintStats();
 }
 
-static void SignalUnsafeCall(ThreadState *thr, uptr pc) {
+#if !SANITIZER_APPLE
+void SignalUnsafeCall(ThreadState *thr, uptr pc) {
   if (atomic_load_relaxed(&thr->in_signal_handler) == 0 ||
       !ShouldReport(thr, ReportTypeSignalUnsafe))
     return;
@@ -184,24 +185,15 @@ static void SignalUnsafeCall(ThreadState *thr, uptr pc) {
     return;
   // Use alloca, because malloc during signal handling deadlocks
   ScopedReport *rep = (ScopedReport *)__builtin_alloca(sizeof(ScopedReport));
-  // Take a new scope as Apple platforms require the below locks released
-  // before symbolizing in order to avoid a deadlock
-  {
-    ThreadRegistryLock l(&ctx->thread_registry);
-    new (rep) ScopedReport(ReportTypeSignalUnsafe);
-    rep->AddStack(stack, true);
-#if SANITIZER_APPLE
-  }  // Close this scope to release the locks
-#endif
-    OutputReport(thr, *rep);
+  ThreadRegistryLock l(&ctx->thread_registry);
+  new (rep) ScopedReport(ReportTypeSignalUnsafe);
+  rep->AddStack(stack, true);
+  OutputReport(thr, *rep);
 
-    // Need to manually destroy this because we used placement new to allocate
-    rep->~ScopedReport();
-#if !SANITIZER_APPLE
-  }
-#endif
+  // Placement new requires explicit destruction.
+  rep->~ScopedReport();
 }
-
+#endif  // !SANITIZER_APPLE
 
 void *user_alloc_internal(ThreadState *thr, uptr pc, uptr sz, uptr align,
                           bool signal) {
