@@ -16,6 +16,7 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "../rtl/tsan_platform.h"
+#include "tsan_cpu_posix.h"
 
 namespace __tsan {
 
@@ -35,79 +36,12 @@ void InitializeCpuVmaSize(uptr current_frame) {
   vmaSize = MostSignificantSetBitIndex(current_frame) + 1;
 #endif
 
-#if defined(__aarch64__)
-# if !SANITIZER_GO
-  if (vmaSize != 39 && vmaSize != 42 && vmaSize != 47 && vmaSize != 48) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 39, 42, 47 and 48\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 48) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 48\n", vmaSize);
-    Die();
-  }
-#    endif
-#  elif SANITIZER_LOONGARCH64
-#    if !SANITIZER_GO
-  if (vmaSize != 47) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 47) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-#    endif
-#  elif defined(__powerpc64__)
-#    if !SANITIZER_GO
-  if (vmaSize != 44 && vmaSize != 46 && vmaSize != 47) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 44, 46, and 47\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 46 && vmaSize != 47) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 46, and 47\n", vmaSize);
-    Die();
-  }
-#    endif
-#  elif defined(__mips64)
-#    if !SANITIZER_GO
-  if (vmaSize != 40) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 40\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 47) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-#    endif
-#  elif SANITIZER_RISCV64
-  // the bottom half of vma is allocated for userspace
-  vmaSize = vmaSize + 1;
-#    if !SANITIZER_GO
-  if (vmaSize != 39 && vmaSize != 48) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 39 and 48\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 39 && vmaSize != 48) {
-    Printf("FATAL: ThreadSanitizer: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 39 and 48\n", vmaSize);
-    Die();
-  }
-#    endif
-#  endif
+#if SANITIZER_RISCV64
+  // RISC-V reports the width of the lower user-space half.
+  ++vmaSize;
+#endif
+
+  ValidatePosixCpuVmaSize();
 }
 
 }  // namespace __tsan

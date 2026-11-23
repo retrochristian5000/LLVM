@@ -148,6 +148,8 @@ target(tsan_target_type, "rtl") {
     # CPU VMA validation and platform initialization support Linux and BSD.
     sources += [
       "../cpu/tsan_cpu.cpp",
+      "../cpu/tsan_cpu_posix.cpp",
+      "../cpu/tsan_cpu_posix.h",
       "tsan_platform_linux.cpp",
       "tsan_platform_posix.cpp",
     ]

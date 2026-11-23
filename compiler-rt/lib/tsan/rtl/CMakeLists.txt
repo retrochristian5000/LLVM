@@ -99,6 +99,7 @@ elseif(UNIX)
   # CPU VMA validation and platform initialization support Linux and BSD.
   list(APPEND TSAN_SOURCES
     ../cpu/tsan_cpu.cpp
+    ../cpu/tsan_cpu_posix.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
     )
@@ -120,6 +121,7 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
 endif()
 
 set(TSAN_HEADERS
+  ../cpu/tsan_cpu_posix.h
   ../buff/tsan_buff.h
   ../array/tsan_array_darwin.h
   ../reg/tsan_reg_aarch64.h
