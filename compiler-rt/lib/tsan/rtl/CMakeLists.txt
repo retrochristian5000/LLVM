@@ -70,6 +70,7 @@ if(APPLE)
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
+    tsan_macho.cpp
     tsan_mman_darwin.cpp
     tsan_platform_darwin.cpp
     tsan_platform_mac.cpp
@@ -117,6 +118,7 @@ set(TSAN_HEADERS
   ../interface/tsan_interface.inc
   ../interface/tsan_interface_ann.h
   ../interface/tsan_interface_java.h
+  tsan_macho.h
   tsan_mman.h
   tsan_mutexset.h
   tsan_platform.h

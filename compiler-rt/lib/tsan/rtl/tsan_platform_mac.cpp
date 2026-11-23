@@ -19,6 +19,7 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_procmaps.h"
+#include "tsan_macho.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
 #include "tsan_flags.h"
@@ -71,6 +72,8 @@ void InitializePlatformEarly() {
 
 void InitializePlatform() {
   DisableCoreDumperIfNecessary();
+  VPrintf(2, "ThreadSanitizer: main Mach-O executable architecture: %s\n",
+          MachOExecutableArchitecture());
 #if !SANITIZER_GO
   if (!CheckAndProtect(true, true, true)) {
     Printf("FATAL: ThreadSanitizer: found incompatible memory layout.\n");
