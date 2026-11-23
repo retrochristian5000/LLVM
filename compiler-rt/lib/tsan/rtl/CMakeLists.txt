@@ -77,6 +77,7 @@ if(APPLE)
     ../stack/tsan_stack_darwin.cpp
     ../warn/tsan_warn_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
+    ../cxx/tsan_cxx_darwin.cpp
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
     ../interface/tsan_interface_darwin.cpp

@@ -116,6 +116,7 @@ target(tsan_target_type, "rtl") {
   if (target_os == "mac") {
     sources += [
       "../cpu/tsan_cpu_darwin.cpp",
+      "../cxx/tsan_cxx_darwin.cpp",
       "../array/tsan_array_darwin.cpp",
       "../array/tsan_array_darwin.h",
       "../stack/tsan_stack_darwin.cpp",
