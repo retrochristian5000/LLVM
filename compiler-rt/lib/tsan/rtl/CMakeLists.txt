@@ -50,6 +50,7 @@ set(TSAN_SOURCES
   tsan_thread.cpp
   tsan_thread_posix.cpp
   tsan_type.cpp
+  tsan_stack.cpp
   tsan_stack_trace.cpp
   tsan_suppressions.cpp
   tsan_symbolize.cpp
@@ -135,6 +136,7 @@ set(TSAN_HEADERS
   tsan_report.h
   tsan_rtl.h
   tsan_shadow.h
+  tsan_stack.h
   tsan_stack_trace.h
   tsan_suppressions.h
   tsan_symbolize.h

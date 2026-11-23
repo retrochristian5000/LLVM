@@ -62,6 +62,19 @@ static void TestTrim(StackTraceTy *trace) {
   EXPECT_EQ(42U, trace->trace[kStackTraceMax - 1]);
 }
 
+TEST(Stack, ShadowStackAllocationAndRelease) {
+  ThreadState thr(kMainTid);
+  ASSERT_NE(nullptr, thr.shadow_stack);
+  EXPECT_EQ(thr.shadow_stack, thr.shadow_stack_pos);
+  EXPECT_EQ(kShadowStackSize,
+            static_cast<uptr>(thr.shadow_stack_end - thr.shadow_stack));
+
+  DestroyShadowStack(&thr);
+  EXPECT_EQ(nullptr, thr.shadow_stack);
+  EXPECT_EQ(nullptr, thr.shadow_stack_pos);
+  EXPECT_EQ(nullptr, thr.shadow_stack_end);
+}
+
 TEST(StackTrace, BasicVarSize) {
   VarSizeStackTrace trace;
   TestStackTrace(&trace);

@@ -19,7 +19,6 @@
 #include "sanitizer_common/sanitizer_interface_internal.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
-#include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
 #include "tsan_adaptive_delay.h"
 #include "tsan_defs.h"
@@ -419,20 +418,7 @@ ThreadState::ThreadState(Tid tid)
     // ignore_interceptors()
     : tid(tid) {
   CHECK_EQ(reinterpret_cast<uptr>(this) % SANITIZER_CACHE_LINE_SIZE, 0);
-#if !SANITIZER_GO
-  // C/C++ uses fixed size shadow stack.
-  const int kInitStackSize = kShadowStackSize;
-  shadow_stack = static_cast<uptr*>(
-      MmapNoReserveOrDie(kInitStackSize * sizeof(uptr), "shadow stack"));
-  SetShadowRegionHugePageMode(reinterpret_cast<uptr>(shadow_stack),
-                              kInitStackSize * sizeof(uptr));
-#else
-  // Go uses malloc-allocated shadow stack with dynamic size.
-  const int kInitStackSize = 8;
-  shadow_stack = static_cast<uptr*>(Alloc(kInitStackSize * sizeof(uptr)));
-#endif
-  shadow_stack_pos = shadow_stack;
-  shadow_stack_end = shadow_stack + kInitStackSize;
+  InitializeShadowStack(this);
 }
 
 #if !SANITIZER_GO
@@ -904,41 +890,6 @@ void ForkChildAfter(ThreadState* thr, uptr pc, bool start_thread) {
 }
 #endif
 
-#if SANITIZER_GO
-NOINLINE
-void GrowShadowStack(ThreadState *thr) {
-  const int sz = thr->shadow_stack_end - thr->shadow_stack;
-  const int newsz = 2 * sz;
-  auto *newstack = (uptr *)Alloc(newsz * sizeof(uptr));
-  internal_memcpy(newstack, thr->shadow_stack, sz * sizeof(uptr));
-  Free(thr->shadow_stack);
-  thr->shadow_stack = newstack;
-  thr->shadow_stack_pos = newstack + sz;
-  thr->shadow_stack_end = newstack + newsz;
-}
-#endif
-
-StackID CurrentStackId(ThreadState *thr, uptr pc) {
-#if !SANITIZER_GO
-  if (!thr->is_inited)  // May happen during bootstrap.
-    return kInvalidStackID;
-#endif
-  if (pc != 0) {
-#if !SANITIZER_GO
-    DCHECK_LT(thr->shadow_stack_pos, thr->shadow_stack_end);
-#else
-    if (thr->shadow_stack_pos == thr->shadow_stack_end)
-      GrowShadowStack(thr);
-#endif
-    thr->shadow_stack_pos[0] = pc;
-    thr->shadow_stack_pos++;
-  }
-  StackID id = StackDepotPut(
-      StackTrace(thr->shadow_stack, thr->shadow_stack_pos - thr->shadow_stack));
-  if (pc != 0)
-    thr->shadow_stack_pos--;
-  return id;
-}
 
 static bool TraceSkipGap(ThreadState* thr) {
   Trace *trace = &thr->tctx->trace;
@@ -1087,13 +1038,6 @@ void ThreadIgnoreEnd(ThreadState *thr) {
   }
 }
 
-#if !SANITIZER_GO
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-uptr __tsan_testonly_shadow_stack_current_size() {
-  ThreadState *thr = cur_thread();
-  return thr->shadow_stack_pos - thr->shadow_stack;
-}
-#endif
 
 void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc) {
   DPrintf("#%d: ThreadIgnoreSyncBegin\n", thr->tid);

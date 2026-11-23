@@ -259,14 +259,7 @@ void ThreadFinish(ThreadState *thr) {
       IncrementEpoch(thr);
     }
   }
-#if !SANITIZER_GO
-  UnmapOrDie(thr->shadow_stack, kShadowStackSize * sizeof(uptr));
-#else
-  Free(thr->shadow_stack);
-#endif
-  thr->shadow_stack = nullptr;
-  thr->shadow_stack_pos = nullptr;
-  thr->shadow_stack_end = nullptr;
+  DestroyShadowStack(thr);
   if (common_flags()->detect_deadlocks)
     ctx->dd->DestroyLogicalThread(thr->dd_lt);
   SlotDetach(thr);

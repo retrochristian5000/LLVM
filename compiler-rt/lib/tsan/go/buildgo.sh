@@ -60,6 +60,7 @@ SRCS="
 	../rtl/tsan_rtl_report.cpp
 	../rtl/tsan_thread.cpp
 	../rtl/tsan_rtl_proc.cpp
+	../rtl/tsan_stack.cpp
 	../rtl/tsan_stack_trace.cpp
 	../rtl/tsan_suppressions.cpp
 	../rtl/tsan_sync.cpp

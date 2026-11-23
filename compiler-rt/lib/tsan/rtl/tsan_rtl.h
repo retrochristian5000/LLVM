@@ -44,6 +44,7 @@
 #include "tsan_platform.h"
 #include "tsan_report.h"
 #include "tsan_shadow.h"
+#include "tsan_stack.h"
 #include "tsan_stack_trace.h"
 #include "tsan_sync.h"
 #include "tsan_trace.h"
@@ -522,7 +523,6 @@ bool IsExpectedReport(uptr addr, uptr size);
 # define DPrintf2(...)
 #endif
 
-StackID CurrentStackId(ThreadState *thr, uptr pc);
 ReportStack *SymbolizeStackId(StackID stack_id);
 void PrintCurrentStack(ThreadState *thr, uptr pc);
 void PrintCurrentStack(uptr pc, bool fast);  // may uses libunwind
@@ -787,8 +787,6 @@ void TraceTime(ThreadState *thr);
 
 void TraceRestartFuncExit(ThreadState *thr);
 void TraceRestartFuncEntry(ThreadState *thr, uptr pc);
-
-void GrowShadowStack(ThreadState *thr);
 
 ALWAYS_INLINE
 void FuncEntry(ThreadState *thr, uptr pc) {
