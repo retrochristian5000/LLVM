@@ -115,8 +115,9 @@ target(tsan_target_type, "rtl") {
     ]
     cflags += [ "-fblocks" ]
   } else {
-    # tsan_platform_linux.cpp also supports FreeBSD and NetBSD.
+    # CPU VMA validation and platform initialization support Linux and BSD.
     sources += [
+      "tsan_cpu.cpp",
       "tsan_platform_linux.cpp",
       "tsan_platform_posix.cpp",
     ]

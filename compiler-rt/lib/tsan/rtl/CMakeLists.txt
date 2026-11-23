@@ -70,8 +70,9 @@ if(APPLE)
     tsan_platform_posix.cpp
     )
 elseif(UNIX)
-  # tsan_platform_linux.cpp also contains BSD support.
+  # CPU VMA validation and platform initialization support Linux and BSD.
   list(APPEND TSAN_SOURCES
+    tsan_cpu.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
     )

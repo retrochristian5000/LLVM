@@ -1132,6 +1132,10 @@ void InitializePlatform();
 void InitializeDarwinLongJmp();
 #endif
 void InitializePlatformEarly();
+#if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD
+// Validate the architecture's supported virtual-address width before mapping.
+void InitializeCpuVmaSize(uptr current_frame);
+#endif
 bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings);
 void InitializeShadowMemoryPlatform();
 void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns);
