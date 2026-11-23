@@ -18,6 +18,7 @@
 #include "sanitizer_common/sanitizer_mac.h"
 #include "sanitizer_common/sanitizer_ptrauth.h"
 #include "../rtl/tsan_platform.h"
+#include "../stack/tsan_stack_aarch64.h"
 
 #include <pthread.h>
 
@@ -48,6 +49,13 @@ uptr ExtractLongJmpSp(uptr *env) {
   uptr sp = mangled_sp ^ longjmp_xor_key;
   sp = (uptr)ptrauth_auth_data((void *)sp, ptrauth_key_asdb,
                                ptrauth_string_discriminator("sp"));
+#if defined(__aarch64__) && !SANITIZER_GO
+  if (UNLIKELY(!__tsan_stack_aarch64_valid_sp(sp))) {
+    Report("FATAL: ThreadSanitizer: decoded Darwin AArch64 longjmp "
+           "stack pointer is null or not 16-byte aligned\n");
+    Die();
+  }
+#endif
   return sp;
 }
 

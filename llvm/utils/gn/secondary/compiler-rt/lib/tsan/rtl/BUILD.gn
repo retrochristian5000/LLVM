@@ -102,6 +102,7 @@ target(tsan_target_type, "rtl") {
     "tsan_shadow.h",
     "../stack/tsan_stack.cpp",
     "../stack/tsan_stack.h",
+    "../stack/tsan_stack_aarch64.h",
     "../stack/tsan_stack_trace.cpp",
     "../stack/tsan_stack_trace.h",
     "tsan_suppressions.cpp",
@@ -171,6 +172,7 @@ target(tsan_target_type, "rtl") {
   } else if (target_cpu == "arm64") {
     sources += [
       "../cpu/tsan_cpu_aarch64.S",
+      "../stack/tsan_stack_aarch64.S",
       "../buff/tsan_buff_aarch64.S",
       "../array/tsan_array_aarch64.S",
       "../interface/tsan_interface_aarch64.S",

@@ -156,6 +156,7 @@ set(TSAN_HEADERS
   tsan_rtl.h
   tsan_shadow.h
   ../stack/tsan_stack.h
+  ../stack/tsan_stack_aarch64.h
   ../stack/tsan_stack_trace.h
   tsan_suppressions.h
   tsan_symbolize.h
@@ -185,6 +186,7 @@ if(APPLE)
   set(TSAN_ASM_SOURCES
     tsan_interceptors_amd64.S
     ../cpu/tsan_cpu_aarch64.S
+    ../stack/tsan_stack_aarch64.S
     tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S
     ../got/tsan_got_aarch64.S
@@ -251,6 +253,7 @@ else()
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
         ../cpu/tsan_cpu_aarch64.S
+        ../stack/tsan_stack_aarch64.S
         ../buff/tsan_buff_aarch64.S
         ../array/tsan_array_aarch64.S
         ../interface/tsan_interface_aarch64.S

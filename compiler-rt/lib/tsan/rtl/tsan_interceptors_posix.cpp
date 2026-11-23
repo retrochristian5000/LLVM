@@ -39,6 +39,7 @@
 #include "tsan_interceptors_darwin.h"
 #include "../interface/tsan_interface.h"
 #include "../interface/tsan_interface_mmap.h"
+#include "../stack/tsan_stack_aarch64.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -522,6 +523,13 @@ static void JmpBufGarbageCollect(ThreadState *thr, uptr sp) {
 static void SetJmp(ThreadState *thr, uptr sp) {
   if (!thr->is_inited)  // called from libc guts during bootstrap
     return;
+#if defined(__aarch64__) && !SANITIZER_GO
+  if (UNLIKELY(!__tsan_stack_aarch64_valid_sp(sp))) {
+    Report("FATAL: ThreadSanitizer: AArch64 setjmp captured a null or "
+           "misaligned stack pointer\n");
+    Die();
+  }
+#endif
   // Cleanup old bufs.
   JmpBufGarbageCollect(thr, sp);
   // Remember the buf.
