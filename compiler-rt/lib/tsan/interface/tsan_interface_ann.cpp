@@ -16,12 +16,12 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "sanitizer_common/sanitizer_vector.h"
-#include "tsan_adaptive_delay.h"
-#include "tsan_flags.h"
-#include "tsan_mman.h"
-#include "tsan_platform.h"
-#include "tsan_report.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_adaptive_delay.h"
+#include "../rtl/tsan_flags.h"
+#include "../rtl/tsan_mman.h"
+#include "../rtl/tsan_platform.h"
+#include "../rtl/tsan_report.h"
+#include "../rtl/tsan_rtl.h"
 
 #define CALLERPC ((uptr)__builtin_return_address(0))
 

@@ -13,7 +13,7 @@
 #define SANITIZER_COMMON_NO_REDEFINE_BUILTINS
 
 #include "tsan_interceptors.h"
-#include "tsan_interface.h"
+#include "../interface/tsan_interface.h"
 
 using namespace __tsan;
 

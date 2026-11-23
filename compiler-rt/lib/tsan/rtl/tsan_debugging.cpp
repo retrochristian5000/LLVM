@@ -10,7 +10,7 @@
 //
 // TSan debugging API implementation.
 //===----------------------------------------------------------------------===//
-#include "tsan_interface.h"
+#include "../interface/tsan_interface.h"
 #include "tsan_report.h"
 #include "tsan_rtl.h"
 

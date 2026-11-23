@@ -16,7 +16,7 @@
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno_codes.h"
-#include "tsan_interface.h"
+#include "../interface/tsan_interface.h"
 #include "tsan_rtl.h"
 
 namespace __tsan {

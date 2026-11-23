@@ -1,6 +1,6 @@
 type ^
   tsan_go.cpp ^
-  ..\rtl\tsan_interface_atomic.cpp ^
+  ..\interface\tsan_interface_atomic.cpp ^
   ..\rtl\tsan_flags.cpp ^
   ..\rtl\tsan_md5.cpp ^
   ..\rtl\tsan_report.cpp ^
@@ -8,7 +8,7 @@ type ^
   ..\rtl\tsan_rtl_access.cpp ^
   ..\rtl\tsan_rtl_mutex.cpp ^
   ..\rtl\tsan_rtl_report.cpp ^
-  ..\rtl\tsan_rtl_thread.cpp ^
+  ..\rtl\tsan_thread.cpp ^
   ..\rtl\tsan_rtl_proc.cpp ^
   ..\rtl\tsan_suppressions.cpp ^
   ..\rtl\tsan_sync.cpp ^
@@ -40,6 +40,7 @@ gcc ^
   -c ^
   -o race_windows_amd64.syso ^
   gotsan.cpp ^
+  -I..\interface ^
   -I..\rtl ^
   -I..\.. ^
   -I..\..\sanitizer_common ^

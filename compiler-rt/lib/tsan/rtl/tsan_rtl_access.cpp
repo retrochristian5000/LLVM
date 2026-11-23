@@ -757,5 +757,5 @@ template void MemoryAccessRangeT<false>(ThreadState* thr, uptr pc, uptr addr,
 
 #if !SANITIZER_GO
 // Must be included in this file to make sure everything is inlined.
-#  include "tsan_interface.inc"
+#  include "../interface/tsan_interface.inc"
 #endif

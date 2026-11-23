@@ -23,8 +23,8 @@
 #  include "interception/interception.h"
 #  include "tsan_interceptors.h"
 #  include "tsan_sync.h"
-#  include "tsan_interface.h"
-#  include "tsan_interface_ann.h"
+#  include "../interface/tsan_interface.h"
+#  include "../interface/tsan_interface_ann.h"
 
 #  if defined(__has_include) && __has_include(<xpc/xpc.h>)
 #    include <xpc/xpc.h>

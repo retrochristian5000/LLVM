@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_internal_defs.h"
-#include "tsan_interface.h"
+#include "../interface/tsan_interface.h"
 
 #if SANITIZER_CAN_USE_PREINIT_ARRAY
 

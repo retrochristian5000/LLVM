@@ -30,10 +30,10 @@ set(TSAN_SOURCES
   tsan_ignoreset.cpp
   tsan_interceptors_memintrinsics.cpp
   tsan_interceptors_posix.cpp
-  tsan_interface.cpp
-  tsan_interface_ann.cpp
-  tsan_interface_atomic.cpp
-  tsan_interface_java.cpp
+  ../interface/tsan_interface.cpp
+  ../interface/tsan_interface_ann.cpp
+  ../interface/tsan_interface_atomic.cpp
+  ../interface/tsan_interface_java.cpp
   tsan_malloc_mac.cpp
   tsan_md5.cpp
   tsan_mman.cpp
@@ -109,10 +109,10 @@ set(TSAN_HEADERS
   tsan_ilist.h
   tsan_interceptors.h
   tsan_interceptors_darwin.h
-  tsan_interface.h
-  tsan_interface.inc
-  tsan_interface_ann.h
-  tsan_interface_java.h
+  ../interface/tsan_interface.h
+  ../interface/tsan_interface.inc
+  ../interface/tsan_interface_ann.h
+  ../interface/tsan_interface_java.h
   tsan_mman.h
   tsan_mutexset.h
   tsan_platform.h

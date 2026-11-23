@@ -21,10 +21,10 @@
 #include "sanitizer_common/sanitizer_mutex.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
-#include "tsan_adaptive_delay.h"
-#include "tsan_flags.h"
+#include "../rtl/tsan_adaptive_delay.h"
+#include "../rtl/tsan_flags.h"
 #include "tsan_interface.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_rtl.h"
 
 using namespace __tsan;
 

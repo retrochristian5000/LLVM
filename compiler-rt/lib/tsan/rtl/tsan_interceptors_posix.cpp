@@ -37,7 +37,7 @@
 #include "tsan_adaptive_delay.h"
 #include "tsan_interceptors.h"
 #include "tsan_interceptors_darwin.h"
-#include "tsan_interface.h"
+#include "../interface/tsan_interface.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"

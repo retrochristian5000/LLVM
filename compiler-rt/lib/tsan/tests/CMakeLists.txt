@@ -1,4 +1,4 @@
-include_directories(../rtl)
+include_directories(../rtl ../interface)
 
 add_custom_target(TsanUnitTests)
 set_target_properties(TsanUnitTests PROPERTIES
@@ -11,6 +11,7 @@ set(TSAN_UNITTEST_CFLAGS
   -I${COMPILER_RT_SOURCE_DIR}/include
   -I${COMPILER_RT_SOURCE_DIR}/lib
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/rtl
+  -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/interface
   -DSANITIZER_COMMON_NO_REDEFINE_BUILTINS
   -DGTEST_HAS_RTTI=0
   -fno-rtti

@@ -12,7 +12,7 @@
 
 #include "tsan_interface.h"
 #include "tsan_interface_ann.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_rtl.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_ptrauth.h"
 
