@@ -49,14 +49,14 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
 
   // tail jump to libc setjmp
 #if !defined(__APPLE__)
-  adrp    x1, :got:_ZN14__interception11real_setjmpE
-  ldr     x1, [x1, #:got_lo12:_ZN14__interception11real_setjmpE]
-  ldr     x1, [x1]
+  adrp    x16, :got:_ZN14__interception11real_setjmpE
+  ldr     x16, [x16, #:got_lo12:_ZN14__interception11real_setjmpE]
+  ldr     x16, [x16]
+  br      x16
 #else
-  adrp    x1, _setjmp@GOTPAGE
-  ldr     x1, [x1, _setjmp@GOTPAGEOFF]
+  // Let the Mach-O linker generate an authenticated arm64e stub.
+  b       ASM_SYMBOL(setjmp)
 #endif
-  br      x1
 
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(setjmp))
@@ -100,14 +100,13 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
 
   // tail jump to libc setjmp
 #if !defined(__APPLE__)
-  adrp    x1, :got:_ZN14__interception12real__setjmpE
-  ldr     x1, [x1, #:got_lo12:_ZN14__interception12real__setjmpE]
-  ldr     x1, [x1]
+  adrp    x16, :got:_ZN14__interception12real__setjmpE
+  ldr     x16, [x16, #:got_lo12:_ZN14__interception12real__setjmpE]
+  ldr     x16, [x16]
+  br      x16
 #else
-  adrp    x1, __setjmp@GOTPAGE
-  ldr     x1, [x1, __setjmp@GOTPAGEOFF]
+  b       ASM_SYMBOL(_setjmp)
 #endif
-  br      x1
 
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(_setjmp))
@@ -153,14 +152,13 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
 
   // tail jump to libc sigsetjmp
 #if !defined(__APPLE__)
-  adrp    x2, :got:_ZN14__interception14real_sigsetjmpE
-  ldr     x2, [x2, #:got_lo12:_ZN14__interception14real_sigsetjmpE]
-  ldr     x2, [x2]
+  adrp    x16, :got:_ZN14__interception14real_sigsetjmpE
+  ldr     x16, [x16, #:got_lo12:_ZN14__interception14real_sigsetjmpE]
+  ldr     x16, [x16]
+  br      x16
 #else
-  adrp    x2, _sigsetjmp@GOTPAGE
-  ldr     x2, [x2, _sigsetjmp@GOTPAGEOFF]
+  b       ASM_SYMBOL(sigsetjmp)
 #endif
-  br      x2
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(sigsetjmp))
 
@@ -206,14 +204,11 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
 
   // tail jump to libc __sigsetjmp
 #if !defined(__APPLE__)
-  adrp    x2, :got:_ZN14__interception16real___sigsetjmpE
-  ldr     x2, [x2, #:got_lo12:_ZN14__interception16real___sigsetjmpE]
-  ldr     x2, [x2]
-#else
-  adrp    x2, ASM_SYMBOL(__sigsetjmp)@page
-  add     x2, x2, ASM_SYMBOL(__sigsetjmp)@pageoff
+  adrp    x16, :got:_ZN14__interception16real___sigsetjmpE
+  ldr     x16, [x16, #:got_lo12:_ZN14__interception16real___sigsetjmpE]
+  ldr     x16, [x16]
 #endif
-  br      x2
+  br      x16
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(__sigsetjmp))
 #endif
