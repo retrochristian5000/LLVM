@@ -650,7 +650,9 @@ TSAN_INTERCEPTOR(void, siglongjmp_symname, uptr *env, int val) {
   REAL(siglongjmp_symname)(env, val);
 }
 
-#if SANITIZER_NETBSD
+// Apple also provides _longjmp as the counterpart to _setjmp.  Without
+// intercepting it, a jump bypasses TSan's shadow-stack unwinding.
+#if SANITIZER_APPLE || SANITIZER_NETBSD
 TSAN_INTERCEPTOR(void, _longjmp, uptr *env, int val) {
   {
     SCOPED_INTERCEPTOR_RAW(_longjmp, env, val);
@@ -3046,7 +3048,7 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(longjmp_symname);
   TSAN_INTERCEPT(siglongjmp_symname);
-#if SANITIZER_NETBSD
+#if SANITIZER_APPLE || SANITIZER_NETBSD
   TSAN_INTERCEPT(_longjmp);
 #endif
 
