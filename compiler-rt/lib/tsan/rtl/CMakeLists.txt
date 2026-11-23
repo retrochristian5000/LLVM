@@ -124,6 +124,7 @@ endif()
 
 set(TSAN_HEADERS
   ../cpu/tsan_cpu_posix.h
+  ../cpu/tsan_cpu_arm64e.h
   ../buff/tsan_buff.h
   ../array/tsan_array_darwin.h
   ../reg/tsan_reg_aarch64.h
@@ -186,6 +187,7 @@ if(APPLE)
   set(TSAN_ASM_SOURCES
     tsan_interceptors_amd64.S
     ../cpu/tsan_cpu_aarch64.S
+    ../cpu/tsan_cpu_arm64e.S
     ../stack/tsan_stack_aarch64.S
     tsan_ignore_aarch64.S
     tsan_interceptors_aarch64.S

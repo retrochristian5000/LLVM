@@ -4,6 +4,8 @@
 //
 // RUN: %clang_tsan -O1 %s -o %t
 // RUN: %run %t 2>&1 | FileCheck %s --implicit-check-not='ThreadSanitizer'
+// RUN: %clang_tsan -O2 %s -o %t.opt
+// RUN: %run %t.opt 2>&1 | FileCheck %s --implicit-check-not='ThreadSanitizer'
 
 #include <pthread.h>
 #include <setjmp.h>

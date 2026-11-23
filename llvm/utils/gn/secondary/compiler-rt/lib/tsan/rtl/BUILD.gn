@@ -119,6 +119,7 @@ target(tsan_target_type, "rtl") {
   if (target_os == "mac") {
     sources += [
       "../cpu/tsan_cpu_darwin.cpp",
+      "../cpu/tsan_cpu_arm64e.h",
       "../cxx/tsan_cxx_darwin.cpp",
       "../array/tsan_array_darwin.cpp",
       "../array/tsan_array_darwin.h",
@@ -172,6 +173,7 @@ target(tsan_target_type, "rtl") {
   } else if (target_cpu == "arm64") {
     sources += [
       "../cpu/tsan_cpu_aarch64.S",
+      "../cpu/tsan_cpu_arm64e.S",
       "../stack/tsan_stack_aarch64.S",
       "../buff/tsan_buff_aarch64.S",
       "../array/tsan_array_aarch64.S",
