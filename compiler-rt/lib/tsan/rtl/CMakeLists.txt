@@ -71,6 +71,7 @@ if(APPLE)
 elseif(UNIX)
   # Assume Linux
   list(APPEND TSAN_SOURCES
+    tsan_interceptors_linux.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
     )
