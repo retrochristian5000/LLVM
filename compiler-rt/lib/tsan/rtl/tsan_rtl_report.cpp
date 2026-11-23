@@ -16,6 +16,7 @@
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
+#include "tsan_buff.h"
 #include "tsan_defs.h"
 #include "tsan_fd.h"
 #include "tsan_flags.h"
@@ -818,11 +819,7 @@ ALWAYS_INLINE USED void PrintCurrentStack(uptr pc, bool fast) {
   auto *ptrace = New<BufferedStackTrace>();
   ptrace->Unwind(pc, bp, nullptr, fast);
 
-  for (uptr i = 0; i < ptrace->size / 2; i++) {
-    uptr tmp = ptrace->trace_buffer[i];
-    ptrace->trace_buffer[i] = ptrace->trace_buffer[ptrace->size - i - 1];
-    ptrace->trace_buffer[ptrace->size - i - 1] = tmp;
-  }
+  ReversePcBuffer(ptrace->trace_buffer, ptrace->size);
 
   if (ready_to_symbolize) {
     PrintStack(SymbolizeStack(*ptrace));

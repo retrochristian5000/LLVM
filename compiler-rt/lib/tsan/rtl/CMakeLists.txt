@@ -22,6 +22,7 @@ append_list_if(COMPILER_RT_HAS_LIBM m TSAN_DYNAMIC_LINK_LIBS)
 append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread TSAN_DYNAMIC_LINK_LIBS)
 
 set(TSAN_SOURCES
+  tsan_buff.cpp
   tsan_array.cpp
   tsan_adaptive_delay.cpp
   tsan_debugging.cpp
@@ -111,6 +112,7 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
 endif()
 
 set(TSAN_HEADERS
+  tsan_buff.h
   tsan_array_darwin.h
   tsan_aarch64_regs.h
   tsan_defs.h

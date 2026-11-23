@@ -47,6 +47,7 @@ SUFFIX="${GOOS}_${GOARCH}"
 
 SRCS="
 	tsan_go.cpp
+	../rtl/tsan_buff.cpp
 	../rtl/tsan_external.cpp
 	../rtl/tsan_flags.cpp
 	../rtl/tsan_endian.cpp
