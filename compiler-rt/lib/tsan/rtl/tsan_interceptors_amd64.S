@@ -1,4 +1,16 @@
-// The content of this file is x86_64-only:
+//===-- tsan_interceptors_amd64.S -----------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// AMD64 setjmp/sigsetjmp interceptors for ELF and Darwin Mach-O.
+// Preserve the established System V x86-64 argument/stack conventions and
+// the target libc's jump-buffer semantics. The TSan runtime only observes
+// the caller's stack pointer; all libc tail calls retain their ABI.
+
 #if defined(__x86_64__)
 
 #include "sanitizer_common/sanitizer_asm.h"
@@ -64,7 +76,9 @@ ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(__setjmp14))
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(setjmp))
 #endif
 
+#if !defined(__APPLE__)
 .comm _ZN14__interception12real__setjmpE,8,8
+#endif
 .globl ASM_SYMBOL_INTERCEPTOR(_setjmp)
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(_setjmp))
 ASM_SYMBOL_INTERCEPTOR(_setjmp):
@@ -105,7 +119,9 @@ ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(_setjmp))
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(__sigsetjmp14))
 ASM_SYMBOL_INTERCEPTOR(__sigsetjmp14):
 #else
+#if !defined(__APPLE__)
 .comm _ZN14__interception14real_sigsetjmpE,8,8
+#endif
 .globl ASM_SYMBOL_INTERCEPTOR(sigsetjmp)
 ASM_TYPE_FUNCTION(ASM_SYMBOL_INTERCEPTOR(sigsetjmp))
 ASM_SYMBOL_INTERCEPTOR(sigsetjmp):

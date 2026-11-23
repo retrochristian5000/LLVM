@@ -133,7 +133,7 @@ target(tsan_target_type, "rtl") {
     }
   }
   if (target_cpu == "x64") {
-    sources += [ "tsan_rtl_amd64.S" ]
+    sources += [ "tsan_interceptors_amd64.S" ]
   } else if (target_cpu == "arm64") {
     sources += [
       "tsan_cpu_aarch64.S",

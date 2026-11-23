@@ -140,7 +140,7 @@ if(APPLE)
   endif()
 
   set(TSAN_ASM_SOURCES
-    tsan_rtl_amd64.S
+    tsan_interceptors_amd64.S
     tsan_cpu_aarch64.S
     tsan_interceptors_aarch64.S
     )
@@ -188,7 +188,7 @@ else()
   foreach(arch ${TSAN_SUPPORTED_ARCH})
     if(arch STREQUAL "x86_64")
       set(TSAN_ASM_SOURCES
-        tsan_rtl_amd64.S
+        tsan_interceptors_amd64.S
         )
       # Check for Go runtime.
       set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../go/buildgo.sh)
