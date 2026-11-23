@@ -79,6 +79,7 @@ if(APPLE)
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
     ../interface/tsan_interface_darwin.cpp
+    ../got/tsan_got_darwin.cpp
     ../interface/tsan_interface_got.cpp
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
