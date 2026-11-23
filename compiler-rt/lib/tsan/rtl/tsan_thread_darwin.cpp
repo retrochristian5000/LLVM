@@ -13,6 +13,7 @@
 
 #if SANITIZER_APPLE
 
+#include <limits.h>
 #include <pthread.h>
 #include <sys/mman.h>
 
