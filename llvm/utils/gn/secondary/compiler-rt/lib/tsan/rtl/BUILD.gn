@@ -48,6 +48,7 @@ target(tsan_target_type, "rtl") {
   sources = [
     "tsan_aarch64_regs.h",
     "../buff/tsan_buff.cpp",
+    "../array/tsan_array.cpp",
     "../buff/tsan_buff.h",
     "tsan_adaptive_delay.cpp",
     "tsan_debugging.cpp",
@@ -111,6 +112,8 @@ target(tsan_target_type, "rtl") {
   if (target_os == "mac") {
     sources += [
       "../cpu/tsan_cpu_darwin.cpp",
+      "../array/tsan_array_darwin.cpp",
+      "../array/tsan_array_darwin.h",
       "../endian/tsan_endian_darwin.cpp",
       "../endian/tsan_endian_darwin.h",
       "../got/tsan_got.cpp",
@@ -154,6 +157,7 @@ target(tsan_target_type, "rtl") {
     sources += [
       "../cpu/tsan_cpu_aarch64.S",
       "../buff/tsan_buff_aarch64.S",
+      "../array/tsan_array_aarch64.S",
       "tsan_interceptors_aarch64.S",
     ]
     if (target_os == "mac") {

@@ -1,4 +1,4 @@
-include_directories(../rtl ../buff ../interface ../flags ../endian)
+include_directories(../rtl ../array ../buff ../interface ../flags ../endian)
 
 add_custom_target(TsanUnitTests)
 set_target_properties(TsanUnitTests PROPERTIES
@@ -12,6 +12,7 @@ set(TSAN_UNITTEST_CFLAGS
   -I${COMPILER_RT_SOURCE_DIR}/lib
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/rtl
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/buff
+  -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/array
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/flags
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/endian
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/interface

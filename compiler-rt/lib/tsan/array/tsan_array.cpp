@@ -11,9 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "tsan_rtl.h"
+#include "../rtl/tsan_rtl.h"
 
 namespace __tsan {
+
+#if defined(__aarch64__) && !SANITIZER_GO
+// Native AArch64 implementation writes {value, 0, 0, 0} per shadow cell.
+// The C++ entry point retains shadow-memory and alignment validation.
+extern "C" void __tsan_shadow_set_aarch64(RawShadow *begin,
+                                           RawShadow *end, u32 value);
+#endif
 
 void ShadowSet(RawShadow* p, RawShadow* end, RawShadow v) {
   DCHECK_LT(p, end);
@@ -22,7 +29,9 @@ void ShadowSet(RawShadow* p, RawShadow* end, RawShadow v) {
   UNUSED const uptr kAlign = kShadowCnt * kShadowSize;
   DCHECK_EQ(reinterpret_cast<uptr>(p) % kAlign, 0);
   DCHECK_EQ(reinterpret_cast<uptr>(end) % kAlign, 0);
-#if !TSAN_VECTORIZE
+#if defined(__aarch64__) && !SANITIZER_GO
+  __tsan_shadow_set_aarch64(p, end, static_cast<u32>(v));
+#elif !TSAN_VECTORIZE
   for (; p < end; p += kShadowCnt) {
     p[0] = v;
     for (uptr i = 1; i < kShadowCnt; i++) p[i] = Shadow::kEmpty;

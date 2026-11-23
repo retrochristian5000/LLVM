@@ -17,8 +17,8 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "tsan_array_darwin.h"
-#include "tsan_platform.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_platform.h"
+#include "../rtl/tsan_rtl.h"
 
 namespace __tsan {
 

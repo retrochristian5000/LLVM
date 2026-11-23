@@ -1,4 +1,4 @@
-include_directories(../.. ../buff ../flags ../endian ../got)
+include_directories(../.. ../array ../buff ../flags ../endian ../got)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -23,7 +23,7 @@ append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread TSAN_DYNAMIC_LINK_LIBS)
 
 set(TSAN_SOURCES
   ../buff/tsan_buff.cpp
-  tsan_array.cpp
+  ../array/tsan_array.cpp
   tsan_adaptive_delay.cpp
   tsan_debugging.cpp
   ../endian/tsan_endian.cpp
@@ -70,7 +70,7 @@ set(TSAN_PREINIT_SOURCES
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
-    tsan_array_darwin.cpp
+    ../array/tsan_array_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
@@ -114,7 +114,7 @@ endif()
 
 set(TSAN_HEADERS
   ../buff/tsan_buff.h
-  tsan_array_darwin.h
+  ../array/tsan_array_darwin.h
   tsan_aarch64_regs.h
   tsan_defs.h
   tsan_dense_alloc.h
@@ -174,6 +174,7 @@ if(APPLE)
     tsan_interceptors_aarch64.S
     ../got/tsan_got_aarch64.S
     ../buff/tsan_buff_aarch64.S
+    ../array/tsan_array_aarch64.S
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
@@ -235,6 +236,7 @@ else()
       set(TSAN_ASM_SOURCES
         ../cpu/tsan_cpu_aarch64.S
         ../buff/tsan_buff_aarch64.S
+        ../array/tsan_array_aarch64.S
         tsan_ignore_aarch64.S
         tsan_interceptors_aarch64.S
         )

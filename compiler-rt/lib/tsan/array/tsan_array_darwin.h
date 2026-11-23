@@ -13,7 +13,7 @@
 
 #if SANITIZER_APPLE
 
-#include "tsan_defs.h"
+#include "../rtl/tsan_defs.h"
 
 namespace __tsan {
 
