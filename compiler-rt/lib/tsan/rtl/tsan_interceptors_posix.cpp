@@ -120,9 +120,6 @@ const int PTHREAD_MUTEX_RECURSIVE_NP = 1;
 const int PTHREAD_MUTEX_RECURSIVE = 2;
 const int PTHREAD_MUTEX_RECURSIVE_NP = 2;
 #endif
-#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
-const int EPOLL_CTL_ADD = 1;
-#endif
 const int SIGILL = 4;
 const int SIGTRAP = 5;
 const int SIGABRT = 6;
@@ -367,28 +364,6 @@ void ScopedInterceptor::DisableIgnoresImpl() {
 
 #define READ_STRING(thr, pc, s, n)                             \
     READ_STRING_OF_LEN((thr), (pc), (s), internal_strlen(s), (n))
-
-#define BLOCK_REAL(name) (BlockingCall(thr), REAL(name))
-
-struct BlockingCall {
-  explicit BlockingCall(ThreadState *thr)
-      : thr(thr) {
-    EnterBlockingFunc(thr);
-    // When we are in a "blocking call", we process signals asynchronously
-    // (right when they arrive). In this context we do not expect to be
-    // executing any user/runtime code. The known interceptor sequence when
-    // this is not true is: pthread_join -> munmap(stack). It's fine
-    // to ignore munmap in this case -- we handle stack shadow separately.
-    thr->ignore_interceptors++;
-  }
-
-  ~BlockingCall() {
-    thr->ignore_interceptors--;
-    atomic_store(&thr->in_blocking_func, 0, memory_order_relaxed);
-  }
-
-  ThreadState *thr;
-};
 
 TSAN_INTERCEPTOR(unsigned, sleep, unsigned sec) {
   SCOPED_TSAN_INTERCEPTOR(sleep, sec);
@@ -1876,58 +1851,13 @@ TSAN_INTERCEPTOR(int, dup3, int oldfd, int newfd, int flags) {
 }
 #endif
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, eventfd, unsigned initval, int flags) {
-  SCOPED_TSAN_INTERCEPTOR(eventfd, initval, flags);
-  int fd = REAL(eventfd)(initval, flags);
-  if (fd >= 0)
-    FdEventCreate(thr, pc, fd);
-  return fd;
-}
-#define TSAN_MAYBE_INTERCEPT_EVENTFD TSAN_INTERCEPT(eventfd)
-#else
-#define TSAN_MAYBE_INTERCEPT_EVENTFD
-#endif
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, signalfd, int fd, void *mask, int flags) {
-  SCOPED_INTERCEPTOR_RAW(signalfd, fd, mask, flags);
-  FdClose(thr, pc, fd);
-  fd = REAL(signalfd)(fd, mask, flags);
-  if (!MustIgnoreInterceptor(thr))
-    FdSignalCreate(thr, pc, fd);
-  return fd;
-}
-#define TSAN_MAYBE_INTERCEPT_SIGNALFD TSAN_INTERCEPT(signalfd)
-#else
-#define TSAN_MAYBE_INTERCEPT_SIGNALFD
-#endif
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, inotify_init, int fake) {
-  SCOPED_TSAN_INTERCEPTOR(inotify_init, fake);
-  int fd = REAL(inotify_init)(fake);
-  if (fd >= 0)
-    FdInotifyCreate(thr, pc, fd);
-  return fd;
-}
-#define TSAN_MAYBE_INTERCEPT_INOTIFY_INIT TSAN_INTERCEPT(inotify_init)
-#else
-#define TSAN_MAYBE_INTERCEPT_INOTIFY_INIT
-#endif
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, inotify_init1, int flags) {
-  SCOPED_TSAN_INTERCEPTOR(inotify_init1, flags);
-  int fd = REAL(inotify_init1)(flags);
-  if (fd >= 0)
-    FdInotifyCreate(thr, pc, fd);
-  return fd;
-}
-#define TSAN_MAYBE_INTERCEPT_INOTIFY_INIT1 TSAN_INTERCEPT(inotify_init1)
-#else
-#define TSAN_MAYBE_INTERCEPT_INOTIFY_INIT1
-#endif
+
+
+
+
 
 TSAN_INTERCEPTOR(int, socket, int domain, int type, int protocol) {
   SCOPED_TSAN_INTERCEPTOR(socket, domain, type, protocol);
@@ -2083,89 +2013,7 @@ TSAN_INTERCEPTOR(int, closedir, void *dirp) {
   return REAL(closedir)(dirp);
 }
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, epoll_create, int size) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_create, size);
-  int fd = REAL(epoll_create)(size);
-  if (fd >= 0)
-    FdPollCreate(thr, pc, fd);
-  return fd;
-}
 
-TSAN_INTERCEPTOR(int, epoll_create1, int flags) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_create1, flags);
-  int fd = REAL(epoll_create1)(flags);
-  if (fd >= 0)
-    FdPollCreate(thr, pc, fd);
-  return fd;
-}
-
-TSAN_INTERCEPTOR(int, epoll_ctl, int epfd, int op, int fd, void *ev) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_ctl, epfd, op, fd, ev);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  if (epfd >= 0 && fd >= 0)
-    FdAccess(thr, pc, fd);
-  if (op == EPOLL_CTL_ADD && epfd >= 0) {
-    FdPollAdd(thr, pc, epfd, fd);
-    FdRelease(thr, pc, epfd);
-  }
-  int res = REAL(epoll_ctl)(epfd, op, fd, ev);
-  return res;
-}
-
-TSAN_INTERCEPTOR(int, epoll_wait, int epfd, void *ev, int cnt, int timeout) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_wait, epfd, ev, cnt, timeout);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  int res = BLOCK_REAL(epoll_wait)(epfd, ev, cnt, timeout);
-  if (res > 0 && epfd >= 0)
-    FdAcquire(thr, pc, epfd);
-  return res;
-}
-
-TSAN_INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
-                 void *sigmask) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_pwait, epfd, ev, cnt, timeout, sigmask);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  int res = BLOCK_REAL(epoll_pwait)(epfd, ev, cnt, timeout, sigmask);
-  if (res > 0 && epfd >= 0)
-    FdAcquire(thr, pc, epfd);
-  return res;
-}
-
-TSAN_INTERCEPTOR(int, epoll_pwait2, int epfd, void *ev, int cnt, void *timeout,
-                 void *sigmask) {
-  SCOPED_INTERCEPTOR_RAW(epoll_pwait2, epfd, ev, cnt, timeout, sigmask);
-  // This function is new and may not be present in libc and/or kernel.
-  // Since we effectively add it to libc (as will be probed by the program
-  // using dlsym or a weak function pointer) we need to handle the case
-  // when it's not present in the actual libc.
-  if (!REAL(epoll_pwait2)) {
-    errno = errno_ENOSYS;
-    return -1;
-  }
-  if (MustIgnoreInterceptor(thr))
-    REAL(epoll_pwait2)(epfd, ev, cnt, timeout, sigmask);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  int res = BLOCK_REAL(epoll_pwait2)(epfd, ev, cnt, timeout, sigmask);
-  if (res > 0 && epfd >= 0)
-    FdAcquire(thr, pc, epfd);
-  return res;
-}
-
-#  define TSAN_MAYBE_INTERCEPT_EPOLL \
-    TSAN_INTERCEPT(epoll_create);    \
-    TSAN_INTERCEPT(epoll_create1);   \
-    TSAN_INTERCEPT(epoll_ctl);       \
-    TSAN_INTERCEPT(epoll_wait);      \
-    TSAN_INTERCEPT(epoll_pwait);     \
-    TSAN_INTERCEPT(epoll_pwait2)
-#else
-#define TSAN_MAYBE_INTERCEPT_EPOLL
-#endif
 
 // The following functions are intercepted merely to process pending signals.
 // If program blocks signal X, we must deliver the signal before the function
@@ -3184,16 +3032,14 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(dup);
   TSAN_INTERCEPT(dup2);
   TSAN_INTERCEPT(dup3);
-  TSAN_MAYBE_INTERCEPT_EVENTFD;
-  TSAN_MAYBE_INTERCEPT_SIGNALFD;
-  TSAN_MAYBE_INTERCEPT_INOTIFY_INIT;
-  TSAN_MAYBE_INTERCEPT_INOTIFY_INIT1;
   TSAN_INTERCEPT(socket);
   TSAN_INTERCEPT(socketpair);
   TSAN_INTERCEPT(connect);
   TSAN_INTERCEPT(bind);
   TSAN_INTERCEPT(listen);
-  TSAN_MAYBE_INTERCEPT_EPOLL;
+#if SANITIZER_LINUX
+  InitializeLinuxInterceptors();
+#endif
   TSAN_INTERCEPT(close);
   TSAN_MAYBE_INTERCEPT___CLOSE;
   TSAN_MAYBE_INTERCEPT___RES_ICLOSE;
