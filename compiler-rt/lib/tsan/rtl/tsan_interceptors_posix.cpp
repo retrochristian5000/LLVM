@@ -36,6 +36,7 @@
 #endif
 #include "tsan_adaptive_delay.h"
 #include "tsan_interceptors.h"
+#include "tsan_interceptors_darwin.h"
 #include "tsan_interface.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
@@ -72,37 +73,16 @@ const int kSigCount = 129;
 const int kSigCount = 65;
 #endif
 
-#if SANITIZER_APPLE
-struct ucontext_t {
-  // Darwin passes a small ucontext header. The machine context is accessed
-  // through uc_mcontext and is not contiguous with the header on the signal
-  // stack. Copying the Linux-sized structure can read off the stack.
-#  if SANITIZER_WORDSIZE == 64
-  u64 opaque[56 / sizeof(u64)];
-#  else
-  u32 opaque[32 / sizeof(u32)];
-#  endif
-};
-#elif defined(__mips__)
+#if defined(__mips__)
 struct ucontext_t {
   u64 opaque[768 / sizeof(u64) + 1];
 };
-#else
+#elif !SANITIZER_APPLE
 struct ucontext_t {
   // The size is determined by looking at sizeof of real ucontext_t on linux.
   u64 opaque[936 / sizeof(u64) + 1];
 };
 #endif
-
-// Apple's siginfo_t is smaller than the opaque Linux-sized placeholder in
-// sanitizer_platform_limits_posix.h. Copy only the Darwin ABI extent.
-#if SANITIZER_APPLE
-constexpr uptr kSignalInfoCopySize = SANITIZER_WORDSIZE == 64 ? 104 : 64;
-#else
-constexpr uptr kSignalInfoCopySize = sizeof(__sanitizer_siginfo);
-#endif
-static_assert(kSignalInfoCopySize <= sizeof(__sanitizer_siginfo),
-              "signal info copy exceeds temporary storage");
 
 extern "C" int pthread_attr_init(void *attr);
 extern "C" int pthread_attr_destroy(void *attr);
@@ -187,7 +167,11 @@ struct SignalDesc {
   bool armed;
   __sanitizer_siginfo siginfo;
   bool has_ctx;
+#if SANITIZER_APPLE
+  DarwinSignalContext ctx;
+#else
   ucontext_t ctx;
+#endif
 };
 
 struct ThreadSignalContext {
@@ -2368,10 +2352,19 @@ void sighandler(int sig, __sanitizer_siginfo *info, void *ctx) {
   SignalDesc *signal = &sctx->pending_signals[sig];
   if (signal->armed == false) {
     signal->armed = true;
-    internal_memcpy(&signal->siginfo, info, kSignalInfoCopySize);
+#if SANITIZER_APPLE
+    CopyDarwinSignalInfo(&signal->siginfo, info);
+#else
+    internal_memcpy(&signal->siginfo, info, sizeof(signal->siginfo));
+#endif
     signal->has_ctx = (ctx != nullptr);
-    if (ctx)
+    if (ctx) {
+#if SANITIZER_APPLE
+      CopyDarwinSignalContext(&signal->ctx, ctx);
+#else
       internal_memcpy(&signal->ctx, ctx, sizeof(signal->ctx));
+#endif
+    }
     atomic_store(&thr->pending_signals, 1, memory_order_relaxed);
   }
 }
