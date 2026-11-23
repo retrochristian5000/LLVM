@@ -6,6 +6,7 @@
 
 #include "sanitizer_common/sanitizer_asm.h"
 #include "builtins/assembly.h"
+#include "tsan_aarch64_regs.h"
 
 TEXT_SECTION
 #if defined(__APPLE__)
@@ -25,16 +26,16 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
   // Save frame/link register
   stp     x29, x30, [sp, -32]!
   CFI_DEF_CFA_OFFSET (32)
-  CFI_OFFSET (29, -32)
-  CFI_OFFSET (30, -24)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_FP, -32)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_LR, -24)
 
   // Adjust the SP for previous frame
   add     x29, sp, 0
-  CFI_DEF_CFA_REGISTER (29)
+  CFI_DEF_CFA_REGISTER (TSAN_AARCH64_DWARF_FP)
 
   // Save env parameter
   str     x0, [sp, 16]
-  CFI_OFFSET (0, -16)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
 
   // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
   add     x0, x29, 32
@@ -44,13 +45,13 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
 
   // Restore env parameter
   ldr     x0, [sp, 16]
-  CFI_RESTORE (0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X0)
 
   // Restore frame/link register
   ldp     x29, x30, [sp], 32
-  CFI_RESTORE (29)
-  CFI_RESTORE (30)
-  CFI_DEF_CFA (31, 0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_FP)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_LR)
+  CFI_DEF_CFA (TSAN_AARCH64_DWARF_SP, 0)
 
   // tail jump to libc setjmp
 #if !defined(__APPLE__)
@@ -78,16 +79,16 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
   // Save frame/link register
   stp     x29, x30, [sp, -32]!
   CFI_DEF_CFA_OFFSET (32)
-  CFI_OFFSET (29, -32)
-  CFI_OFFSET (30, -24)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_FP, -32)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_LR, -24)
 
   // Adjust the SP for previous frame
   add     x29, sp, 0
-  CFI_DEF_CFA_REGISTER (29)
+  CFI_DEF_CFA_REGISTER (TSAN_AARCH64_DWARF_FP)
 
   // Save env parameter
   str     x0, [sp, 16]
-  CFI_OFFSET (0, -16)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
 
   // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
   add     x0, x29, 32
@@ -97,13 +98,13 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
 
   // Restore env parameter
   ldr     x0, [sp, 16]
-  CFI_RESTORE (0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X0)
 
   // Restore frame/link register
   ldp     x29, x30, [sp], 32
-  CFI_RESTORE (29)
-  CFI_RESTORE (30)
-  CFI_DEF_CFA (31, 0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_FP)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_LR)
+  CFI_DEF_CFA (TSAN_AARCH64_DWARF_SP, 0)
 
   // tail jump to libc setjmp
 #if !defined(__APPLE__)
@@ -130,17 +131,17 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
   // Save frame/link register
   stp     x29, x30, [sp, -32]!
   CFI_DEF_CFA_OFFSET (32)
-  CFI_OFFSET (29, -32)
-  CFI_OFFSET (30, -24)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_FP, -32)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_LR, -24)
 
   // Adjust the SP for previous frame
   add     x29, sp, 0
-  CFI_DEF_CFA_REGISTER (29)
+  CFI_DEF_CFA_REGISTER (TSAN_AARCH64_DWARF_FP)
 
   // Save env and savesigs parameter
   stp     x0, x1, [sp, 16]
-  CFI_OFFSET (0, -16)
-  CFI_OFFSET (1, -8)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X1, -8)
 
   // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
   add     x0, x29, 32
@@ -150,14 +151,14 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
 
   // Restore env and savesigs parameter
   ldp     x0, x1, [sp, 16]
-  CFI_RESTORE (0)
-  CFI_RESTORE (1)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X1)
 
   // Restore frame/link register
   ldp     x29, x30, [sp], 32
-  CFI_RESTORE (29)
-  CFI_RESTORE (30)
-  CFI_DEF_CFA (31, 0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_FP)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_LR)
+  CFI_DEF_CFA (TSAN_AARCH64_DWARF_SP, 0)
 
   // tail jump to libc sigsetjmp
 #if !defined(__APPLE__)
@@ -182,17 +183,17 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
   // Save frame/link register
   stp     x29, x30, [sp, -32]!
   CFI_DEF_CFA_OFFSET (32)
-  CFI_OFFSET (29, -32)
-  CFI_OFFSET (30, -24)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_FP, -32)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_LR, -24)
 
   // Adjust the SP for previous frame
   add     x29, sp, 0
-  CFI_DEF_CFA_REGISTER (29)
+  CFI_DEF_CFA_REGISTER (TSAN_AARCH64_DWARF_FP)
 
   // Save env and savesigs parameter
   stp     x0, x1, [sp, 16]
-  CFI_OFFSET (0, -16)
-  CFI_OFFSET (1, -8)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X0, -16)
+  CFI_OFFSET (TSAN_AARCH64_DWARF_X1, -8)
 
   // Obtain SP, first argument to `void __tsan_setjmp(uptr sp)`
   add     x0, x29, 32
@@ -202,14 +203,14 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
 
   // Restore env and savesigs parameter
   ldp     x0, x1, [sp, 16]
-  CFI_RESTORE (0)
-  CFI_RESTORE (1)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_X1)
 
   // Restore frame/link register
   ldp     x29, x30, [sp], 32
-  CFI_RESTORE (29)
-  CFI_RESTORE (30)
-  CFI_DEF_CFA (31, 0)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_FP)
+  CFI_RESTORE (TSAN_AARCH64_DWARF_LR)
+  CFI_DEF_CFA (TSAN_AARCH64_DWARF_SP, 0)
 
   // tail jump to libc __sigsetjmp
 #if !defined(__APPLE__)

@@ -98,6 +98,7 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
 endif()
 
 set(TSAN_HEADERS
+  tsan_aarch64_regs.h
   tsan_defs.h
   tsan_dense_alloc.h
   tsan_fd.h
