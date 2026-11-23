@@ -47,7 +47,7 @@ SUFFIX="${GOOS}_${GOARCH}"
 
 SRCS="
 	tsan_go.cpp
-	../rtl/tsan_buff.cpp
+	../buff/tsan_buff.cpp
 	../rtl/tsan_external.cpp
 	../flags/tsan_flags.cpp
 	../endian/tsan_endian.cpp
@@ -223,7 +223,7 @@ for F in $SRCS; do
 	cat $F
 done > $DIR/gotsan.cpp
 
-FLAGS=" -I../interface -I../rtl -I../flags -I../endian -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
+FLAGS=" -I../interface -I../rtl -I../buff -I../flags -I../endian -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
 DEBUG_FLAGS="$FLAGS -DSANITIZER_DEBUG=1 -g"
 FLAGS="$FLAGS -DSANITIZER_DEBUG=0 -O3 -fomit-frame-pointer"
 

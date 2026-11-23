@@ -13,17 +13,26 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
-#include "tsan_mman.h"
-#include "tsan_stack_trace.h"
+#include "../rtl/tsan_mman.h"
+#include "../rtl/tsan_stack_trace.h"
 
 namespace __tsan {
+
+#if defined(__aarch64__) && !SANITIZER_GO
+// This symbol is provided by tsan_buff_aarch64.S in native AArch64 builds.
+extern "C" void __tsan_reverse_pc_buffer_aarch64(uptr *pcs, uptr count);
+#endif
 
 void ReversePcBuffer(uptr *pcs, uptr count) {
   if (!count)
     return;
   CHECK(pcs);
+#if defined(__aarch64__) && !SANITIZER_GO
+  __tsan_reverse_pc_buffer_aarch64(pcs, count);
+#else
   for (uptr i = 0; i < count / 2; ++i)
     Swap(pcs[i], pcs[count - i - 1]);
+#endif
 }
 
 VarSizeStackTrace::VarSizeStackTrace()

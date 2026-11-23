@@ -47,6 +47,8 @@ target(tsan_target_type, "rtl") {
 
   sources = [
     "tsan_aarch64_regs.h",
+    "../buff/tsan_buff.cpp",
+    "../buff/tsan_buff.h",
     "tsan_adaptive_delay.cpp",
     "tsan_debugging.cpp",
     "tsan_defs.h",
@@ -151,6 +153,7 @@ target(tsan_target_type, "rtl") {
   } else if (target_cpu == "arm64") {
     sources += [
       "../cpu/tsan_cpu_aarch64.S",
+      "../buff/tsan_buff_aarch64.S",
       "tsan_interceptors_aarch64.S",
     ]
     if (target_os == "mac") {

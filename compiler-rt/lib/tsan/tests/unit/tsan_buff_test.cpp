@@ -34,6 +34,25 @@ TEST(Buff, ReverseOddAndEvenEntries) {
   EXPECT_EQ(10U, even[3]);
 }
 
+TEST(Buff, ReverseAllLengthsWithoutOverwritingNeighbors) {
+  const uptr left_canary = 0x11223344;
+  const uptr right_canary = 0x55667788;
+  for (uptr count = 0; count <= 65; ++count) {
+    uptr pcs[67] = {};
+    pcs[0] = left_canary;
+    for (uptr i = 0; i < count; ++i)
+      pcs[i + 1] = i + 1;
+    pcs[count + 1] = right_canary;
+
+    ReversePcBuffer(pcs + 1, count);
+
+    EXPECT_EQ(left_canary, pcs[0]);
+    EXPECT_EQ(right_canary, pcs[count + 1]);
+    for (uptr i = 0; i < count; ++i)
+      EXPECT_EQ(count - i, pcs[i + 1]);
+  }
+}
+
 TEST(Buff, VarSizeTraceInitializeReverseAndClear) {
   VarSizeStackTrace trace;
   trace.Init(nullptr, 0);
