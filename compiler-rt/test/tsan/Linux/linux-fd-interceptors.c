@@ -28,14 +28,14 @@ int main(void) {
     return 2;
 
   const uint64_t written = 1;
-  if (write(ev, &written, sizeof(written)) != sizeof(written))
+  if (write(ev, &written, sizeof(written)) != (ssize_t)sizeof(written))
     return 3;
 
   struct epoll_event ready = {0};
   if (epoll_wait(ep, &ready, 1, 1000) != 1 || ready.data.fd != ev)
     return 4;
   uint64_t received = 0;
-  if (read(ev, &received, sizeof(received)) != sizeof(received) ||
+  if (read(ev, &received, sizeof(received)) != (ssize_t)sizeof(received) ||
       received != written)
     return 5;
 
