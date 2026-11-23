@@ -7,13 +7,14 @@
 //===----------------------------------------------------------------------===//
 //
 // Thread shadow-stack allocation, growth, release, and stack depot IDs.
-// Unwinding and variable-size trace buffers remain in tsan_stack_trace.cpp.
+// Unwinding lives in tsan_stack_trace.cpp. Variable-size trace storage is
+// managed by ../buff/tsan_buff.cpp.
 
 #include "tsan_stack.h"
 
 #include "sanitizer_common/sanitizer_stackdepot.h"
-#include "tsan_mman.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_mman.h"
+#include "../rtl/tsan_rtl.h"
 
 namespace __tsan {
 

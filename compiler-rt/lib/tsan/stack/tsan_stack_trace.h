@@ -13,7 +13,7 @@
 #define TSAN_STACK_TRACE_H
 
 #include "sanitizer_common/sanitizer_stacktrace.h"
-#include "tsan_defs.h"
+#include "../rtl/tsan_defs.h"
 
 namespace __tsan {
 

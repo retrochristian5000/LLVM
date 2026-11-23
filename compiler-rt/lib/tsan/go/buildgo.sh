@@ -62,8 +62,8 @@ SRCS="
 	../rtl/tsan_rtl_report.cpp
 	../rtl/tsan_thread.cpp
 	../rtl/tsan_rtl_proc.cpp
-	../rtl/tsan_stack.cpp
-	../rtl/tsan_stack_trace.cpp
+	../stack/tsan_stack.cpp
+	../stack/tsan_stack_trace.cpp
 	../rtl/tsan_suppressions.cpp
 	../rtl/tsan_sync.cpp
 	../rtl/tsan_vector_clock.cpp
@@ -223,7 +223,7 @@ for F in $SRCS; do
 	cat $F
 done > $DIR/gotsan.cpp
 
-FLAGS=" -I../interface -I../rtl -I../buff -I../warn -I../flags -I../endian -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
+FLAGS=" -I../interface -I../rtl -I../buff -I../stack -I../warn -I../flags -I../endian -I../.. -I../../sanitizer_common -I../../../include -std=c++17 -Wall -fno-exceptions -fno-rtti -DSANITIZER_GO=1 -DSANITIZER_DEADLOCK_DETECTOR_VERSION=2 $OSCFLAGS $ARCHCFLAGS $EXTRA_CFLAGS"
 DEBUG_FLAGS="$FLAGS -DSANITIZER_DEBUG=1 -g"
 FLAGS="$FLAGS -DSANITIZER_DEBUG=0 -O3 -fomit-frame-pointer"
 

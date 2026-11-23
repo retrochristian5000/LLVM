@@ -12,12 +12,18 @@
 #ifndef TSAN_STACK_H
 #define TSAN_STACK_H
 
-#include "tsan_defs.h"
+#include "../rtl/tsan_defs.h"
 
 namespace __tsan {
 
 void InitializeShadowStack(ThreadState *thr);
 void DestroyShadowStack(ThreadState *thr);
+
+#if SANITIZER_APPLE && !SANITIZER_GO
+// Record a newly started Darwin thread's stack as initialized. ThreadStart
+// handles the main-thread exception and TLS initialization separately.
+void ImitateDarwinStackInitialization(ThreadState *thr);
+#endif
 
 StackID CurrentStackId(ThreadState *thr, uptr pc);
 

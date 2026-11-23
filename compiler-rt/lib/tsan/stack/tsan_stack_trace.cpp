@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "tsan_stack_trace.h"
-#include "tsan_rtl.h"
+#include "../rtl/tsan_rtl.h"
 
 
 #if !SANITIZER_GO

@@ -1,4 +1,4 @@
-include_directories(../rtl ../array ../buff ../interface ../flags ../endian ../reg ../warn)
+include_directories(../rtl ../array ../buff ../interface ../flags ../endian ../reg ../stack ../warn)
 
 add_custom_target(TsanUnitTests)
 set_target_properties(TsanUnitTests PROPERTIES
@@ -16,6 +16,7 @@ set(TSAN_UNITTEST_CFLAGS
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/flags
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/endian
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/reg
+  -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/stack
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/warn
   -I${COMPILER_RT_SOURCE_DIR}/lib/tsan/interface
   -DSANITIZER_COMMON_NO_REDEFINE_BUILTINS

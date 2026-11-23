@@ -215,11 +215,15 @@ void ThreadStart(ThreadState *thr, Tid tid, ThreadID os_id,
   // TLS_SLOT_SANITIZER slot. So skip this check on
   // Android platform.
   if (tid != kMainTid) {
+#if SANITIZER_APPLE
+    ImitateDarwinStackInitialization(thr);
+#else
     if (stk_addr && stk_size) {
       const uptr pc = StackTrace::GetNextInstructionPc(
           reinterpret_cast<uptr>(__tsan_stack_initialization));
       MemoryRangeImitateWrite(thr, pc, stk_addr, stk_size);
     }
+#endif
 
     if (tls_addr && tls_size)
       ImitateTlsWrite(thr, tls_addr, tls_size);

@@ -75,6 +75,20 @@ TEST(Stack, ShadowStackAllocationAndRelease) {
   EXPECT_EQ(nullptr, thr.shadow_stack_end);
 }
 
+#if SANITIZER_APPLE && !SANITIZER_GO
+TEST(Stack, DarwinEmptyInitializationIsNoOp) {
+  ThreadState thr(kMainTid);
+
+  thr.stk_addr = 0;
+  thr.stk_size = 4096;
+  ImitateDarwinStackInitialization(&thr);
+
+  thr.stk_addr = 4096;
+  thr.stk_size = 0;
+  ImitateDarwinStackInitialization(&thr);
+}
+#endif
+
 TEST(StackTrace, BasicVarSize) {
   VarSizeStackTrace trace;
   TestStackTrace(&trace);
