@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "tsan_defs.h"
-#include "tsan_endian.h"
+#include "../endian/tsan_endian.h"
 
 namespace __tsan {
 

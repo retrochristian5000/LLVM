@@ -11,7 +11,7 @@
 // Mach VM accounting and Darwin jump-buffer ABI handling belong elsewhere.
 
 #include "tsan_macho.h"
-#include "tsan_endian_darwin.h"
+#include "../endian/tsan_endian_darwin.h"
 
 #if SANITIZER_APPLE
 

@@ -1,4 +1,4 @@
-include_directories(../.. ../flags)
+include_directories(../.. ../flags ../endian)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -26,8 +26,8 @@ set(TSAN_SOURCES
   tsan_array.cpp
   tsan_adaptive_delay.cpp
   tsan_debugging.cpp
-  tsan_endian.cpp
-  tsan_endian_little.cpp
+  ../endian/tsan_endian.cpp
+  ../endian/tsan_endian_little.cpp
   tsan_external.cpp
   tsan_fd.cpp
   ../flags/tsan_flags.cpp
@@ -72,7 +72,7 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     tsan_array_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
-    tsan_endian_darwin.cpp
+    ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
     tsan_got.cpp
     tsan_interceptors_darwin.cpp
@@ -118,8 +118,8 @@ set(TSAN_HEADERS
   tsan_aarch64_regs.h
   tsan_defs.h
   tsan_dense_alloc.h
-  tsan_endian.h
-  tsan_endian_darwin.h
+  ../endian/tsan_endian.h
+  ../endian/tsan_endian_darwin.h
   tsan_fd.h
   ../flags/tsan_flags.h
   ../flags/tsan_flags.inc

@@ -51,15 +51,15 @@ target(tsan_target_type, "rtl") {
     "tsan_debugging.cpp",
     "tsan_defs.h",
     "tsan_dense_alloc.h",
-    "tsan_endian.cpp",
-    "tsan_endian_little.cpp",
-    "tsan_endian.h",
+    "../endian/tsan_endian.cpp",
+    "../endian/tsan_endian_little.cpp",
+    "../endian/tsan_endian.h",
     "tsan_external.cpp",
     "tsan_fd.cpp",
     "tsan_fd.h",
-    "tsan_flags.cpp",
-    "tsan_flags.h",
-    "tsan_flags.inc",
+    "../flags/tsan_flags.cpp",
+    "../flags/tsan_flags.h",
+    "../flags/tsan_flags.inc",
     "tsan_ignoreset.cpp",
     "tsan_ignoreset.h",
     "tsan_ilist.h",
@@ -102,14 +102,17 @@ target(tsan_target_type, "rtl") {
     "tsan_sync.cpp",
     "tsan_sync.h",
     "tsan_trace.h",
-    "tsan_update_shadow_word.inc",
     "tsan_vector_clock.cpp",
     "tsan_vector_clock.h",
     "tsan_warn.cpp",
   ]
   if (target_os == "mac") {
     sources += [
-      "tsan_cpu_darwin.cpp",
+      "../cpu/tsan_cpu_darwin.cpp",
+      "../endian/tsan_endian_darwin.cpp",
+      "../endian/tsan_endian_darwin.h",
+      "tsan_macho.cpp",
+      "tsan_macho.h",
       "tsan_fd_darwin.cpp",
       "tsan_interceptors_darwin.cpp",
       "tsan_interceptors_darwin.h",
@@ -127,7 +130,7 @@ target(tsan_target_type, "rtl") {
   } else {
     # CPU VMA validation and platform initialization support Linux and BSD.
     sources += [
-      "tsan_cpu.cpp",
+      "../cpu/tsan_cpu.cpp",
       "tsan_platform_linux.cpp",
       "tsan_platform_posix.cpp",
     ]
@@ -145,7 +148,7 @@ target(tsan_target_type, "rtl") {
     sources += [ "tsan_interceptors_amd64.S" ]
   } else if (target_cpu == "arm64") {
     sources += [
-      "tsan_cpu_aarch64.S",
+      "../cpu/tsan_cpu_aarch64.S",
       "tsan_interceptors_aarch64.S",
     ]
   } else if (target_cpu == "loongarch64") {

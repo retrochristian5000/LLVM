@@ -12,7 +12,7 @@
 #ifndef TSAN_ENDIAN_H
 #define TSAN_ENDIAN_H
 
-#include "tsan_defs.h"
+#include "../rtl/tsan_defs.h"
 
 namespace __tsan {
 
