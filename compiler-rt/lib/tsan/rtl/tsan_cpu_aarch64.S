@@ -21,7 +21,11 @@ TEXT_SECTION
 #endif
 
 .globl ASM_SYMBOL(__tsan_cpu_aarch64_vma_bits)
+#if defined(__APPLE__)
+.private_extern ASM_SYMBOL(__tsan_cpu_aarch64_vma_bits)
+#else
 ASM_HIDDEN(ASM_SYMBOL(__tsan_cpu_aarch64_vma_bits))
+#endif
 ASM_TYPE_FUNCTION(ASM_SYMBOL(__tsan_cpu_aarch64_vma_bits))
 ASM_SYMBOL(__tsan_cpu_aarch64_vma_bits):
   CFI_STARTPROC
