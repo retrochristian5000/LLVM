@@ -13,14 +13,11 @@
 #if SANITIZER_APPLE
 
 #include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_mac.h"
-#include "sanitizer_common/sanitizer_ptrauth.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
 
 #include <mach/mach.h>
-#include <pthread.h>
 
 namespace __tsan {
 
@@ -94,32 +91,6 @@ void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
 #  endif
       stacks.n_uniq_ids, stacks.allocated / 1024, nthread, nlive);
 }
-
-static uptr longjmp_xor_key = 0;
-
-void InitializeDarwinLongJmp() {
-  if (GetMacosAlignedVersion() >= MacosVersion(10, 14)) {
-    // Libsystem currently uses a process-global key; this might change.
-    const unsigned kTLSLongjmpXorKeySlot = 0x7;
-    longjmp_xor_key = (uptr)pthread_getspecific(kTLSLongjmpXorKeySlot);
-  }
-}
-
-#ifdef __aarch64__
-# define LONG_JMP_SP_ENV_SLOT \
-    ((GetMacosAlignedVersion() >= MacosVersion(10, 14)) ? 12 : 13)
-#else
-# define LONG_JMP_SP_ENV_SLOT 2
-#endif
-
-uptr ExtractLongJmpSp(uptr *env) {
-  uptr mangled_sp = env[LONG_JMP_SP_ENV_SLOT];
-  uptr sp = mangled_sp ^ longjmp_xor_key;
-  sp = (uptr)ptrauth_auth_data((void *)sp, ptrauth_key_asdb,
-                               ptrauth_string_discriminator("sp"));
-  return sp;
-}
-
 }  // namespace __tsan
 
 #endif  // SANITIZER_APPLE

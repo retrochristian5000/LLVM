@@ -105,6 +105,7 @@ target(tsan_target_type, "rtl") {
   ]
   if (target_os == "mac") {
     sources += [
+      "tsan_cpu_darwin.cpp",
       "tsan_fd_darwin.cpp",
       "tsan_interceptors_darwin.cpp",
       "tsan_interceptors_darwin.h",

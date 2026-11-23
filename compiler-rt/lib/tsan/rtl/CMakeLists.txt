@@ -62,6 +62,7 @@ set(TSAN_PREINIT_SOURCES
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
+    tsan_cpu_darwin.cpp
     tsan_fd_darwin.cpp
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
