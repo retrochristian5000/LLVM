@@ -72,7 +72,18 @@ const int kSigCount = 129;
 const int kSigCount = 65;
 #endif
 
-#ifdef __mips__
+#if SANITIZER_APPLE
+struct ucontext_t {
+  // Darwin passes a small ucontext header. The machine context is accessed
+  // through uc_mcontext and is not contiguous with the header on the signal
+  // stack. Copying the Linux-sized structure can read off the stack.
+#  if SANITIZER_WORDSIZE == 64
+  u64 opaque[56 / sizeof(u64)];
+#  else
+  u32 opaque[32 / sizeof(u32)];
+#  endif
+};
+#elif defined(__mips__)
 struct ucontext_t {
   u64 opaque[768 / sizeof(u64) + 1];
 };
@@ -82,6 +93,16 @@ struct ucontext_t {
   u64 opaque[936 / sizeof(u64) + 1];
 };
 #endif
+
+// Apple's siginfo_t is smaller than the opaque Linux-sized placeholder in
+// sanitizer_platform_limits_posix.h. Copy only the Darwin ABI extent.
+#if SANITIZER_APPLE
+constexpr uptr kSignalInfoCopySize = SANITIZER_WORDSIZE == 64 ? 104 : 64;
+#else
+constexpr uptr kSignalInfoCopySize = sizeof(__sanitizer_siginfo);
+#endif
+static_assert(kSignalInfoCopySize <= sizeof(__sanitizer_siginfo),
+              "signal info copy exceeds temporary storage");
 
 extern "C" int pthread_attr_init(void *attr);
 extern "C" int pthread_attr_destroy(void *attr);
@@ -2347,7 +2368,7 @@ void sighandler(int sig, __sanitizer_siginfo *info, void *ctx) {
   SignalDesc *signal = &sctx->pending_signals[sig];
   if (signal->armed == false) {
     signal->armed = true;
-    internal_memcpy(&signal->siginfo, info, sizeof(*info));
+    internal_memcpy(&signal->siginfo, info, kSignalInfoCopySize);
     signal->has_ctx = (ctx != nullptr);
     if (ctx)
       internal_memcpy(&signal->ctx, ctx, sizeof(signal->ctx));
