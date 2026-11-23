@@ -23,6 +23,7 @@
 #include "tsan_adaptive_delay.h"
 #include "tsan_defs.h"
 #include "../interface/tsan_interface.h"
+#include "../interface/tsan_interface_darwin.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_suppressions.h"

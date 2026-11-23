@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_common/sanitizer_platform.h"
+#include "tsan_interface_darwin.h"
 
 #if SANITIZER_APPLE
 

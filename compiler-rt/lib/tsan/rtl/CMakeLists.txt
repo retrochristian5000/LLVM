@@ -137,6 +137,7 @@ set(TSAN_HEADERS
   ../interface/tsan_interface.inc
   ../interface/tsan_interface_ann.h
   ../interface/tsan_interface_aarch64.h
+  ../interface/tsan_interface_darwin.h
   ../interface/tsan_interface_java.h
   tsan_macho.h
   tsan_mman.h

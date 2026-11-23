@@ -123,6 +123,7 @@ target(tsan_target_type, "rtl") {
       "../endian/tsan_endian_darwin.cpp",
       "../endian/tsan_endian_darwin.h",
       "../interface/tsan_interface_darwin.cpp",
+      "../interface/tsan_interface_darwin.h",
       "../interface/tsan_interface_got.cpp",
       "../interface/tsan_interface_got.h",
       "tsan_macho.cpp",
