@@ -39,6 +39,7 @@ set(TSAN_SOURCES
   ../interface/tsan_interface.cpp
   ../interface/tsan_interface_ann.cpp
   ../interface/tsan_interface_atomic.cpp
+  ../interface/tsan_interface_cxx.cpp
   ../interface/tsan_interface_java.cpp
   tsan_md5.cpp
   tsan_mman.cpp

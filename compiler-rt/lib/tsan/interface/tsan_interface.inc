@@ -153,18 +153,6 @@ void __sanitizer_unaligned_store64(uu64 *addr, u64 v) {
 }
 }
 
-void __tsan_vptr_update(void **vptr_p, void *new_val) {
-  if (*vptr_p == new_val)
-    return;
-  MemoryAccess(cur_thread(), CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
-               kAccessWrite | kAccessVptr);
-}
-
-void __tsan_vptr_read(void **vptr_p) {
-  MemoryAccess(cur_thread(), CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
-               kAccessRead | kAccessVptr);
-}
-
 void __tsan_func_entry(void *pc) { FuncEntry(cur_thread(), STRIP_PAC_PC(pc)); }
 
 void __tsan_func_exit() { FuncExit(cur_thread()); }
