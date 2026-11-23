@@ -9,6 +9,11 @@
 
 namespace __tsan {
 
+// Linux-only interceptors are initialized separately from shared POSIX code.
+#if SANITIZER_LINUX
+void InitializeLinuxInterceptors();
+#endif
+
 // Signal-aware blocking calls are shared by POSIX interceptors and Linux's
 // epoll wait interceptors. Keep the transition logic in one place.
 void EnterBlockingFunc(ThreadState *thr);
