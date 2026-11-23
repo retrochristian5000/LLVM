@@ -16,7 +16,7 @@ type ^
   ..\rtl\tsan_sync.cpp ^
   ..\rtl\tsan_stack_trace.cpp ^
   ..\rtl\tsan_vector_clock.cpp ^
-  ..\rtl\tsan_warn.cpp ^
+  ..\warn\tsan_warn.cpp ^
   ..\..\sanitizer_common\sanitizer_allocator.cpp ^
   ..\..\sanitizer_common\sanitizer_common.cpp ^
   ..\..\sanitizer_common\sanitizer_flags.cpp ^
@@ -45,6 +45,7 @@ gcc ^
   gotsan.cpp ^
   -I..\interface ^
   -I..\rtl ^
+  -I..\warn ^
   -I..\flags ^
   -I..\endian ^
   -I..\.. ^

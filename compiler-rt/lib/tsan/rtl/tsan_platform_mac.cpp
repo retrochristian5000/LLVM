@@ -24,6 +24,7 @@
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
 #include "../flags/tsan_flags.h"
+#include "../warn/tsan_warn_darwin.h"
 
 #include <limits.h>
 #include <pthread.h>
@@ -53,19 +54,13 @@ void InitializePlatformEarly() {
 #  if !SANITIZER_GO && SANITIZER_IOS
   uptr max_vm = GetMaxUserVirtualAddress() + 1;
   if (max_vm < HiAppMemEnd()) {
-    Report(
-        "ThreadSanitizer: Unsupported virtual memory layout:\n\tVM address "
-        "limit = %p\n\tExpected %p.\n",
-        (void*)max_vm, (void*)HiAppMemEnd());
+    ReportDarwinVirtualMemoryLimit(max_vm, HiAppMemEnd());
     Die();
   }
   // In some configurations, the max_vm is expanded, but much of this space is
   // already mapped. TSAN will not work in this configuration.
   if (!MemoryRangeIsAvailable(HiAppMemEnd() - 1, HiAppMemEnd() - 1)) {
-    Report(
-        "ThreadSanitizer: Unsupported virtual memory layout: Address %p is "
-        "already mapped.\n",
-        (void*)(HiAppMemEnd() - 1));
+    ReportDarwinOccupiedShadowAddress(HiAppMemEnd() - 1);
     Die();
   }
 #endif
@@ -89,7 +84,7 @@ void InitializePlatform() {
   }
 #if !SANITIZER_GO
   if (!CheckAndProtect(true, true, true)) {
-    Printf("FATAL: ThreadSanitizer: found incompatible memory layout.\n");
+    ReportDarwinIncompatibleMemoryLayout();
     Die();
   }
 

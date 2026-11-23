@@ -15,15 +15,15 @@
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "../flags/tsan_flags.h"
-#include "tsan_report.h"
-#include "tsan_rtl.h"
-#include "tsan_suppressions.h"
+#include "../rtl/tsan_report.h"
+#include "../rtl/tsan_rtl.h"
+#include "../rtl/tsan_suppressions.h"
 
 namespace __tsan {
 
 using namespace __sanitizer;
 
-// Can be overriden by an application/test to intercept reports.
+// Can be overridden by an application/test to intercept reports.
 #ifdef TSAN_EXTERNAL_HOOKS
 bool OnReport(const ReportDesc *rep, bool suppressed);
 #else

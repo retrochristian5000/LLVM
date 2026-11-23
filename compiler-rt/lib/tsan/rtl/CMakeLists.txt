@@ -1,4 +1,4 @@
-include_directories(../.. ../array ../buff ../flags ../endian ../got ../reg)
+include_directories(../.. ../array ../buff ../flags ../endian ../got ../reg ../warn)
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
@@ -57,7 +57,7 @@ set(TSAN_SOURCES
   tsan_symbolize.cpp
   tsan_sync.cpp
   tsan_vector_clock.cpp
-  tsan_warn.cpp
+  ../warn/tsan_warn.cpp
   )
 
 set(TSAN_CXX_SOURCES
@@ -71,6 +71,7 @@ set(TSAN_PREINIT_SOURCES
 if(APPLE)
   list(APPEND TSAN_SOURCES
     ../array/tsan_array_darwin.cpp
+    ../warn/tsan_warn_darwin.cpp
     ../cpu/tsan_cpu_darwin.cpp
     ../endian/tsan_endian_darwin.cpp
     tsan_fd_darwin.cpp
@@ -149,6 +150,7 @@ set(TSAN_HEADERS
   tsan_trace.h
   tsan_type.h
   tsan_vector_clock.h
+  ../warn/tsan_warn_darwin.h
   )
 
 set(TSAN_RUNTIME_LIBRARIES)

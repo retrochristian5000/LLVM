@@ -107,13 +107,15 @@ target(tsan_target_type, "rtl") {
     "tsan_trace.h",
     "tsan_vector_clock.cpp",
     "tsan_vector_clock.h",
-    "tsan_warn.cpp",
+    "../warn/tsan_warn.cpp",
   ]
   if (target_os == "mac") {
     sources += [
       "../cpu/tsan_cpu_darwin.cpp",
       "../array/tsan_array_darwin.cpp",
       "../array/tsan_array_darwin.h",
+      "../warn/tsan_warn_darwin.cpp",
+      "../warn/tsan_warn_darwin.h",
       "../endian/tsan_endian_darwin.cpp",
       "../endian/tsan_endian_darwin.h",
       "../got/tsan_got.cpp",
