@@ -14,6 +14,11 @@ namespace __tsan {
 void InitializeLinuxInterceptors();
 #endif
 
+// glibc is a libc implementation, not a synonym for Linux.
+#if SANITIZER_GLIBC
+void InitializeGlibcInterceptors();
+#endif
+
 // Signal-aware blocking calls are shared by POSIX interceptors and Linux's
 // epoll wait interceptors. Keep the transition logic in one place.
 void EnterBlockingFunc(ThreadState *thr);

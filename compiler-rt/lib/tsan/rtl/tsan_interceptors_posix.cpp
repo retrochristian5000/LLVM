@@ -1488,35 +1488,7 @@ TSAN_INTERCEPTOR(int, pthread_mutex_clocklock, void *m,
 }
 #endif
 
-#if SANITIZER_GLIBC
-#  if !__GLIBC_PREREQ(2, 34)
-// glibc 2.34 applies a non-default version for the two functions. They are no
-// longer expected to be intercepted by programs.
-TSAN_INTERCEPTOR(int, __pthread_mutex_lock, void *m) {
-  SCOPED_TSAN_INTERCEPTOR(__pthread_mutex_lock, m);
-  MutexPreLock(thr, pc, (uptr)m);
-  AdaptiveDelay::SyncOp();
-  int res = BLOCK_REAL(__pthread_mutex_lock)(m);
-  if (res == errno_EOWNERDEAD)
-    MutexRepair(thr, pc, (uptr)m);
-  if (res == 0 || res == errno_EOWNERDEAD)
-    MutexPostLock(thr, pc, (uptr)m);
-  if (res == errno_EINVAL)
-    MutexInvalidAccess(thr, pc, (uptr)m);
-  return res;
-}
 
-TSAN_INTERCEPTOR(int, __pthread_mutex_unlock, void *m) {
-  SCOPED_TSAN_INTERCEPTOR(__pthread_mutex_unlock, m);
-  MutexUnlock(thr, pc, (uptr)m);
-  int res = REAL(__pthread_mutex_unlock)(m);
-  AdaptiveDelay::SyncOp();
-  if (res == errno_EINVAL)
-    MutexInvalidAccess(thr, pc, (uptr)m);
-  return res;
-}
-#  endif
-#endif
 
 #if !SANITIZER_APPLE
 TSAN_INTERCEPTOR(int, pthread_spin_init, void *m, int pshared) {
@@ -1718,24 +1690,7 @@ TSAN_INTERCEPTOR(int, pthread_once, void *o, void (*f)()) {
   return 0;
 }
 
-#if SANITIZER_GLIBC
-TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__fxstat, version, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(__fxstat)(version, fd, buf);
-}
 
-TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__fxstat64, version, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(__fxstat64)(version, fd, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___FXSTAT TSAN_INTERCEPT(__fxstat); TSAN_INTERCEPT(__fxstat64)
-#else
-#define TSAN_MAYBE_INTERCEPT___FXSTAT
-#endif
 
 #if !SANITIZER_GLIBC || __GLIBC_PREREQ(2, 33)
 TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
@@ -1918,19 +1873,7 @@ TSAN_INTERCEPTOR(int, __close, int fd) {
 #define TSAN_MAYBE_INTERCEPT___CLOSE
 #endif
 
-// glibc guts
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(void, __res_iclose, void *state, bool free_addr) {
-  SCOPED_INTERCEPTOR_RAW(__res_iclose, state, free_addr);
-  int fds[64];
-  int cnt = ExtractResolvFDs(state, fds, ARRAY_SIZE(fds));
-  for (int i = 0; i < cnt; i++) FdClose(thr, pc, fds[i]);
-  REAL(__res_iclose)(state, free_addr);
-}
-#define TSAN_MAYBE_INTERCEPT___RES_ICLOSE TSAN_INTERCEPT(__res_iclose)
-#else
-#define TSAN_MAYBE_INTERCEPT___RES_ICLOSE
-#endif
+
 
 TSAN_INTERCEPTOR(int, pipe, int *pipefd) {
   SCOPED_TSAN_INTERCEPTOR(pipe, pipefd);
@@ -2990,15 +2933,13 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(pthread_mutex_trylock);
   TSAN_INTERCEPT(pthread_mutex_timedlock);
   TSAN_INTERCEPT(pthread_mutex_unlock);
+#if SANITIZER_GLIBC
+  InitializeGlibcInterceptors();
+#endif
 #if SANITIZER_LINUX
   TSAN_INTERCEPT(pthread_mutex_clocklock);
 #endif
-#if SANITIZER_GLIBC
-#  if !__GLIBC_PREREQ(2, 34)
-  TSAN_INTERCEPT(__pthread_mutex_lock);
-  TSAN_INTERCEPT(__pthread_mutex_unlock);
-#  endif
-#endif
+
 
   TSAN_INTERCEPT(pthread_spin_init);
   TSAN_INTERCEPT(pthread_spin_destroy);
@@ -3022,7 +2963,6 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(pthread_once);
 
-  TSAN_MAYBE_INTERCEPT___FXSTAT;
   TSAN_MAYBE_INTERCEPT_FSTAT;
   TSAN_MAYBE_INTERCEPT_FSTAT64;
   TSAN_INTERCEPT(open);
@@ -3042,7 +2982,6 @@ void InitializeInterceptors() {
 #endif
   TSAN_INTERCEPT(close);
   TSAN_MAYBE_INTERCEPT___CLOSE;
-  TSAN_MAYBE_INTERCEPT___RES_ICLOSE;
   TSAN_INTERCEPT(pipe);
   TSAN_INTERCEPT(pipe2);
 

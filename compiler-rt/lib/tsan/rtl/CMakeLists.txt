@@ -69,8 +69,9 @@ if(APPLE)
     tsan_platform_posix.cpp
     )
 elseif(UNIX)
-  # Assume Linux
+  # The glibc source is empty on other Linux libcs (e.g. musl).
   list(APPEND TSAN_SOURCES
+    tsan_interceptors_glibc.cpp
     tsan_interceptors_linux.cpp
     tsan_platform_linux.cpp
     tsan_platform_posix.cpp
