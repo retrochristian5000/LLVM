@@ -13,6 +13,10 @@
 #include "tsan_rtl.h"
 #include "gtest/gtest.h"
 
+#if SANITIZER_APPLE && !SANITIZER_GO
+#  include "tsan_array_darwin.h"
+#endif
+
 namespace __tsan {
 
 struct Region {
@@ -100,6 +104,41 @@ TEST(Shadow, Mapping) {
   CHECK(IsShadowMem(MemToShadow((uptr)&stack)));
   CHECK(IsShadowMem(MemToShadow((uptr)heap)));
 }
+
+TEST(Shadow, ApplicationMemoryRangeValidation) {
+  const uptr windows[][2] = {
+      {LoAppMemBeg(), LoAppMemEnd()},
+      {MidAppMemBeg(), MidAppMemEnd()},
+      {HeapMemBeg(), HeapMemEnd()},
+      {HiAppMemBeg(), HiAppMemEnd()},
+  };
+  EXPECT_FALSE(IsValidAppMemoryRange(0, 0));
+  EXPECT_FALSE(IsValidAppMemoryRange(~(uptr)0 - 1, 4));
+
+  for (const auto &window : windows) {
+    if (window[0] == window[1])
+      continue;
+    EXPECT_TRUE(IsValidAppMemoryRange(window[0], window[1] - window[0]));
+    EXPECT_TRUE(IsValidAppMemoryRange(window[1] - 1, 1));
+
+    bool has_adjacent_window = false;
+    for (const auto &other : windows)
+      has_adjacent_window |= other[0] == window[1] && other[0] < other[1];
+    EXPECT_EQ(has_adjacent_window,
+              IsValidAppMemoryRange(window[1] - 1, 2));
+  }
+}
+
+#if SANITIZER_APPLE && !SANITIZER_GO
+TEST(Shadow, DarwinMachVmPageRounding) {
+  const uptr page_size = GetPageSizeCached();
+  const uptr heap_end = HeapMemEnd();
+  ASSERT_GT(heap_end - HeapMemBeg(), page_size);
+  EXPECT_TRUE(DarwinArrayRangeIsSupported(heap_end - page_size, page_size));
+  // The final byte in the heap plus one byte outside it spans two pages.
+  EXPECT_FALSE(DarwinArrayRangeIsSupported(heap_end - 1, 2));
+}
+#endif
 
 TEST(Shadow, Celling) {
   u64 aligned_data[4];

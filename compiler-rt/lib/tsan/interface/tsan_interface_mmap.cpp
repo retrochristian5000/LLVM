@@ -28,11 +28,8 @@ namespace __tsan {
 namespace {
 
 bool IsValidAppRange(uptr addr, uptr size) {
-  // A zero-size mapping or a wrapped end address cannot describe
-  // a valid application-memory interval.
-  if (!size || addr > ~static_cast<uptr>(0) - (size - 1))
-    return false;
-  return IsAppMem(addr) && IsAppMem(addr + size - 1);
+  // Validate the whole interval, including gaps between address windows.
+  return IsValidAppMemoryRange(addr, size);
 }
 
 }  // namespace

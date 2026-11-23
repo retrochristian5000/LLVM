@@ -22,45 +22,22 @@
 
 namespace __tsan {
 
-static bool ContainsAddress(uptr addr, uptr begin, uptr end) {
-  return begin < end && addr >= begin && addr < end;
-}
-
-// The application windows on Darwin are not necessarily contiguous. Checking
-// only endpoints could miss a shadow-memory gap between them. Walk the four
-// possible windows, allowing adjacent windows without crossing a gap.
-static bool IsApplicationRange(uptr addr, uptr size) {
-  if (size > ~(uptr)0 - addr)
-    return false;
-  const uptr end = addr + size;
-  uptr current = addr;
-  for (unsigned i = 0; i < 4 && current < end; ++i) {
-    uptr covered = current;
-    if (ContainsAddress(current, LoAppMemBeg(), LoAppMemEnd()))
-      covered = Max(covered, LoAppMemEnd());
-    if (ContainsAddress(current, MidAppMemBeg(), MidAppMemEnd()))
-      covered = Max(covered, MidAppMemEnd());
-    if (ContainsAddress(current, HeapMemBeg(), HeapMemEnd()))
-      covered = Max(covered, HeapMemEnd());
-    if (ContainsAddress(current, HiAppMemBeg(), HiAppMemEnd()))
-      covered = Max(covered, HiAppMemEnd());
-    if (covered == current)
-      return false;
-    current = covered;
-  }
-  return current >= end;
-}
-
 bool DarwinArrayRangeIsSupported(uptr addr, uptr size) {
   if (!size)
     return true;
-  // Mach VM rounds allocations to whole pages.
+  // Mach VM uses page-granular ranges. Round the complete [addr, addr+size)
+  // interval; rounding size alone misses a second page for unaligned starts.
   const uptr page_size = GetPageSizeCached();
   CHECK(IsPowerOfTwo(page_size));
-  if (size > ~(uptr)0 - (page_size - 1))
+  const uptr max_addr = ~(uptr)0;
+  if (size > max_addr - addr)
     return false;
-  return IsApplicationRange(RoundDownTo(addr, page_size),
-                            RoundUpTo(size, page_size));
+  const uptr end = addr + size;
+  if (end > max_addr - (page_size - 1))
+    return false;
+  const uptr page_begin = RoundDownTo(addr, page_size);
+  const uptr page_end = RoundUpTo(end, page_size);
+  return IsValidAppMemoryRange(page_begin, page_end - page_begin);
 }
 
 extern "C" void __tsan_tls_initialization() {}

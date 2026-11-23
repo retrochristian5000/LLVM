@@ -984,6 +984,34 @@ uptr MetaShadowBeg(void) { return SelectMapping<MappingField>(kMetaShadowBeg); }
 ALWAYS_INLINE
 uptr MetaShadowEnd(void) { return SelectMapping<MappingField>(kMetaShadowEnd); }
 
+// Validate a complete application-memory interval, not just its endpoints.
+// The four instrumentable windows may be adjacent (for example, the low and
+// heap windows on Darwin AArch64), but shadow-memory gaps must be rejected.
+// Keep raw mmap/Mach VM addresses intact; do not strip pointer authentication.
+ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
+  if (!size || size > ~(uptr)0 - addr)
+    return false;
+
+  const uptr end = addr + size;
+  const uptr windows[][2] = {
+      {LoAppMemBeg(), LoAppMemEnd()},
+      {MidAppMemBeg(), MidAppMemEnd()},
+      {HeapMemBeg(), HeapMemEnd()},
+      {HiAppMemBeg(), HiAppMemEnd()},
+  };
+  for (uptr current = addr; current < end;) {
+    uptr covered = current;
+    for (const auto &window : windows) {
+      if (current >= window[0] && current < window[1])
+        covered = Max(covered, window[1]);
+    }
+    if (covered == current)
+      return false;
+    current = covered;
+  }
+  return true;
+}
+
 struct IsAppMemImpl {
   template <typename Mapping>
   static bool Apply(uptr mem) {

@@ -533,20 +533,7 @@ static bool IsValidMmapRange(uptr addr, uptr size) {
     return true;
   if (static_cast<sptr>(size) < 0)
     return false;
-  if (!IsAppMem(addr) || !IsAppMem(addr + size - 1))
-    return false;
-  // Check that if the start of the region belongs to one of app ranges,
-  // end of the region belongs to the same region.
-  const uptr ranges[][2] = {
-      {LoAppMemBeg(), LoAppMemEnd()},
-      {MidAppMemBeg(), MidAppMemEnd()},
-      {HiAppMemBeg(), HiAppMemEnd()},
-  };
-  for (auto range : ranges) {
-    if (addr >= range[0] && addr < range[1])
-      return addr + size <= range[1];
-  }
-  return false;
+  return IsValidAppMemoryRange(addr, size);
 }
 
 void UnmapShadow(ThreadState* thr, uptr addr, uptr size) {
