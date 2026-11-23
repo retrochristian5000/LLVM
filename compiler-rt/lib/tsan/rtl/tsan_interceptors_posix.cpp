@@ -47,6 +47,11 @@ using namespace __tsan;
 
 DECLARE_REAL(void *, memcpy, void *to, const void *from, SIZE_T size)
 DECLARE_REAL(void *, memset, void *block, int c, SIZE_T size)
+// LongJmp() restores TSan's deferred signal mask before the interceptor
+// definition below. Declare the public POSIX function for both the Darwin
+// direct call and the non-Apple real-function pointer.
+DECLARE_REAL(int, pthread_sigmask, int how, const __sanitizer_sigset_t *set,
+             __sanitizer_sigset_t *oldset)
 
 #if SANITIZER_FREEBSD || SANITIZER_APPLE
 #define stdout __stdoutp
