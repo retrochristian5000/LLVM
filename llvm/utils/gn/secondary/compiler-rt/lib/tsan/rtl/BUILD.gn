@@ -79,6 +79,8 @@ target(tsan_target_type, "rtl") {
     "../interface/tsan_interface_cxx.cpp",
     "../interface/tsan_interface_java.cpp",
     "../interface/tsan_interface_java.h",
+    "../interface/tsan_interface_mmap.cpp",
+    "../interface/tsan_interface_mmap.h",
     "tsan_malloc_mac.cpp",
     "tsan_md5.cpp",
     "tsan_mman.cpp",

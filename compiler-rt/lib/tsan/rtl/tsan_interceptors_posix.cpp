@@ -38,6 +38,7 @@
 #include "tsan_interceptors.h"
 #include "tsan_interceptors_darwin.h"
 #include "../interface/tsan_interface.h"
+#include "../interface/tsan_interface_mmap.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -806,46 +807,25 @@ TSAN_INTERCEPTOR(char*, strdup, const char *str) {
   return REAL(strdup)(str);
 }
 
-// Zero out addr if it points into shadow memory and was provided as a hint
-// only, i.e., MAP_FIXED is not set.
-static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
-  if (*addr) {
-    if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
-      if (flags & MAP_FIXED) {
-        errno = errno_EINVAL;
-        return false;
-      } else {
-        *addr = 0;
-      }
-    }
-  }
-  return true;
-}
-
+// The interface module validates mmap hints and updates shadow/FD metadata.
+// Keep real libc calls here so interceptor signatures remain platform-correct.
 template <class Mmap>
 static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
-                              void *addr, SIZE_T sz, int prot, int flags,
-                              int fd, OFF64_T off) {
-  if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+                             void *addr, SIZE_T sz, int prot, int flags,
+                             int fd, OFF64_T off) {
+  if (!PrepareMmapAddress(&addr, (uptr)sz, (flags & MAP_FIXED) != 0))
+    return MAP_FAILED;
   void *res = real_mmap(addr, sz, prot, flags, fd, off);
-  if (res != MAP_FAILED) {
-    if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-      Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
-             addr, (void*)sz, res);
-      Die();
-    }
-    if (fd > 0) FdAccess(thr, pc, fd);
-    MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, sz);
-  }
+  if (res != MAP_FAILED)
+    RecordMmapResult(thr, pc, addr, res, (uptr)sz, fd);
   return res;
 }
 
 template <class Munmap>
 static int munmap_interceptor(ThreadState *thr, uptr pc, Munmap real_munmap,
-                                void *addr, SIZE_T sz) {
-  UnmapShadow(thr, (uptr)addr, sz);
-  int res = real_munmap(addr, sz);
-  return res;
+                             void *addr, SIZE_T sz) {
+  PrepareMunmapShadow(thr, (uptr)addr, (uptr)sz);
+  return real_munmap(addr, sz);
 }
 
 #if SANITIZER_LINUX

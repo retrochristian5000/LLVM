@@ -41,6 +41,7 @@ set(TSAN_SOURCES
   ../interface/tsan_interface_atomic.cpp
   ../interface/tsan_interface_cxx.cpp
   ../interface/tsan_interface_java.cpp
+  ../interface/tsan_interface_mmap.cpp
   tsan_md5.cpp
   tsan_mman.cpp
   tsan_mutexset.cpp
@@ -144,6 +145,7 @@ set(TSAN_HEADERS
   ../interface/tsan_interface_aarch64.h
   ../interface/tsan_interface_darwin.h
   ../interface/tsan_interface_java.h
+  ../interface/tsan_interface_mmap.h
   tsan_macho.h
   tsan_mman.h
   tsan_mutexset.h
