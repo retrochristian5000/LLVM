@@ -36,7 +36,9 @@ _Bool __aarch64_have_lse_atomics
 
 // The formatter wants to re-order these includes, but doing so is incorrect:
 // clang-format off
-#if defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__)
+#include "aarch64/lse_atomics/apple.inc"
+#elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <sys/auxv.h>
 #include "aarch64/hwcap.inc"
 #include "aarch64/lse_atomics/elf_aux_info.inc"

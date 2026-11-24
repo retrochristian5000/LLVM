@@ -92,6 +92,13 @@ T func_xor(volatile T *v, T op) {
 
 template <typename T>
 T func_nand(volatile T *v, T op) {
+#if SANITIZER_APPLE && defined(__aarch64__)
+  // Use a native atomic NAND for widths supported by the Darwin target.
+  // Clang can lower this to a CAS loop using LSE or exclusive instructions.
+  // Preserve the existing sequentially consistent hardware ordering.
+  if constexpr (sizeof(T) <= sizeof(a64))
+    return __atomic_fetch_nand(v, op, __ATOMIC_SEQ_CST);
+#endif
   // clang does not support __sync_fetch_and_nand.
   T cmp = *v;
   for (;;) {
