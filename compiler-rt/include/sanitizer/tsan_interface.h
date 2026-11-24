@@ -131,6 +131,15 @@ void SANITIZER_CDECL __tsan_mutex_post_divert(void *addr, unsigned flags);
 // report a bug report otherwise.
 void SANITIZER_CDECL __tsan_check_no_mutexes_held();
 
+// Annotate CPU memory accesses performed by an uninstrumented library.
+// The entire byte range must belong to instrumentable application memory.
+// Report the access on the current CPU thread at the call site; these
+// functions neither access the bytes nor establish synchronization.
+// For strided graphics uploads/readbacks, annotate each accessed row rather
+// than padding between rows. GPU execution itself is not instrumented.
+void SANITIZER_CDECL __tsan_read_range(void *addr, unsigned long size);
+void SANITIZER_CDECL __tsan_write_range(void *addr, unsigned long size);
+
 // External race detection API.
 // Can be used by non-instrumented libraries to detect when their objects are
 // being used in an unsafe manner.
