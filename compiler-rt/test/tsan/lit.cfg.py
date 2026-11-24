@@ -127,6 +127,13 @@ if (
 ):
     config.available_features.add("tsan-objcxx-runtime")
 
+if (
+    config.target_os == "Darwin"
+    and config.apple_target_is_host
+    and getattr(config, "tsan_has_objc", False)
+):
+    config.available_features.add("tsan-objc-runtime")
+
 # Default test suffixes.
 config.suffixes = [".c", ".cpp", ".m", ".mm"]
 

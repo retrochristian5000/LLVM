@@ -59,6 +59,46 @@ int main() {
   endif()
 endif()
 
+# Pure Objective-C is independent of Objective-C++ and uses the C driver.
+option(COMPILER_RT_TSAN_OBJC "Enable native macOS Objective-C TSan queries" OFF)
+if(COMPILER_RT_TSAN_OBJC)
+  if(NOT APPLE OR NOT COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY OR
+     NOT "${TSAN_SUPPORTED_OS}" STREQUAL "osx")
+    message(FATAL_ERROR "TSan Objective-C requires the native macOS-only runtime profile")
+  endif()
+  if(NOT CMAKE_OBJC_COMPILER)
+    set(CMAKE_OBJC_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH
+        "Objective-C compiler for TSan")
+  endif()
+  if(CMAKE_C_COMPILER_TARGET AND NOT CMAKE_OBJC_COMPILER_TARGET)
+    set(CMAKE_OBJC_COMPILER_TARGET "${CMAKE_C_COMPILER_TARGET}")
+  endif()
+  enable_language(OBJC)
+  if(NOT CMAKE_OBJC_COMPILER_ID MATCHES "^(AppleClang|Clang)$")
+    message(FATAL_ERROR "TSan Objective-C requires Clang's Objective-C frontend")
+  endif()
+  set(CMAKE_OBJC_STANDARD 11)
+  set(CMAKE_OBJC_STANDARD_REQUIRED ON)
+  include(CheckOBJCSourceCompiles)
+  include(CMakePushCheckState)
+  cmake_push_check_state()
+  list(APPEND CMAKE_REQUIRED_LIBRARIES objc)
+  unset(TSAN_OBJC_COMPILES CACHE)
+  check_objc_source_compiles([=[
+#include <objc/runtime.h>
+#include <dlfcn.h>
+int main(void) {
+  Dl_info info = {0};
+  const char *encoding = @encode(BOOL);
+  return !encoding[0] || !dladdr((const void *)&class_getImageName, &info);
+}
+]=] TSAN_OBJC_COMPILES)
+  cmake_pop_check_state()
+  if(NOT TSAN_OBJC_COMPILES)
+    message(FATAL_ERROR "TSan Objective-C requires compatible SDK headers, dyld and libobjc")
+  endif()
+endif()
+
 # Add the actual runtime library.
 add_subdirectory(rtl)
 

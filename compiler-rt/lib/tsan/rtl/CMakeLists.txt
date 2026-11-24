@@ -214,14 +214,33 @@ if(APPLE)
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
   if(COMPILER_RT_TSAN_OBJCXX)
-    list(APPEND TSAN_SOURCES
-      ../objc/tsan_objc_darwin.mm
-      ../objc/tsan_objc_aslr.mm)
-    list(APPEND TSAN_HEADERS ../objc/tsan_objc_aslr.h)
+    list(APPEND TSAN_SOURCES ../objc/tsan_objc_darwin.mm)
     list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_OBJCXX=1)
-    set_source_files_properties(
-      ../objc/tsan_objc_darwin.mm ../objc/tsan_objc_aslr.mm PROPERTIES
+    set_source_files_properties(../objc/tsan_objc_darwin.mm PROPERTIES
       COMPILE_OPTIONS "-fno-objc-arc;-fno-sanitize=all")
+  endif()
+  if(COMPILER_RT_TSAN_OBJC OR COMPILER_RT_TSAN_OBJCXX)
+    list(APPEND TSAN_SOURCES ../objc/tsan_objc_aslr.cpp)
+    list(APPEND TSAN_HEADERS ../objc/tsan_objc_aslr.h)
+    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_OBJC_ASLR=1)
+  endif()
+  set(TSAN_OBJC_OBJECT_LIBS)
+  if(COMPILER_RT_TSAN_OBJC)
+    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_OBJC=1)
+    list(APPEND TSAN_HEADERS ../objc/tsan_objc_runtime.h)
+    # Use a separate object target, retaining the native SDK and architecture
+    # flags but not the C++ standard-library or TSan C++ compiler options.
+    function(add_tsan_objc_objects)
+      list(REMOVE_ITEM DARWIN_osx_CFLAGS -stdlib=libc++)
+      add_compiler_rt_object_libraries(RTTsanObjC
+        OS osx
+        ARCHS ${TSAN_SUPPORTED_ARCH}
+        SOURCES ../objc/tsan_objc_runtime.m
+        ADDITIONAL_HEADERS ../objc/tsan_objc_runtime.h
+        CFLAGS -fno-objc-arc -fno-sanitize=all -fvisibility=hidden -fno-lto)
+    endfunction()
+    add_tsan_objc_objects()
+    list(APPEND TSAN_OBJC_OBJECT_LIBS RTTsanObjC)
   endif()
   if(COMPILER_RT_TSAN_LIBFFI)
     if(NOT COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY OR
@@ -271,7 +290,7 @@ int main() {
     ARCHS ${TSAN_SUPPORTED_ARCH}
     SOURCES ${TSAN_SOURCES} ${TSAN_CXX_SOURCES} ${TSAN_ASM_SOURCES}
     ADDITIONAL_HEADERS ${TSAN_HEADERS}
-    OBJECT_LIBS RTInterception
+    OBJECT_LIBS ${TSAN_OBJC_OBJECT_LIBS} RTInterception
                 RTSanitizerCommon
                 RTSanitizerCommonLibc
                 RTSanitizerCommonCoverage
