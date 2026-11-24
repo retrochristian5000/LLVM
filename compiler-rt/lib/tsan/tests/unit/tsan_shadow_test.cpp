@@ -177,6 +177,28 @@ TEST(Shadow, PosixMunmapPageRange) {
   }
 }
 
+TEST(Shadow, ShadowReleaseRange) {
+  const uptr addr = RoundUpTo(LoAppMemBeg(), kShadowCell);
+  ASSERT_TRUE(IsValidAppMemoryRange(addr, 3 * kShadowCell));
+  uptr begin = 0;
+  uptr end = 0;
+  ASSERT_TRUE(GetShadowReleaseRange(addr + 1, 2 * kShadowCell, &begin, &end));
+  EXPECT_EQ(reinterpret_cast<uptr>(MemToShadow(addr + kShadowCell)), begin);
+  EXPECT_EQ(begin + kShadowCnt * sizeof(RawShadow), end);
+
+  const uptr last = LoAppMemEnd();
+  ASSERT_TRUE(GetShadowReleaseRange(last - kShadowCell, kShadowCell,
+                                    &begin, &end));
+  EXPECT_EQ(reinterpret_cast<uptr>(MemToShadow(last - 1) + kShadowCnt), end);
+  begin = 1;
+  end = 2;
+  EXPECT_FALSE(GetShadowReleaseRange(addr, 0, &begin, &end));
+  EXPECT_FALSE(GetShadowReleaseRange(addr + 1, kShadowCell - 1, &begin, &end));
+  EXPECT_FALSE(GetShadowReleaseRange(~(uptr)0 - 1, 4, &begin, &end));
+  EXPECT_EQ(1U, begin);
+  EXPECT_EQ(2U, end);
+}
+
 TEST(Shadow, ShadowCellRangeValidation) {
   const uptr addr = RoundUpTo(LoAppMemBeg(), kShadowCell);
   ASSERT_TRUE(IsValidAppMemoryRange(addr, 2 * kShadowCell));

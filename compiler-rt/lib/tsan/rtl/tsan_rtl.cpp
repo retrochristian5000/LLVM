@@ -514,8 +514,9 @@ static void StopBackgroundThread() {
 #endif
 
 void DontNeedShadowFor(uptr addr, uptr size) {
-  ReleaseMemoryPagesToOS(reinterpret_cast<uptr>(MemToShadow(addr)),
-                         reinterpret_cast<uptr>(MemToShadow(addr + size)));
+  uptr begin, end;
+  if (GetShadowReleaseRange(addr, size, &begin, &end))
+    ReleaseMemoryPagesToOS(begin, end);
 }
 
 #if !SANITIZER_GO

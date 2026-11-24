@@ -105,46 +105,78 @@ bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
 }
 #endif
 
-static void RegionMemUsage(uptr start, uptr end, uptr *res, uptr *dirty) {
+// Region totals cannot be attributed exactly to a subrange of a Mach entry.
+// Count only complete entries and explicitly mark incomplete samples.
+static bool RegionMemUsage(uptr start, uptr end, uptr *res, uptr *dirty) {
   vm_address_t address = start;
-  vm_address_t end_address = end;
+  const uptr page_size = GetPageSizeCached();
   uptr resident_pages = 0;
   uptr dirty_pages = 0;
-  while (address < end_address) {
-    vm_size_t vm_region_size;
+  bool complete = true;
+  while (address < end) {
+    const vm_address_t cursor = address;
+    vm_size_t size = 0;
     mach_msg_type_number_t count = VM_REGION_EXTENDED_INFO_COUNT;
-    vm_region_extended_info_data_t vm_region_info;
-    mach_port_t object_name;
-    kern_return_t ret = vm_region_64(
-        mach_task_self(), &address, &vm_region_size, VM_REGION_EXTENDED_INFO,
-        (vm_region_info_t)&vm_region_info, &count, &object_name);
-    if (ret != KERN_SUCCESS) break;
-
-    resident_pages += vm_region_info.pages_resident;
-    dirty_pages += vm_region_info.pages_dirtied;
-
-    address += vm_region_size;
+    vm_region_extended_info_data_t info = {};
+    mach_port_t object_name = MACH_PORT_NULL;
+    const kern_return_t kr = vm_region_64(
+        mach_task_self(), &address, &size, VM_REGION_EXTENDED_INFO,
+        reinterpret_cast<vm_region_info_t>(&info), &count, &object_name);
+    if (MACH_PORT_VALID(object_name))
+      mach_port_deallocate(mach_task_self(), object_name);
+    if (kr == KERN_INVALID_ADDRESS)
+      break;  // No further mapped regions.
+    if (kr != KERN_SUCCESS) {
+      complete = false;
+      break;
+    }
+    if (address >= end)
+      break;  // The next mapping belongs to another window.
+    if (!size || size > ~(uptr)0 - address || address + size <= cursor ||
+        count < VM_REGION_EXTENDED_INFO_COUNT) {
+      complete = false;
+      break;
+    }
+    const uptr next = address + size;
+    if (address < start || next > end) {
+      complete = false;
+    } else {
+      const uptr max_pages = ~(uptr)0 / page_size;
+      if (info.pages_resident > max_pages - resident_pages ||
+          info.pages_dirtied > max_pages - dirty_pages) {
+        complete = false;
+        break;
+      }
+      resident_pages += info.pages_resident;
+      dirty_pages += info.pages_dirtied;
+    }
+    address = next;
   }
-  *res = resident_pages * GetPageSizeCached();
-  *dirty = dirty_pages * GetPageSizeCached();
+  *res = resident_pages * page_size;
+  *dirty = dirty_pages * page_size;
+  return complete;
 }
 
 void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
   uptr shadow_res, shadow_dirty;
   uptr meta_res, meta_dirty;
-  RegionMemUsage(ShadowBeg(), ShadowEnd(), &shadow_res, &shadow_dirty);
-  RegionMemUsage(MetaShadowBeg(), MetaShadowEnd(), &meta_res, &meta_dirty);
+  bool complete =
+      RegionMemUsage(ShadowBeg(), ShadowEnd(), &shadow_res, &shadow_dirty);
+  complete &= RegionMemUsage(MetaShadowBeg(), MetaShadowEnd(),
+                             &meta_res, &meta_dirty);
 
 #  if !SANITIZER_GO
   uptr low_res, low_dirty;
+  uptr mid_res, mid_dirty;
   uptr high_res, high_dirty;
   uptr heap_res, heap_dirty;
-  RegionMemUsage(LoAppMemBeg(), LoAppMemEnd(), &low_res, &low_dirty);
-  RegionMemUsage(HiAppMemBeg(), HiAppMemEnd(), &high_res, &high_dirty);
-  RegionMemUsage(HeapMemBeg(), HeapMemEnd(), &heap_res, &heap_dirty);
+  complete &= RegionMemUsage(LoAppMemBeg(), LoAppMemEnd(), &low_res, &low_dirty);
+  complete &= RegionMemUsage(MidAppMemBeg(), MidAppMemEnd(), &mid_res, &mid_dirty);
+  complete &= RegionMemUsage(HiAppMemBeg(), HiAppMemEnd(), &high_res, &high_dirty);
+  complete &= RegionMemUsage(HeapMemBeg(), HeapMemEnd(), &heap_res, &heap_dirty);
 #else  // !SANITIZER_GO
   uptr app_res, app_dirty;
-  RegionMemUsage(LoAppMemBeg(), LoAppMemEnd(), &app_res, &app_dirty);
+  complete &= RegionMemUsage(LoAppMemBeg(), LoAppMemEnd(), &app_res, &app_dirty);
 #endif
 
   StackDepotStats stacks = StackDepotGetStats();
@@ -156,11 +188,13 @@ void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
       "meta     (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
 #  if !SANITIZER_GO
       "low app  (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
+      "mid app  (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
       "high app (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
       "heap     (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
 #  else  // !SANITIZER_GO
       "app      (0x%016zx-0x%016zx): resident %zd kB, dirty %zd kB\n"
 #  endif
+      "VM region accounting: %s\n"
       "stacks: %zd unique IDs, %zd kB allocated\n"
       "threads: %zd total, %zd live\n"
       "------------------------------\n",
@@ -168,11 +202,13 @@ void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
       MetaShadowBeg(), MetaShadowEnd(), meta_res / 1024, meta_dirty / 1024,
 #  if !SANITIZER_GO
       LoAppMemBeg(), LoAppMemEnd(), low_res / 1024, low_dirty / 1024,
+      MidAppMemBeg(), MidAppMemEnd(), mid_res / 1024, mid_dirty / 1024,
       HiAppMemBeg(), HiAppMemEnd(), high_res / 1024, high_dirty / 1024,
       HeapMemBeg(), HeapMemEnd(), heap_res / 1024, heap_dirty / 1024,
 #  else  // !SANITIZER_GO
       LoAppMemBeg(), LoAppMemEnd(), app_res / 1024, app_dirty / 1024,
 #  endif
+      complete ? "complete entries" : "partial (unattributed regions omitted)",
       stacks.n_uniq_ids, stacks.allocated / 1024, nthread, nlive);
 }
 }  // namespace __tsan

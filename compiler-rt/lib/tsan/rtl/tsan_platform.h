@@ -1128,6 +1128,35 @@ RawShadow *MemToShadow(uptr x) {
       SelectMapping<MemToShadowImpl>(STRIP_MTE_TAG(x)));
 }
 
+// Translate only whole application cells for physical shadow-page release.
+// Never expand an unaligned range into a live neighboring cell or translate
+// an exclusive application end outside a mapping.
+inline bool GetShadowReleaseRange(uptr addr, uptr size, uptr *begin,
+                                  uptr *end) {
+  addr = STRIP_MTE_TAG(addr);
+  if (!IsValidAppMemoryRange(addr, size) ||
+      addr > ~(uptr)0 - (kShadowCell - 1))
+    return false;
+  const uptr first = RoundUpTo(addr, kShadowCell);
+  const uptr last = RoundDownTo(addr + size, kShadowCell);
+  if (first >= last)
+    return false;
+  const uptr shadow_begin = reinterpret_cast<uptr>(MemToShadow(first));
+  const uptr shadow_last = reinterpret_cast<uptr>(MemToShadow(last - 1));
+  const uptr cell_bytes = kShadowCnt * sizeof(RawShadow);
+  if (shadow_last > ~(uptr)0 - cell_bytes ||
+      last - first > ~(uptr)0 / kShadowMultiplier)
+    return false;
+  const uptr shadow_end = shadow_last + cell_bytes;
+  if (shadow_end <= shadow_begin ||
+      shadow_end - shadow_begin != (last - first) * kShadowMultiplier ||
+      shadow_begin < ShadowBeg() || shadow_end > ShadowEnd())
+    return false;
+  *begin = shadow_begin;
+  *end = shadow_end;
+  return true;
+}
+
 struct MemToMetaImpl {
   template <typename Mapping>
   static u32 *Apply(uptr x) {
