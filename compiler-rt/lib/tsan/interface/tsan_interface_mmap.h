@@ -28,6 +28,12 @@ struct ThreadState;
 // invalid fixed mappings fail with EINVAL.
 bool PrepareMmapAddress(void **addr, uptr size, bool fixed);
 
+#if SANITIZER_APPLE
+// Anonymous Darwin mappings may encode Mach VM flags in the fd argument.
+// Return the descriptor to use for TSan accounting, not for the syscall.
+int DarwinMmapFileDescriptor(int fd, int flags);
+#endif
+
 // Called after successful mmap; validates the mapped range and records
 // FD and shadow-memory metadata without changing the mapped contents.
 void RecordMmapResult(ThreadState *thr, uptr pc, void *requested_addr,

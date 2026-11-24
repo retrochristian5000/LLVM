@@ -17,6 +17,9 @@
 #if SANITIZER_POSIX && !SANITIZER_GO
 
 #include <errno.h>
+#if SANITIZER_APPLE
+#include <sys/mman.h>
+#endif
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno.h"
@@ -75,6 +78,12 @@ bool PrepareMmapAddress(void **addr, uptr size, bool fixed) {
   *addr = nullptr;
   return true;
 }
+
+#if SANITIZER_APPLE
+int DarwinMmapFileDescriptor(int fd, int flags) {
+  return (flags & MAP_ANON) ? -1 : fd;
+}
+#endif
 
 void RecordMmapResult(ThreadState *thr, uptr pc, void *requested_addr,
                       void *mapped_addr, uptr size, int fd) {

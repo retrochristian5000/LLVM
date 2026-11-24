@@ -894,8 +894,12 @@ static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
   if (!PrepareMmapAddress(&addr, (uptr)sz, (flags & MAP_FIXED) != 0))
     return MAP_FAILED;
   void *res = real_mmap(addr, sz, prot, flags, fd, off);
-  if (res != MAP_FAILED)
+  if (res != MAP_FAILED) {
+#if SANITIZER_APPLE
+    fd = DarwinMmapFileDescriptor(fd, flags);
+#endif
     RecordMmapResult(thr, pc, addr, res, (uptr)sz, fd);
+  }
   return res;
 }
 
