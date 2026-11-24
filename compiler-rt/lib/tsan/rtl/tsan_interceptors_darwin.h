@@ -34,6 +34,16 @@ struct DarwinSignalContext {
 #endif
 };
 
+// Values obtained from the Darwin SDK, independent of other BSD ABIs.
+extern const int kDarwinSiginfoFlag;
+extern const int kDarwinSigSetMask;
+extern const int kDarwinSigTerm;
+extern const int kDarwinSigSys;
+bool IsDarwinSignalNumber(int sig);
+bool CanChangeDarwinSignalAction(int sig);
+bool IsDarwinSynchronousSignal(int sig);
+bool IsDarwinRecursiveMutexType(int type);
+
 // Invoke the registered callback with its native signature. Return a
 // diagnostic PC, not a callable pointer reconstructed from an integer.
 uptr InvokeDarwinSignalHandler(const __sanitizer_sigaction &action, int sig,

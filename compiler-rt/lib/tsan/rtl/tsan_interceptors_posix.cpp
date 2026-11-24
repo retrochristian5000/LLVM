@@ -120,7 +120,12 @@ extern __sanitizer_FILE __sF[];
 #else
 extern __sanitizer_FILE *stdout, *stderr;
 #endif
-#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
+#if SANITIZER_APPLE
+// Native Darwin ABI values, independent of the signal storage capacity.
+const int &SIGTERM = kDarwinSigTerm;
+const int &SIGSYS = kDarwinSigSys;
+#else
+#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
 const int PTHREAD_MUTEX_RECURSIVE = 1;
 const int PTHREAD_MUTEX_RECURSIVE_NP = 1;
 #else
@@ -134,13 +139,14 @@ const int SIGFPE = 8;
 const int SIGSEGV = 11;
 const int SIGPIPE = 13;
 const int SIGTERM = 15;
-#if defined(__mips__) || SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD
+#if defined(__mips__) || SANITIZER_FREEBSD || SANITIZER_NETBSD
 const int SIGBUS = 10;
 const int SIGSYS = 12;
 #else
 const int SIGBUS = 7;
 const int SIGSYS = 31;
 #endif
+#endif  // SANITIZER_APPLE
 #if SANITIZER_HAS_SIGINFO
 const int SI_TIMER = -2;
 #endif
@@ -160,7 +166,10 @@ typedef __sanitizer::u16 mode_t;
 # define F_TLOCK 2      /* Test and lock a region for exclusive use.  */
 # define F_TEST  3      /* Test a region for other processes locks.  */
 
-#if SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD
+#if SANITIZER_APPLE
+const int &SA_SIGINFO = kDarwinSiginfoFlag;
+const int &SIG_SETMASK = kDarwinSigSetMask;
+#elif SANITIZER_FREEBSD || SANITIZER_NETBSD
 const int SA_SIGINFO = 0x40;
 const int SIG_SETMASK = 3;
 #elif defined(__mips__)
@@ -1449,8 +1458,12 @@ TSAN_INTERCEPTOR(int, pthread_mutex_init, void *m, void *a) {
     if (a) {
       int type = 0;
       if (REAL(pthread_mutexattr_gettype)(a, &type) == 0)
+#if SANITIZER_APPLE
+        if (IsDarwinRecursiveMutexType(type))
+#else
         if (type == PTHREAD_MUTEX_RECURSIVE ||
             type == PTHREAD_MUTEX_RECURSIVE_NP)
+#endif
           flagz |= MutexFlagWriteReentrant;
     }
     MutexCreate(thr, pc, (uptr)m, flagz);
@@ -2172,14 +2185,22 @@ static bool is_sync_signal(ThreadSignalContext *sctx, int sig,
   if (info->si_code == SI_TIMER)
     return false;
 #endif
+#if SANITIZER_APPLE
+  return IsDarwinSynchronousSignal(sig);
+#else
   return sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGTRAP ||
          sig == SIGABRT || sig == SIGFPE || sig == SIGPIPE || sig == SIGSYS;
+#endif
 }
 
 void sighandler(int sig, __sanitizer_siginfo *info, void *ctx) {
   ThreadState *thr = cur_thread_init();
   ThreadSignalContext *sctx = SigCtx(thr);
-  if (sig < 0 || sig >= kSigCount) {
+  if (sig <= 0 || sig >= kSigCount
+#if SANITIZER_APPLE
+      || !IsDarwinSignalNumber(sig)
+#endif
+  ) {
     VPrintf(1, "ThreadSanitizer: ignoring signal %d\n", sig);
     return;
   }
@@ -2591,6 +2612,13 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
   // the signal handler through sighandler, very bad things will happen.
   // The handler will run synchronously and corrupt tsan per-thread state.
   SCOPED_INTERCEPTOR_RAW(sigaction, sig, act, old);
+#if SANITIZER_APPLE
+  // Invalid signal numbers and immutable dispositions must not modify TSan's
+  // callback table or publish a fictitious synchronization edge. Let libc
+  // determine the native result for both queries and changes.
+  if (!CanChangeDarwinSignalAction(sig))
+    return REAL(sigaction)(sig, act, old);
+#endif
   if (sig <= 0 || sig >= kSigCount) {
     errno = errno_EINVAL;
     return -1;

@@ -869,7 +869,8 @@ else()
 endif()
 
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND TSAN_SUPPORTED_ARCH)
-  if (OS_NAME MATCHES "Linux|Darwin|FreeBSD|NetBSD")
+  # Match complete OS names. OpenBSD is not a supported TSan target.
+  if (OS_NAME MATCHES "^(Linux|Darwin|FreeBSD|NetBSD)$")
     set(COMPILER_RT_HAS_TSAN TRUE)
   elseif (OS_NAME MATCHES "Android" AND ANDROID_PLATFORM_LEVEL GREATER 23)
     set(COMPILER_RT_HAS_TSAN TRUE)

@@ -13,6 +13,7 @@
 
 #if SANITIZER_APPLE
 
+#include <pthread.h>
 #include <signal.h>
 #include <sys/ucontext.h>
 
@@ -21,6 +22,28 @@
 #include "sanitizer_common/sanitizer_ptrauth.h"
 
 namespace __tsan {
+
+const int kDarwinSiginfoFlag = SA_SIGINFO;
+const int kDarwinSigSetMask = SIG_SETMASK;
+const int kDarwinSigTerm = SIGTERM;
+const int kDarwinSigSys = SIGSYS;
+
+bool IsDarwinSignalNumber(int sig) {
+  return sig > 0 && sig < NSIG;
+}
+
+bool CanChangeDarwinSignalAction(int sig) {
+  return IsDarwinSignalNumber(sig) && sig != SIGKILL && sig != SIGSTOP;
+}
+
+bool IsDarwinSynchronousSignal(int sig) {
+  return sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGTRAP ||
+         sig == SIGABRT || sig == SIGFPE || sig == SIGPIPE || sig == SIGSYS;
+}
+
+bool IsDarwinRecursiveMutexType(int type) {
+  return type == PTHREAD_MUTEX_RECURSIVE;
+}
 
 static_assert(sizeof(siginfo_t) <= 128,
               "Darwin siginfo_t exceeds POSIX interceptor storage");
