@@ -2081,6 +2081,9 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
   // Ensure that the handler does not spoil errno.
   const int saved_errno = errno;
   errno = 99;
+#if SANITIZER_APPLE
+  const uptr pc = InvokeDarwinSignalHandler(sigactions[sig], sig, info, uctx);
+#else
   // This code races with sigaction. Be careful to not read sa_sigaction twice.
   // Also need to remember pc for reporting before the call,
   // because the handler can reset it.
@@ -2093,6 +2096,7 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
     // additional arguments to sa_handler works and is harmless.
     ((__sanitizer_sigactionhandler_ptr)pc)(sig, info, uctx);
   }
+#endif
   if (!ctx->after_multithreaded_fork) {
     thr->ignore_reads_and_writes = ignore_reads_and_writes;
     if (ignore_reads_and_writes)
@@ -2589,9 +2593,21 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
     // and signal handler reads the handler concurrently. It can read
     // some bytes from old value and some bytes from new value.
     // Use volatile to prevent insertion of memcpy.
+#if SANITIZER_APPLE
+    // Preserve the selected callback type rather than copying a three-argument
+    // callback through the one-argument union member on arm64e.
+    const volatile __sanitizer_sigaction &requested = *act;
+    const int action_flags = requested.sa_flags;
+    if (action_flags & SA_SIGINFO)
+      sigactions[sig].sigaction = requested.sigaction;
+    else
+      sigactions[sig].handler = requested.handler;
+    sigactions[sig].sa_flags = action_flags;
+#else
     sigactions[sig].handler =
         *(volatile __sanitizer_sighandler_ptr const *)&act->handler;
     sigactions[sig].sa_flags = *(volatile int const *)&act->sa_flags;
+#endif
     internal_memcpy(&sigactions[sig].sa_mask, &act->sa_mask,
                     sizeof(sigactions[sig].sa_mask));
 #if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD

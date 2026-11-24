@@ -18,11 +18,38 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
+#include "sanitizer_common/sanitizer_ptrauth.h"
 
 namespace __tsan {
 
 static_assert(sizeof(siginfo_t) <= 128,
               "Darwin siginfo_t exceeds POSIX interceptor storage");
+
+uptr InvokeDarwinSignalHandler(const __sanitizer_sigaction &action, int sig,
+                               __sanitizer_siginfo *info, void *uctx) {
+  // The disposition can change concurrently. Read the selected callback
+  // once and retain it as a typed function pointer for the authenticated call.
+  const volatile __sanitizer_sigaction &current = action;
+  if (current.sa_flags & SA_SIGINFO) {
+    const auto handler = current.sigaction;
+    const uptr value = reinterpret_cast<uptr>(handler);
+    if (value == sig_dfl || value == sig_ign)
+      return value;
+    using NativeHandler = void (*)(int, siginfo_t *, void *);
+    const uptr pc = STRIP_PAC_PC(handler);
+    reinterpret_cast<NativeHandler>(handler)(
+        sig, reinterpret_cast<siginfo_t *>(info), uctx);
+    return pc;
+  }
+
+  const auto handler = current.handler;
+  const uptr value = reinterpret_cast<uptr>(handler);
+  if (value == sig_dfl || value == sig_ign)
+    return value;
+  const uptr pc = STRIP_PAC_PC(handler);
+  handler(sig);
+  return pc;
+}
 
 void CopyDarwinSignalInfo(void *destination, const void *source) {
   __sanitizer::internal_memcpy(destination, source, sizeof(siginfo_t));

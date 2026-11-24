@@ -16,6 +16,7 @@
 #include <sys/ucontext.h>
 
 #include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_platform_limits_posix.h"
 
 namespace __tsan {
 
@@ -32,6 +33,11 @@ struct DarwinSignalContext {
   _STRUCT_MCONTEXT mcontext;
 #endif
 };
+
+// Invoke the registered callback with its native signature. Return a
+// diagnostic PC, not a callable pointer reconstructed from an integer.
+uptr InvokeDarwinSignalHandler(const __sanitizer_sigaction &action, int sig,
+                               __sanitizer_siginfo *info, void *uctx);
 
 void CopyDarwinSignalInfo(void *destination, const void *source);
 void CopyDarwinSignalContext(DarwinSignalContext *destination,
