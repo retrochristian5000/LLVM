@@ -1,6 +1,7 @@
 # -*- Python -*-
 
 import os
+import shlex
 
 
 def get_required_attr(config, attr_name):
@@ -97,6 +98,19 @@ config.substitutions.append(
         + " ",
     )
 )
+
+# Optional external libffi provider for native ABI and callback tests.
+# Keep it out of the runtime's link interface and ordinary test runs.
+if lit_config.params.get("tsan_libffi") == "1" and (
+    config.target_os == "Linux"
+    or (config.target_os == "Darwin" and config.apple_target_is_host)
+):
+    config.available_features.add("tsan-libffi")
+    for name, default in (("cflags", ""), ("ldflags", "-lffi")):
+        flags = shlex.split(lit_config.params.get("tsan_libffi_" + name, default))
+        config.substitutions.append(
+            ("%tsan_libffi_" + name, " ".join(shlex.quote(flag) for flag in flags))
+        )
 
 # Default test suffixes.
 config.suffixes = [".c", ".cpp", ".m", ".mm"]
