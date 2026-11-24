@@ -43,11 +43,16 @@ static bool isRISCVBareMetal(const llvm::Triple &Triple) {
   return Triple.getEnvironmentName() == "elf";
 }
 
-/// Is the triple powerpc[64][le]-*-none-{eabi,elf}?
+/// Recognize explicitly bare-metal PowerPC ELF triples, including an
+/// explicit object format following an unspecified environment.
 static bool isPPCBareMetal(const llvm::Triple &Triple) {
-  return Triple.isPPC() && Triple.getOS() == llvm::Triple::UnknownOS &&
-         (Triple.getEnvironment() == llvm::Triple::EABI ||
-          Triple.getEnvironmentName() == "elf");
+  if (!Triple.isPPC() || Triple.getOS() != llvm::Triple::UnknownOS ||
+      !Triple.isOSBinFormatELF())
+    return false;
+
+  StringRef Env = Triple.getEnvironmentName();
+  return Triple.getEnvironment() == llvm::Triple::EABI || Env == "elf" ||
+         Env == "unknown-elf" || Env == "none-elf";
 }
 
 /// Is the triple {ix86,x86_64}-*-none-elf, including -m16?
