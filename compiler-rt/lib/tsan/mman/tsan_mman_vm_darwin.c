@@ -11,6 +11,7 @@
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 #include <mach/vm_region.h>
+#include <mach/task_info.h>
 
 _Static_assert(sizeof(mach_vm_address_t) == sizeof(uint64_t),
                "Mach VM address width");
@@ -74,4 +75,48 @@ int __tsan_darwin_vm_usage(uint64_t begin, uint64_t end, size_t page_size,
   usage->resident_bytes = resident * page_size;
   usage->dirty_bytes = dirty * page_size;
   return complete;
+}
+
+int __tsan_darwin_task_vm_info(TsanDarwinTaskVmInfo *result) {
+  if (!result)
+    return TSAN_DARWIN_TASK_VM_UNAVAILABLE;
+  *result = (TsanDarwinTaskVmInfo){0};
+
+  task_vm_info_data_t info = {0};
+  // Request only the revision we consume, not newer ledger fields.
+#ifdef TASK_VM_INFO_REV2_COUNT
+  const mach_msg_type_number_t requested = TASK_VM_INFO_REV2_COUNT;
+#else
+  const mach_msg_type_number_t requested = TASK_VM_INFO_COUNT;
+#endif
+  const size_t basic_bytes =
+      offsetof(task_vm_info_data_t, resident_size) + sizeof(info.resident_size);
+  mach_msg_type_number_t count = requested;
+  const kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO,
+                                     (task_info_t)&info, &count);
+  if (kr != KERN_SUCCESS || count > requested ||
+      count < (basic_bytes + sizeof(natural_t) - 1) / sizeof(natural_t) ||
+      info.page_size <= 0 || info.region_count < 0)
+    return TSAN_DARWIN_TASK_VM_UNAVAILABLE;
+
+  const uint32_t page_size = (uint32_t)info.page_size;
+  if (page_size & (page_size - 1))
+    return TSAN_DARWIN_TASK_VM_UNAVAILABLE;
+
+  result->virtual_bytes = info.virtual_size;
+  result->resident_bytes = info.resident_size;
+  result->page_size = page_size;
+  result->region_count = (uint32_t)info.region_count;
+#ifdef TASK_VM_INFO_REV2_COUNT
+  const size_t bounds_bytes =
+      offsetof(task_vm_info_data_t, max_address) + sizeof(info.max_address);
+  if (count >= TASK_VM_INFO_REV2_COUNT &&
+      count >= (bounds_bytes + sizeof(natural_t) - 1) / sizeof(natural_t) &&
+      info.min_address < info.max_address) {
+    result->min_address = info.min_address;
+    result->max_address = info.max_address;
+    return TSAN_DARWIN_TASK_VM_BOUNDS;
+  }
+#endif
+  return TSAN_DARWIN_TASK_VM_BASIC;
 }

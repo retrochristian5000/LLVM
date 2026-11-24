@@ -36,8 +36,33 @@ namespace __tsan {
 
 void InitializePlatformEarly() {
 #if !SANITIZER_GO
+#if defined(TSAN_HAS_NATIVE_DARWIN_VM_C)
+  TsanDarwinTaskVmInfo vm = {};
+  const int status = __tsan_darwin_task_vm_info(&vm);
+  const uptr kernel_limit =
+      status == TSAN_DARWIN_TASK_VM_BOUNDS ? vm.max_address : 0;
+  // The kernel's address ceiling and the sanitizer's table ceiling are
+  // separate. A missing revision retains the desktop conservative fallback.
+  const uptr supported_limit =
+      kernel_limit ? Min<uptr>(kernel_limit, SANITIZER_MMAP_RANGE_SIZE)
+                   : SANITIZER_MMAP_RANGE_SIZE;
+  if (status != TSAN_DARWIN_TASK_VM_UNAVAILABLE) {
+    VPrintf(2,
+            "ThreadSanitizer: native Darwin task VM: virtual=%zu bytes "
+            "resident=%zu bytes regions=%u page_size=%u bounds=%s\n",
+            static_cast<uptr>(vm.virtual_bytes),
+            static_cast<uptr>(vm.resident_bytes), vm.region_count, vm.page_size,
+            kernel_limit ? "available" : "unavailable");
+    if (vm.page_size != GetPageSizeCached())
+      VPrintf(1, "ThreadSanitizer: Darwin task VM page size differs from "
+                 "cached native page size\n");
+  } else {
+    VPrintf(1, "ThreadSanitizer: native Darwin task VM query unavailable\n");
+  }
+#else
   const uptr kernel_limit = GetDarwinTaskVmMaxAddress();
   const uptr supported_limit = GetMaxUserVirtualAddress() + 1;
+#endif
   VPrintf(1,
           "ThreadSanitizer: Darwin VM limit: kernel=%p supported=%p "
           "layout_end=%p\n",
