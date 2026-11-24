@@ -186,7 +186,7 @@ struct SignalDesc {
 struct ThreadSignalContext {
   int int_signal_send;
   SignalDesc pending_signals[kSigCount];
-  // emptyset and oldset are too big for stack.
+  // Keep the shared full mask and the non-local unwind history here.
   __sanitizer_sigset_t emptyset;
   __sanitizer::Vector<__sanitizer_sigset_t> oldset;
 };
@@ -590,18 +590,19 @@ static void LongJmp(ThreadState *thr, uptr *env) {
     while (thr->shadow_stack_pos > buf->shadow_stack_pos)
       FuncExit(thr);
     ThreadSignalContext *sctx = SigCtx(thr);
+    __sanitizer_sigset_t restore_mask;
+    bool restore_mask_needed = false;
     if (sctx) {
       sctx->int_signal_send = buf->int_signal_send;
-      // A deferred handler runs with TSan's temporary all-blocked mask.
-      // A non-local jump bypasses ProcessPendingSignalsImpl's epilogue, so
-      // undo each temporary mask before returning to libc. In particular,
-      // siglongjmp after sigsetjmp(env, 0) will not restore the OS mask.
-      while (sctx->oldset.Size() > buf->oldset_stack_size) {
-        const __sanitizer_sigset_t oldset =
-            sctx->oldset[sctx->oldset.Size() - 1];
-        const int res = REAL(pthread_sigmask)(SIG_SETMASK, &oldset, nullptr);
-        CHECK_EQ(res, 0);
-        sctx->oldset.PopBack();
+      // The first abandoned deferred scope saved the mask that was active
+      // before any of the abandoned scopes. Intermediate masks must not be
+      // installed: unblocking a signal can invoke another handler before
+      // pthread_sigmask returns. Drop the abandoned entries first.
+      if (sctx->oldset.Size() > buf->oldset_stack_size) {
+        internal_memcpy(&restore_mask, &sctx->oldset[buf->oldset_stack_size],
+                        sizeof(restore_mask));
+        sctx->oldset.Resize(buf->oldset_stack_size);
+        restore_mask_needed = true;
       }
     }
     atomic_store(&thr->in_blocking_func, buf->in_blocking_func,
@@ -614,6 +615,13 @@ static void LongJmp(ThreadState *thr, uptr *env) {
 #else
     JmpBufGarbageCollect(thr, buf->sp - 1);
 #endif
+    // All saved TSan state must be restored before a mask change can
+    // deliver a signal. Libc still owns the actual non-local transfer and
+    // any signal mask saved by sigsetjmp(env, 1).
+    if (restore_mask_needed) {
+      const int res = REAL(pthread_sigmask)(SIG_SETMASK, &restore_mask, nullptr);
+      CHECK_EQ(res, 0);
+    }
     return;
   }
 #if SANITIZER_APPLE
@@ -2125,9 +2133,12 @@ void ProcessPendingSignalsImpl(ThreadState *thr) {
     return;
   atomic_fetch_add(&thr->in_signal_handler, 1, memory_order_relaxed);
   internal_sigfillset(&sctx->emptyset);
-  __sanitizer_sigset_t *oldset = sctx->oldset.PushBack();
-  int res = REAL(pthread_sigmask)(SIG_SETMASK, &sctx->emptyset, oldset);
+  __sanitizer_sigset_t oldset;
+  int res = REAL(pthread_sigmask)(SIG_SETMASK, &sctx->emptyset, &oldset);
   CHECK_EQ(res, 0);
+  // Nested deferred dispatch can grow the vector. Keep a stable local copy
+  // for the normal return, and a vector entry for non-local unwinding.
+  sctx->oldset.PushBack(oldset);
   for (int sig = 0; sig < kSigCount; sig++) {
     SignalDesc *signal = &sctx->pending_signals[sig];
     if (signal->armed) {
@@ -2140,10 +2151,12 @@ void ProcessPendingSignalsImpl(ThreadState *thr) {
 #endif
     }
   }
-  res = REAL(pthread_sigmask)(SIG_SETMASK, oldset, 0);
-  CHECK_EQ(res, 0);
+  // Retire this scope before unblocking signals, which can run handlers
+  // synchronously inside pthread_sigmask.
   sctx->oldset.PopBack();
   atomic_fetch_add(&thr->in_signal_handler, -1, memory_order_relaxed);
+  res = REAL(pthread_sigmask)(SIG_SETMASK, &oldset, nullptr);
+  CHECK_EQ(res, 0);
 }
 
 }  // namespace __tsan
