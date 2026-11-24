@@ -54,6 +54,9 @@ if(APPLE)
     $<TARGET_OBJECTS:RTSanitizerCommonCoverage.osx>
     $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.osx>
     $<TARGET_OBJECTS:RTUbsan.osx>)
+  if(TARGET RTTsanPosixC.osx)
+    list(APPEND TSAN_TEST_RUNTIME_OBJECTS $<TARGET_OBJECTS:RTTsanPosixC.osx>)
+  endif()
   if(COMPILER_RT_TSAN_OBJC)
     list(APPEND TSAN_TEST_RUNTIME_OBJECTS $<TARGET_OBJECTS:RTTsanObjC.osx>)
   endif()

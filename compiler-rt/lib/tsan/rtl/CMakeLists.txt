@@ -213,6 +213,26 @@ if(APPLE)
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
+  set(TSAN_POSIX_C_OBJECT_LIBS)
+  if(COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY AND
+     "${TSAN_SUPPORTED_OS}" STREQUAL "osx")
+    # The native POSIX page arithmetic uses C types and the C frontend.
+    # Keep C++ driver options out of this object without changing the SDK,
+    # deployment target, or selected architecture.
+    function(add_tsan_posix_c_objects)
+      list(REMOVE_ITEM DARWIN_osx_CFLAGS -stdlib=libc++)
+      add_compiler_rt_object_libraries(RTTsanPosixC
+        OS osx
+        ARCHS ${TSAN_SUPPORTED_ARCH}
+        SOURCES ../mman/tsan_mman_range_posix.c
+        ADDITIONAL_HEADERS ../mman/tsan_mman_range_posix.h
+        CFLAGS -std=c11 -fPIC -fno-sanitize=all -fvisibility=hidden -fno-lto)
+    endfunction()
+    add_tsan_posix_c_objects()
+    list(APPEND TSAN_POSIX_C_OBJECT_LIBS RTTsanPosixC)
+    list(APPEND TSAN_HEADERS ../mman/tsan_mman_range_posix.h)
+    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_NATIVE_POSIX_C=1)
+  endif()
   if(COMPILER_RT_TSAN_OBJCXX)
     list(APPEND TSAN_SOURCES ../objc/tsan_objc_darwin.mm)
     list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_OBJCXX=1)
@@ -290,7 +310,7 @@ int main() {
     ARCHS ${TSAN_SUPPORTED_ARCH}
     SOURCES ${TSAN_SOURCES} ${TSAN_CXX_SOURCES} ${TSAN_ASM_SOURCES}
     ADDITIONAL_HEADERS ${TSAN_HEADERS}
-    OBJECT_LIBS ${TSAN_OBJC_OBJECT_LIBS} RTInterception
+    OBJECT_LIBS ${TSAN_POSIX_C_OBJECT_LIBS} ${TSAN_OBJC_OBJECT_LIBS} RTInterception
                 RTSanitizerCommon
                 RTSanitizerCommonLibc
                 RTSanitizerCommonCoverage
