@@ -13,18 +13,23 @@
 
 #if SANITIZER_APPLE
 
+#include <sys/ucontext.h>
+
 #include "sanitizer_common/sanitizer_internal_defs.h"
 
 namespace __tsan {
 
-// The signal handler receives a ucontext_t header, not the separately
-// allocated machine context to which uc_mcontext points. The Darwin
-// implementation checks this buffer size against the active SDK.
+// Darwin's signal ucontext points at a separate machine context. A deferred
+// callback must not retain the original pointer into the signal stack.
+// Reserve storage for the widest machine context supported by this SDK.
 struct DarwinSignalContext {
-#if SANITIZER_WORDSIZE == 64
-  __sanitizer::u64 opaque[56 / sizeof(__sanitizer::u64)];
+  ucontext_t context;
+#if defined(__x86_64__) && defined(_STRUCT_MCONTEXT_AVX512_64_FULL)
+  _STRUCT_MCONTEXT_AVX512_64_FULL mcontext;
+#elif defined(__x86_64__) && defined(_STRUCT_MCONTEXT_AVX512_64)
+  _STRUCT_MCONTEXT_AVX512_64 mcontext;
 #else
-  __sanitizer::u32 opaque[32 / sizeof(__sanitizer::u32)];
+  _STRUCT_MCONTEXT mcontext;
 #endif
 };
 

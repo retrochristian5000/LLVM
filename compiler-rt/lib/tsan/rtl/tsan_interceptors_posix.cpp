@@ -2120,7 +2120,11 @@ void ProcessPendingSignalsImpl(ThreadState *thr) {
     if (signal->armed) {
       signal->armed = false;
       CallUserSignalHandler(thr, false, true, sig, &signal->siginfo,
+#if SANITIZER_APPLE
+                            signal->has_ctx ? &signal->ctx.context : nullptr);
+#else
                             signal->has_ctx ? &signal->ctx : nullptr);
+#endif
     }
   }
   res = REAL(pthread_sigmask)(SIG_SETMASK, oldset, 0);
