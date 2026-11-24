@@ -111,6 +111,8 @@ if lit_config.params.get("tsan_libffi") == "1" and (
         and config.target_os == "Darwin"
     ):
         config.available_features.add("tsan-libffi-runtime")
+        if config.target_arch in ("aarch64", "arm64", "arm64e"):
+            config.available_features.add("tsan-libffi-aarch64")
     for name, default in (("cflags", ""), ("ldflags", "-lffi")):
         flags = shlex.split(lit_config.params.get("tsan_libffi_" + name, default))
         config.substitutions.append(

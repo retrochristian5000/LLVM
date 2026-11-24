@@ -73,6 +73,11 @@ inline uptr FfiScalarResultSize(const ffi_type *type) {
   }
 }
 
+#if SANITIZER_APPLE && defined(__aarch64__) && !SANITIZER_GO
+// Native Darwin AArch64, flat homogeneous float/double aggregates only.
+uptr FfiAarch64HfaSize(const ffi_type *type);
+#endif
+
 }  // namespace __tsan
 
 #endif  // TSAN_FFI_H

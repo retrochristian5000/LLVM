@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Track scalar argument reads and result writes by uninstrumented libffi.
+// Track supported argument reads and result writes by uninstrumented libffi.
 // The provider still owns the calling convention and executable trampolines.
 //
 //===----------------------------------------------------------------------===//
@@ -55,6 +55,19 @@ void TrackRange(ThreadState *thr, uptr pc, const void *ptr, uptr size,
   }
 }
 
+uptr ArgumentSize(const ffi_type *type, ffi_abi abi) {
+  const uptr scalar = FfiScalarSize(type);
+  if (scalar)
+    return scalar;
+#if defined(__aarch64__)
+  if (abi == FFI_DEFAULT_ABI)
+    return FfiAarch64HfaSize(type);
+#else
+  (void)abi;
+#endif
+  return 0;
+}
+
 void ReadArguments(ThreadState *thr, uptr pc, const ffi_cif *cif,
                    void **values) {
   if (!CanInspect(cif, sizeof(*cif)))
@@ -77,7 +90,7 @@ void ReadArguments(ThreadState *thr, uptr pc, const ffi_cif *cif,
     const ffi_type *type = types[i];
     if (!CanInspect(type, sizeof(*type)))
       continue;
-    const uptr size = FfiScalarSize(type);
+    const uptr size = ArgumentSize(type, cif->abi);
     if (size)
       TrackRange(thr, pc, values[i], size, false);
   }
@@ -88,7 +101,16 @@ uptr ResultSize(const ffi_cif *cif, const void *result) {
       cif->abi != FFI_DEFAULT_ABI)
     return 0;
   const ffi_type *type = cif->rtype;
-  return CanInspect(type, sizeof(*type)) ? FfiScalarResultSize(type) : 0;
+  if (!CanInspect(type, sizeof(*type)))
+    return 0;
+  const uptr scalar = FfiScalarResultSize(type);
+  if (scalar)
+    return scalar;
+#if defined(__aarch64__)
+  return FfiAarch64HfaSize(type);
+#else
+  return 0;
+#endif
 }
 
 }  // namespace
