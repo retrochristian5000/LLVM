@@ -28,7 +28,19 @@
 
 using namespace __tsan;
 
-#if __TSAN_HAS_INT128
+// Darwin AArch64 targets with native 16-byte atomics must use the same
+// hardware atomicity for loads, stores and RMWs. A private software mutex
+// cannot serialize an access with a native CASP in another library.
+#if SANITIZER_APPLE && defined(__aarch64__) && __TSAN_HAS_INT128 && \
+    defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16)
+#define TSAN_DARWIN_NATIVE_ATOMIC128 1
+static_assert(__atomic_always_lock_free(sizeof(a128), nullptr),
+              "Darwin AArch64 requires lock-free 128-bit atomics");
+#else
+#define TSAN_DARWIN_NATIVE_ATOMIC128 0
+#endif
+
+#if __TSAN_HAS_INT128 && !TSAN_DARWIN_NATIVE_ATOMIC128
 // Protects emulation of 128-bit atomic operations.
 static StaticSpinMutex mutex128;
 #endif
@@ -96,7 +108,7 @@ T func_nand(volatile T *v, T op) {
   // Use a native atomic NAND for widths supported by the Darwin target.
   // Clang can lower this to a CAS loop using LSE or exclusive instructions.
   // Preserve the existing sequentially consistent hardware ordering.
-  if constexpr (sizeof(T) <= sizeof(a64))
+  if constexpr (sizeof(T) <= sizeof(a64) || TSAN_DARWIN_NATIVE_ATOMIC128)
     return __atomic_fetch_nand(v, op, __ATOMIC_SEQ_CST);
 #endif
   // clang does not support __sync_fetch_and_nand.
@@ -115,10 +127,8 @@ T func_cas(volatile T *v, T cmp, T xch) {
   return __sync_val_compare_and_swap(v, cmp, xch);
 }
 
-// clang does not support 128-bit atomic ops.
-// Atomic ops are executed under tsan internal mutex,
-// here we assume that the atomic variables are not accessed
-// from non-instrumented code.
+// On targets without native 16-byte compare-and-swap, the fallback uses
+// a TSan internal mutex and assumes all accesses use this runtime.
 #if !defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16) && __TSAN_HAS_INT128
 a128 func_xchg(volatile a128 *v, a128 op) {
   SpinMutexLock lock(&mutex128);
@@ -179,17 +189,20 @@ a128 func_cas(volatile a128 *v, a128 cmp, a128 xch) {
 #endif
 
 template <typename T>
-static int AccessSize() {
-  if (sizeof(T) <= 1)
-    return 1;
-  else if (sizeof(T) <= 2)
-    return 2;
-  else if (sizeof(T) <= 4)
-    return 4;
-  else
-    return 8;
-  // For 16-byte atomics we also use 8-byte memory access,
-  // this leads to false negatives only in very obscure cases.
+static void TrackAtomicAccess(ThreadState *thr, uptr pc, const volatile T *a,
+                              AccessType typ) {
+  static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 ||
+                    sizeof(T) == 8 || sizeof(T) == 16,
+                "Unsupported atomic width");
+  const uptr addr = reinterpret_cast<uptr>(a);
+  if constexpr (sizeof(T) == 16) {
+    // Each shadow cell describes eight application bytes. Track both with
+    // the atomic flag intact; range trace events do not encode that flag.
+    MemoryAccess(thr, pc, addr, 8, typ | kAccessAtomic);
+    MemoryAccess(thr, pc, addr + 8, 8, typ | kAccessAtomic);
+  } else {
+    MemoryAccess(thr, pc, addr, sizeof(T), typ | kAccessAtomic);
+  }
 }
 
 #if !SANITIZER_GO
@@ -233,7 +246,7 @@ namespace {
 
 template <typename T, T (*F)(volatile T *v, T op)>
 static T AtomicRMW(ThreadState *thr, uptr pc, volatile T *a, T v, morder mo) {
-  MemoryAccess(thr, pc, (uptr)a, AccessSize<T>(), kAccessWrite | kAccessAtomic);
+  TrackAtomicAccess(thr, pc, a, kAccessWrite);
   if (LIKELY(mo == mo_relaxed))
     return F(a, v);
   SlotLocker locker(thr);
@@ -261,8 +274,12 @@ struct OpLoad {
 
 #if __TSAN_HAS_INT128
   static a128 NoTsanAtomic(morder mo, const volatile a128 *a) {
+#if TSAN_DARWIN_NATIVE_ATOMIC128
+    return __atomic_load_n(a, to_mo(mo));
+#else
     SpinMutexLock lock(&mutex128);
     return *a;
+#endif
   }
 #endif
 
@@ -272,8 +289,7 @@ struct OpLoad {
     // This fast-path is critical for performance.
     // Assume the access is atomic.
     if (!IsAcquireOrder(mo)) {
-      MemoryAccess(thr, pc, (uptr)a, AccessSize<T>(),
-                   kAccessRead | kAccessAtomic);
+      TrackAtomicAccess(thr, pc, a, kAccessRead);
       return NoTsanAtomic(mo, a);
     }
     // Don't create sync object if it does not exist yet. For example, an atomic
@@ -288,8 +304,7 @@ struct OpLoad {
       // of the value and the clock we acquire.
       v = NoTsanAtomic(mo, a);
     }
-    MemoryAccess(thr, pc, (uptr)a, AccessSize<T>(),
-                 kAccessRead | kAccessAtomic);
+    TrackAtomicAccess(thr, pc, a, kAccessRead);
     return v;
   }
 };
@@ -302,16 +317,19 @@ struct OpStore {
 
 #if __TSAN_HAS_INT128
   static void NoTsanAtomic(morder mo, volatile a128 *a, a128 v) {
+#if TSAN_DARWIN_NATIVE_ATOMIC128
+    __atomic_store_n(a, v, to_mo(mo));
+#else
     SpinMutexLock lock(&mutex128);
     *a = v;
+#endif
   }
 #endif
 
   template <typename T>
   static void Atomic(ThreadState *thr, uptr pc, morder mo, volatile T *a, T v) {
     DCHECK(IsStoreOrder(mo));
-    MemoryAccess(thr, pc, (uptr)a, AccessSize<T>(),
-                 kAccessWrite | kAccessAtomic);
+    TrackAtomicAccess(thr, pc, a, kAccessWrite);
     // This fast-path is critical for performance.
     // Assume the access is atomic.
     // Strictly saying even relaxed store cuts off release sequence,
@@ -449,8 +467,7 @@ struct OpCAS {
     // (mo_relaxed) when those are used.
     DCHECK(IsLoadOrder(fmo));
 
-    MemoryAccess(thr, pc, (uptr)a, AccessSize<T>(),
-                 kAccessWrite | kAccessAtomic);
+    TrackAtomicAccess(thr, pc, a, kAccessWrite);
     if (LIKELY(mo == mo_relaxed && fmo == mo_relaxed)) {
       T cc = *c;
       T pr = func_cas(a, cc, v);
