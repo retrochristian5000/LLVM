@@ -49,8 +49,14 @@ TSAN_INTERCEPTOR(kern_return_t, mach_vm_deallocate, vm_map_t target,
   SCOPED_TSAN_INTERCEPTOR(mach_vm_deallocate, target, address, size);
   if (target != mach_task_self())
     return REAL(mach_vm_deallocate)(target, address, size);
-  if (address)
-    UnmapShadow(thr, address, size);
+  // Unlike POSIX munmap, Mach accepts an unaligned start and rounds it
+  // down. Clear the same complete page interval that the kernel removes.
+  if (size) {
+    const DarwinArrayRangeDiagnosis range =
+        DiagnoseDarwinArrayRange(address, size);
+    if (range.error == AppMemoryRangeError::kNone)
+      UnmapShadow(thr, range.page_begin, range.page_end - range.page_begin);
+  }
   return REAL(mach_vm_deallocate)(target, address, size);
 }
 

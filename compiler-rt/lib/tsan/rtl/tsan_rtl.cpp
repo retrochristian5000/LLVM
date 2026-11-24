@@ -543,7 +543,14 @@ void UnmapShadow(ThreadState* thr, uptr addr, uptr size) {
   // should clear the whole shadow range, including the tail shadow
   // while addr + size % kShadowCell != 0.
   uptr rounded_size_shadow = RoundUp(addr + size, kShadowCell) - addr;
-  DontNeedShadowFor(addr, rounded_size_shadow);
+  // The exclusive application end can be outside app memory (for example
+  // at the final page of a window). Translate the last valid shadow cell
+  // and advance by one cell, rather than translating the exclusive end.
+  RawShadow *shadow_begin = MemToShadow(addr);
+  RawShadow *shadow_end =
+      MemToShadow(addr + rounded_size_shadow - 1) + kShadowCnt;
+  ReleaseMemoryPagesToOS(reinterpret_cast<uptr>(shadow_begin),
+                         reinterpret_cast<uptr>(shadow_end));
   ScopedGlobalProcessor sgp;
   SlotLocker locker(thr, true);
   uptr rounded_size_meta = RoundUp(addr + size, kMetaShadowCell) - addr;

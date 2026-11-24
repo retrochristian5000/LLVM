@@ -146,6 +146,37 @@ TEST(Shadow, ApplicationMemoryRangeValidation) {
   }
 }
 
+TEST(Shadow, PosixMunmapPageRange) {
+  const uptr page = GetPageSizeCached();
+  const uptr addr = RoundUpTo(LoAppMemBeg(), page);
+  ASSERT_TRUE(IsValidAppMemoryRange(addr, 2 * page));
+  uptr size = 0;
+  EXPECT_TRUE(GetPosixMunmapRange(addr, 1, page, &size));
+  EXPECT_EQ(page, size);
+  EXPECT_TRUE(GetPosixMunmapRange(addr, page + 1, page, &size));
+  EXPECT_EQ(2 * page, size);
+
+  size = 123;
+  EXPECT_FALSE(GetPosixMunmapRange(addr + 1, page, page, &size));
+  EXPECT_FALSE(GetPosixMunmapRange(addr, 0, page, &size));
+  EXPECT_FALSE(GetPosixMunmapRange(addr, ~(uptr)0, page, &size));
+  EXPECT_FALSE(GetPosixMunmapRange(addr, ~(uptr)0 - addr, page, &size));
+  EXPECT_EQ(123U, size);
+
+  const uptr last_page = RoundDownTo(LoAppMemEnd(), page) - page;
+  ASSERT_TRUE(IsValidAppMemoryRange(last_page, page));
+  EXPECT_TRUE(GetPosixMunmapRange(last_page, page, page, &size));
+  EXPECT_EQ(page, size);
+  // Translate only the last application byte, not the exclusive endpoint.
+  EXPECT_EQ(MemToShadow(last_page) + page / kShadowCell * kShadowCnt,
+            MemToShadow(last_page + page - 1) + kShadowCnt);
+  if (!IsValidAppMemoryRange(last_page, 2 * page)) {
+    size = 123;
+    EXPECT_FALSE(GetPosixMunmapRange(last_page, page + 1, page, &size));
+    EXPECT_EQ(123U, size);
+  }
+}
+
 TEST(Shadow, ShadowCellRangeValidation) {
   const uptr addr = RoundUpTo(LoAppMemBeg(), kShadowCell);
   ASSERT_TRUE(IsValidAppMemoryRange(addr, 2 * kShadowCell));

@@ -62,7 +62,9 @@ void RecordMmapResult(ThreadState *thr, uptr pc, void *requested_addr,
 }
 
 void PrepareMunmapShadow(ThreadState *thr, uptr addr, uptr size) {
-  UnmapShadow(thr, addr, size);
+  uptr rounded_size;
+  if (GetPosixMunmapRange(addr, size, GetPageSizeCached(), &rounded_size))
+    UnmapShadow(thr, addr, rounded_size);
 }
 
 }  // namespace __tsan

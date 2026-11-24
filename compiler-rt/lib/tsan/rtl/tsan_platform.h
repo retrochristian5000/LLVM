@@ -1033,6 +1033,25 @@ ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
   return DiagnoseAppMemoryRange(addr, size) == AppMemoryRangeError::kNone;
 }
 
+// POSIX munmap requires a page-aligned start and unmaps whole pages, even
+// when the requested byte count ends inside a page. Keep raw VM addresses
+// intact, and leave the output unchanged for invalid requests.
+inline bool GetPosixMunmapRange(uptr addr, uptr size, uptr page_size,
+                                uptr *rounded_size) {
+  DCHECK(IsPowerOfTwo(page_size));
+  const uptr max_addr = ~(uptr)0;
+  if (!size || !IsAligned(addr, page_size) || size > max_addr - addr)
+    return false;
+  const uptr end = addr + size;
+  if (end > max_addr - (page_size - 1))
+    return false;
+  const uptr length = RoundUpTo(end, page_size) - addr;
+  if (!IsValidAppMemoryRange(addr, length))
+    return false;
+  *rounded_size = length;
+  return true;
+}
+
 // Convert a memory-access range to whole shadow cells without wrapping the
 // exclusive end. Tagged application pointers use the same normalization as
 // MemToShadow; raw VM addresses must use DiagnoseAppMemoryRange directly.
