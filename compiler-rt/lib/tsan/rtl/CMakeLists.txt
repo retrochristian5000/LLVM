@@ -214,8 +214,13 @@ if(APPLE)
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
   if(COMPILER_RT_TSAN_OBJCXX)
-    list(APPEND TSAN_SOURCES ../objc/tsan_objc_darwin.mm)
-    set_source_files_properties(../objc/tsan_objc_darwin.mm PROPERTIES
+    list(APPEND TSAN_SOURCES
+      ../objc/tsan_objc_darwin.mm
+      ../objc/tsan_objc_aslr.mm)
+    list(APPEND TSAN_HEADERS ../objc/tsan_objc_aslr.h)
+    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_OBJCXX=1)
+    set_source_files_properties(
+      ../objc/tsan_objc_darwin.mm ../objc/tsan_objc_aslr.mm PROPERTIES
       COMPILE_OPTIONS "-fno-objc-arc;-fno-sanitize=all")
   endif()
   if(COMPILER_RT_TSAN_LIBFFI)

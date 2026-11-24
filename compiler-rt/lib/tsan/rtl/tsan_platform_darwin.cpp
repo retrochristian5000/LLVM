@@ -17,6 +17,9 @@
 #if !SANITIZER_GO
 #include "../interface/tsan_interface_got.h"
 #include "tsan_macho.h"
+#if defined(TSAN_HAS_OBJCXX)
+#include "../objc/tsan_objc_aslr.h"
+#endif
 #endif
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
@@ -48,6 +51,9 @@ void InitializePlatform() {
   VPrintf(2, "ThreadSanitizer: main Mach-O executable architecture: %s\n",
           MachOExecutableArchitecture());
   if (Verbosity() >= 2) {
+#if defined(TSAN_HAS_OBJCXX)
+    ReportObjCImagePlacement();
+#endif
     MachOGOTSlots slots;
     if (GetMainExecutableMachOGOTSlots(&slots))
       VPrintf(2,
