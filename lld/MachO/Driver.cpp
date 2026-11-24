@@ -1329,7 +1329,7 @@ static bool greaterEqMinVersion(const MinVersions<N> &minVersions,
   return false;
 }
 
-static bool dataConstDefault(const InputArgList &args) {
+static bool dataConstDefault() {
   static const MinVersions<6> minVersion = {{
       {PLATFORM_MACOS, VersionTuple(10, 15)},
       {PLATFORM_IOS, VersionTuple(13, 0)},
@@ -1343,7 +1343,7 @@ static bool dataConstDefault(const InputArgList &args) {
 
   switch (config->outputType) {
   case MH_EXECUTE:
-    return !(args.hasArg(OPT_no_pie) && supportsNoPie());
+    return config->isPic;
   case MH_BUNDLE:
     // FIXME: return false when -final_name ...
     // has prefix "/System/Library/UserEventPlugins/"
@@ -2356,7 +2356,7 @@ bool link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
   config->dylibCurrentVersion = parseDylibVersion(args, OPT_current_version);
 
   config->dataConst =
-      args.hasFlag(OPT_data_const, OPT_no_data_const, dataConstDefault(args));
+      args.hasFlag(OPT_data_const, OPT_no_data_const, dataConstDefault());
   // Populate config->sectionRenameMap with builtin default renames.
   // Options -rename_section and -rename_segment are able to override.
   initializeSectionRenameMap();

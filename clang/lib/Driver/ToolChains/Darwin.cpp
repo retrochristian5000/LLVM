@@ -378,14 +378,25 @@ void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
   Args.AddAllArgs(CmdArgs, options::OPT_multiply__defined);
   Args.AddAllArgs(CmdArgs, options::OPT_multiply__defined__unused);
 
-  if (const Arg *A =
-          Args.getLastArg(options::OPT_fpie, options::OPT_fPIE,
-                          options::OPT_fno_pie, options::OPT_fno_PIE)) {
-    if (A->getOption().matches(options::OPT_fpie) ||
-        A->getOption().matches(options::OPT_fPIE))
-      CmdArgs.push_back("-pie");
-    else
-      CmdArgs.push_back("-no_pie");
+  // The executable link mode is independent of Darwin's mandatory PIC
+  // code generation on 64-bit targets. Prefer explicit linker-mode options
+  // over compiler-mode options and leave the default to the Mach-O linker.
+  const Arg *PIECodeGen =
+      Args.getLastArg(options::OPT_fpie, options::OPT_fPIE,
+                      options::OPT_fno_pie, options::OPT_fno_PIE);
+  const Arg *PIELink =
+      Args.getLastArg(options::OPT_pie, options::OPT_no_pie);
+  if (!Args.hasArg(options::OPT_dynamiclib, options::OPT_bundle,
+                   options::OPT_static)) {
+    if (PIELink)
+      CmdArgs.push_back(PIELink->getOption().matches(options::OPT_pie)
+                            ? "-pie"
+                            : "-no_pie");
+    else if (PIECodeGen)
+      CmdArgs.push_back(PIECodeGen->getOption().matches(options::OPT_fpie) ||
+                                PIECodeGen->getOption().matches(options::OPT_fPIE)
+                            ? "-pie"
+                            : "-no_pie");
   }
 
   // for embed-bitcode, use -bitcode_bundle in linker command
