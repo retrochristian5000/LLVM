@@ -1033,6 +1033,26 @@ ALWAYS_INLINE bool IsValidAppMemoryRange(uptr addr, uptr size) {
   return DiagnoseAppMemoryRange(addr, size) == AppMemoryRangeError::kNone;
 }
 
+// Convert a memory-access range to whole shadow cells without wrapping the
+// exclusive end. Tagged application pointers use the same normalization as
+// MemToShadow; raw VM addresses must use DiagnoseAppMemoryRange directly.
+inline bool GetShadowCellRange(uptr addr, uptr size, uptr *begin, uptr *end) {
+  addr = STRIP_MTE_TAG(addr);
+  const uptr max_addr = ~(uptr)0;
+  if (!size || size > max_addr - addr)
+    return false;
+  const uptr raw_end = addr + size;
+  if (raw_end > max_addr - (kShadowCell - 1))
+    return false;
+  const uptr aligned_begin = RoundDownTo(addr, kShadowCell);
+  const uptr aligned_end = RoundUpTo(raw_end, kShadowCell);
+  if (!IsValidAppMemoryRange(aligned_begin, aligned_end - aligned_begin))
+    return false;
+  *begin = aligned_begin;
+  *end = aligned_end;
+  return true;
+}
+
 struct IsAppMemImpl {
   template <typename Mapping>
   static bool Apply(uptr mem) {

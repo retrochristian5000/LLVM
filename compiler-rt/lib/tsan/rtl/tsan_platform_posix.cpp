@@ -115,7 +115,8 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
 
     // Note: IsAppMem includes if it is heap memory, hence we must
     // put this check after the heap bounds check.
-    if (IsAppMem(segment.start) && IsAppMem(segment.end - 1))
+    if (segment.end > segment.start &&
+        IsValidAppMemoryRange(segment.start, segment.end - segment.start))
       continue;
 
     // Guard page after the heap end

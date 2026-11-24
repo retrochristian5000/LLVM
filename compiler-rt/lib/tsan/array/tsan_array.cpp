@@ -51,10 +51,8 @@ static void MemoryRangeSet(uptr addr, uptr size, RawShadow val) {
     return;
   DCHECK_EQ(addr % kShadowCell, 0);
   DCHECK_EQ(size % kShadowCell, 0);
-  // If a user passes some insane arguments (memset(0)),
-  // let it just crash as usual.
-  if (!IsAppMem(addr) || !IsAppMem(addr + size - 1))
-    return;
+  // Both callers validate the entire aligned interval before translating it.
+  DCHECK(IsValidAppMemoryRange(addr, size));
   RawShadow* begin = MemToShadow(addr);
   RawShadow* end = begin + size / kShadowCell * kShadowCnt;
   // Don't want to touch lots of shadow memory.
@@ -87,17 +85,21 @@ static void MemoryRangeSet(uptr addr, uptr size, RawShadow val) {
 }
 
 void MemoryResetRange(ThreadState* thr, uptr pc, uptr addr, uptr size) {
-  uptr addr1 = RoundDown(addr, kShadowCell);
-  uptr size1 = RoundUp(size + addr - addr1, kShadowCell);
-  MemoryRangeSet(addr1, size1, Shadow::kEmpty);
+  uptr begin, end;
+  if (!GetShadowCellRange(addr, size, &begin, &end))
+    return;
+  MemoryRangeSet(begin, end - begin, Shadow::kEmpty);
 }
 
 void MemoryRangeImitateWrite(ThreadState* thr, uptr pc, uptr addr, uptr size) {
   DCHECK_EQ(addr % kShadowCell, 0);
-  size = RoundUp(size, kShadowCell);
-  TraceMemoryAccessRange(thr, pc, addr, size, kAccessWrite);
-  Shadow cur(thr->fast_state, 0, 8, kAccessWrite);
-  MemoryRangeSet(addr, size, cur.raw());
+  uptr begin, end;
+  if (!GetShadowCellRange(addr, size, &begin, &end))
+    return;
+  const uptr aligned_size = end - begin;
+  TraceMemoryAccessRange(thr, pc, begin, aligned_size, kAccessWrite);
+  Shadow cur(thr->fast_state, 0, kShadowCell, kAccessWrite);
+  MemoryRangeSet(begin, aligned_size, cur.raw());
 }
 
 void MemoryRangeImitateWriteOrResetRange(ThreadState* thr, uptr pc, uptr addr,

@@ -146,6 +146,52 @@ TEST(Shadow, ApplicationMemoryRangeValidation) {
   }
 }
 
+TEST(Shadow, ShadowCellRangeValidation) {
+  const uptr addr = RoundUpTo(LoAppMemBeg(), kShadowCell);
+  ASSERT_TRUE(IsValidAppMemoryRange(addr, 2 * kShadowCell));
+  uptr begin = 0;
+  uptr end = 0;
+  EXPECT_TRUE(GetShadowCellRange(addr + 1, kShadowCell, &begin, &end));
+  EXPECT_EQ(addr, begin);
+  EXPECT_EQ(addr + 2 * kShadowCell, end);
+
+  // Empty or overflowing ranges must not change the output arguments.
+  begin = 1;
+  end = 2;
+  EXPECT_FALSE(GetShadowCellRange(addr + 1, 0, &begin, &end));
+  EXPECT_FALSE(GetShadowCellRange(addr, ~(uptr)0, &begin, &end));
+  EXPECT_FALSE(GetShadowCellRange(addr, ~(uptr)0 - addr, &begin, &end));
+  EXPECT_EQ(1U, begin);
+  EXPECT_EQ(2U, end);
+
+  // Even valid endpoints do not make an interval across a reserved gap safe.
+  const uptr windows[][2] = {
+      {LoAppMemBeg(), LoAppMemEnd()},
+      {MidAppMemBeg(), MidAppMemEnd()},
+      {HeapMemBeg(), HeapMemEnd()},
+      {HiAppMemBeg(), HiAppMemEnd()},
+  };
+  for (const auto &left : windows) {
+    if (left[0] == left[1])
+      continue;
+    for (const auto &right : windows) {
+      if (right[0] == right[1] || right[0] <= left[1])
+        continue;
+      const uptr first = left[1] - kShadowCell;
+      const uptr last = right[0];
+      const uptr length = last - first + 1;
+      if (DiagnoseAppMemoryRange(first, length) ==
+          AppMemoryRangeError::kCrossesGap) {
+        EXPECT_TRUE(IsAppMem(first));
+        EXPECT_TRUE(IsAppMem(last));
+        EXPECT_FALSE(GetShadowCellRange(first, length, &begin, &end));
+        EXPECT_EQ(1U, begin);
+        EXPECT_EQ(2U, end);
+      }
+    }
+  }
+}
+
 #if SANITIZER_APPLE && !SANITIZER_GO
 TEST(Shadow, DarwinMachVmPageRounding) {
   const uptr page_size = GetPageSizeCached();
