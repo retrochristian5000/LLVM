@@ -2362,6 +2362,8 @@ public:
   GenerateObjCAtomicSetterCopyHelperFunction(const ObjCPropertyImplDecl *PID);
   llvm::Constant *
   GenerateObjCAtomicGetterCopyHelperFunction(const ObjCPropertyImplDecl *PID);
+  llvm::Constant *GenerateObjCAtomicCopyHelperFunction(
+      const ObjCPropertyImplDecl *PID, bool IsSetter);
   llvm::Value *EmitBlockCopyAndAutorelease(llvm::Value *Block, QualType Ty);
 
   void BuildBlockRelease(llvm::Value *DeclPtr, BlockFieldFlags flags,

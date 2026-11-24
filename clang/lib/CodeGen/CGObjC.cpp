@@ -3762,141 +3762,58 @@ void CodeGenFunction::EmitExtendGCLifetime(llvm::Value *object) {
   EmitNounwindRuntimeCall(extender, object);
 }
 
-/// GenerateObjCAtomicSetterCopyHelperFunction - Given a c++ object type with
-/// non-trivial copy assignment function, produce following helper function.
-/// static void copyHelper(Ty *dest, const Ty *source) { *dest = *source; }
-///
 llvm::Constant *
 CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
-                                        const ObjCPropertyImplDecl *PID) {
-  const ObjCPropertyDecl *PD = PID->getPropertyDecl();
-  if ((!(PD->getPropertyAttributes() & ObjCPropertyAttribute::kind_atomic)))
-    return nullptr;
-
-  QualType Ty = PID->getPropertyIvarDecl()->getType();
-  ASTContext &C = getContext();
-
-  if (Ty.isNonTrivialToPrimitiveCopy() == QualType::PCK_Struct) {
-    // Call the move assignment operator instead of calling the copy assignment
-    // operator and destructor.
-    CharUnits Alignment = C.getTypeAlignInChars(Ty);
-    llvm::Constant *Fn = getNonTrivialCStructMoveAssignmentOperator(
-        CGM, Alignment, Alignment, Ty.isVolatileQualified(), Ty);
-    return Fn;
-  }
-
-  if (!getLangOpts().CPlusPlus ||
-      !getLangOpts().ObjCRuntime.hasAtomicCopyHelper())
-    return nullptr;
-  if (!Ty->isRecordType())
-    return nullptr;
-  llvm::Constant *HelperFn = nullptr;
-  if (hasTrivialSetExpr(PID))
-    return nullptr;
-  assert(PID->getSetterCXXAssignment() && "SetterCXXAssignment - null");
-  if ((HelperFn = CGM.getAtomicSetterHelperFnMap(Ty)))
-    return HelperFn;
-
-  const IdentifierInfo *II =
-      &CGM.getContext().Idents.get("__assign_helper_atomic_property_");
-
-  QualType ReturnTy = C.VoidTy;
-  QualType DestTy = C.getPointerType(Ty);
-  QualType SrcTy = Ty;
-  SrcTy.addConst();
-  SrcTy = C.getPointerType(SrcTy);
-
-  SmallVector<QualType, 2> ArgTys;
-  ArgTys.push_back(DestTy);
-  ArgTys.push_back(SrcTy);
-  QualType FunctionTy = C.getFunctionType(ReturnTy, ArgTys, {});
-
-  FunctionDecl *FD = FunctionDecl::Create(
-      C, C.getTranslationUnitDecl(), SourceLocation(), SourceLocation(), II,
-      FunctionTy, nullptr, SC_Static, false, false, false);
-
-  FunctionArgList args;
-  ParmVarDecl *Params[2];
-  ParmVarDecl *DstDecl = ParmVarDecl::Create(
-      C, FD, SourceLocation(), SourceLocation(), nullptr, DestTy,
-      C.getTrivialTypeSourceInfo(DestTy, SourceLocation()), SC_None,
-      /*DefArg=*/nullptr);
-  args.push_back(Params[0] = DstDecl);
-  ParmVarDecl *SrcDecl = ParmVarDecl::Create(
-      C, FD, SourceLocation(), SourceLocation(), nullptr, SrcTy,
-      C.getTrivialTypeSourceInfo(SrcTy, SourceLocation()), SC_None,
-      /*DefArg=*/nullptr);
-  args.push_back(Params[1] = SrcDecl);
-  FD->setParams(Params);
-
-  const CGFunctionInfo &FI =
-      CGM.getTypes().arrangeBuiltinFunctionDeclaration(ReturnTy, args);
-
-  llvm::FunctionType *LTy = CGM.getTypes().GetFunctionType(FI);
-
-  llvm::Function *Fn =
-    llvm::Function::Create(LTy, llvm::GlobalValue::InternalLinkage,
-                           "__assign_helper_atomic_property_",
-                           &CGM.getModule());
-
-  CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
-
-  StartFunction(FD, ReturnTy, Fn, FI, args);
-
-  DeclRefExpr DstExpr(C, DstDecl, false, DestTy, VK_PRValue, SourceLocation());
-  UnaryOperator *DST = UnaryOperator::Create(
-      C, &DstExpr, UO_Deref, DestTy->getPointeeType(), VK_LValue, OK_Ordinary,
-      SourceLocation(), false, FPOptionsOverride());
-
-  DeclRefExpr SrcExpr(C, SrcDecl, false, SrcTy, VK_PRValue, SourceLocation());
-  UnaryOperator *SRC = UnaryOperator::Create(
-      C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
-      SourceLocation(), false, FPOptionsOverride());
-
-  Expr *Args[2] = {DST, SRC};
-  CallExpr *CalleeExp = cast<CallExpr>(PID->getSetterCXXAssignment());
-  CXXOperatorCallExpr *TheCall = CXXOperatorCallExpr::Create(
-      C, OO_Equal, CalleeExp->getCallee(), Args, DestTy->getPointeeType(),
-      VK_LValue, SourceLocation(), FPOptionsOverride());
-
-  EmitStmt(TheCall);
-
-  FinishFunction();
-  HelperFn = Fn;
-  CGM.setAtomicSetterHelperFnMap(Ty, HelperFn);
-  return HelperFn;
+    const ObjCPropertyImplDecl *PID) {
+  return GenerateObjCAtomicCopyHelperFunction(PID, /*IsSetter=*/true);
 }
 
 llvm::Constant *CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
     const ObjCPropertyImplDecl *PID) {
+  return GenerateObjCAtomicCopyHelperFunction(PID, /*IsSetter=*/false);
+}
+
+// Both helpers have the ABI void(T *, const T *). The setter assigns into
+// initialized storage; the getter copy-constructs into uninitialized storage.
+llvm::Constant *CodeGenFunction::GenerateObjCAtomicCopyHelperFunction(
+    const ObjCPropertyImplDecl *PID, bool IsSetter) {
   const ObjCPropertyDecl *PD = PID->getPropertyDecl();
-  if ((!(PD->getPropertyAttributes() & ObjCPropertyAttribute::kind_atomic)))
+  if (!(PD->getPropertyAttributes() & ObjCPropertyAttribute::kind_atomic))
     return nullptr;
 
-  QualType Ty = PD->getType();
+  QualType Ty = IsSetter ? PID->getPropertyIvarDecl()->getType() : PD->getType();
   ASTContext &C = getContext();
 
   if (Ty.isNonTrivialToPrimitiveCopy() == QualType::PCK_Struct) {
     CharUnits Alignment = C.getTypeAlignInChars(Ty);
-    llvm::Constant *Fn = getNonTrivialCStructCopyConstructor(
+    if (IsSetter)
+      return getNonTrivialCStructMoveAssignmentOperator(
+          CGM, Alignment, Alignment, Ty.isVolatileQualified(), Ty);
+    return getNonTrivialCStructCopyConstructor(
         CGM, Alignment, Alignment, Ty.isVolatileQualified(), Ty);
-    return Fn;
   }
 
   if (!getLangOpts().CPlusPlus ||
-      !getLangOpts().ObjCRuntime.hasAtomicCopyHelper())
+      !getLangOpts().ObjCRuntime.hasAtomicCopyHelper() || !Ty->isRecordType())
     return nullptr;
-  if (!Ty->isRecordType())
-    return nullptr;
-  llvm::Constant *HelperFn = nullptr;
-  if (hasTrivialGetExpr(PID))
-    return nullptr;
-  assert(PID->getGetterCXXConstructor() && "getGetterCXXConstructor - null");
-  if ((HelperFn = CGM.getAtomicGetterHelperFnMap(Ty)))
-    return HelperFn;
 
-  const IdentifierInfo *II =
-      &CGM.getContext().Idents.get("__copy_helper_atomic_property_");
+  if (IsSetter) {
+    if (hasTrivialSetExpr(PID))
+      return nullptr;
+    assert(PID->getSetterCXXAssignment() && "SetterCXXAssignment - null");
+    if (auto *HelperFn = CGM.getAtomicSetterHelperFnMap(Ty))
+      return HelperFn;
+  } else {
+    if (hasTrivialGetExpr(PID))
+      return nullptr;
+    assert(PID->getGetterCXXConstructor() && "getGetterCXXConstructor - null");
+    if (auto *HelperFn = CGM.getAtomicGetterHelperFnMap(Ty))
+      return HelperFn;
+  }
+
+  StringRef HelperName = IsSetter ? "__assign_helper_atomic_property_"
+                                  : "__copy_helper_atomic_property_";
+  const IdentifierInfo *II = &C.Idents.get(HelperName);
 
   QualType ReturnTy = C.VoidTy;
   QualType DestTy = C.getPointerType(Ty);
@@ -3933,57 +3850,78 @@ llvm::Constant *CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
   llvm::FunctionType *LTy = CGM.getTypes().GetFunctionType(FI);
 
   llvm::Function *Fn = llvm::Function::Create(
-      LTy, llvm::GlobalValue::InternalLinkage, "__copy_helper_atomic_property_",
-      &CGM.getModule());
+      LTy, llvm::GlobalValue::InternalLinkage, HelperName, &CGM.getModule());
 
   CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
 
   StartFunction(FD, ReturnTy, Fn, FI, args);
 
-  DeclRefExpr SrcExpr(getContext(), SrcDecl, false, SrcTy, VK_PRValue,
-                      SourceLocation());
+  if (IsSetter) {
+    DeclRefExpr DstExpr(C, DstDecl, false, DestTy, VK_PRValue, SourceLocation());
+    UnaryOperator *DST = UnaryOperator::Create(
+        C, &DstExpr, UO_Deref, DestTy->getPointeeType(), VK_LValue, OK_Ordinary,
+        SourceLocation(), false, FPOptionsOverride());
 
-  UnaryOperator *SRC = UnaryOperator::Create(
-      C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
-      SourceLocation(), false, FPOptionsOverride());
+    DeclRefExpr SrcExpr(C, SrcDecl, false, SrcTy, VK_PRValue, SourceLocation());
+    UnaryOperator *SRC = UnaryOperator::Create(
+        C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
+        SourceLocation(), false, FPOptionsOverride());
 
-  CXXConstructExpr *CXXConstExpr =
-    cast<CXXConstructExpr>(PID->getGetterCXXConstructor());
+    Expr *Args[2] = {DST, SRC};
+    CallExpr *CalleeExp = cast<CallExpr>(PID->getSetterCXXAssignment());
+    CXXOperatorCallExpr *TheCall = CXXOperatorCallExpr::Create(
+        C, OO_Equal, CalleeExp->getCallee(), Args, DestTy->getPointeeType(),
+        VK_LValue, SourceLocation(), FPOptionsOverride());
 
-  SmallVector<Expr*, 4> ConstructorArgs;
-  ConstructorArgs.push_back(SRC);
-  ConstructorArgs.append(std::next(CXXConstExpr->arg_begin()),
-                         CXXConstExpr->arg_end());
+    EmitStmt(TheCall);
+  } else {
+    DeclRefExpr SrcExpr(getContext(), SrcDecl, false, SrcTy, VK_PRValue,
+                        SourceLocation());
 
-  CXXConstructExpr *TheCXXConstructExpr =
-    CXXConstructExpr::Create(C, Ty, SourceLocation(),
-                             CXXConstExpr->getConstructor(),
-                             CXXConstExpr->isElidable(),
-                             ConstructorArgs,
-                             CXXConstExpr->hadMultipleCandidates(),
-                             CXXConstExpr->isListInitialization(),
-                             CXXConstExpr->isStdInitListInitialization(),
-                             CXXConstExpr->requiresZeroInitialization(),
-                             CXXConstExpr->getConstructionKind(),
-                             SourceRange());
+    UnaryOperator *SRC = UnaryOperator::Create(
+        C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
+        SourceLocation(), false, FPOptionsOverride());
 
-  DeclRefExpr DstExpr(getContext(), DstDecl, false, DestTy, VK_PRValue,
-                      SourceLocation());
+    CXXConstructExpr *CXXConstExpr =
+      cast<CXXConstructExpr>(PID->getGetterCXXConstructor());
 
-  RValue DV = EmitAnyExpr(&DstExpr);
-  CharUnits Alignment =
-      getContext().getTypeAlignInChars(TheCXXConstructExpr->getType());
-  EmitAggExpr(TheCXXConstructExpr,
-              AggValueSlot::forAddr(
-                  Address(DV.getScalarVal(), ConvertTypeForMem(Ty), Alignment),
-                  Qualifiers(), AggValueSlot::IsDestructed,
-                  AggValueSlot::DoesNotNeedGCBarriers,
-                  AggValueSlot::IsNotAliased, AggValueSlot::DoesNotOverlap));
+    SmallVector<Expr*, 4> ConstructorArgs;
+    ConstructorArgs.push_back(SRC);
+    ConstructorArgs.append(std::next(CXXConstExpr->arg_begin()),
+                           CXXConstExpr->arg_end());
+
+    CXXConstructExpr *TheCXXConstructExpr =
+      CXXConstructExpr::Create(C, Ty, SourceLocation(),
+                               CXXConstExpr->getConstructor(),
+                               CXXConstExpr->isElidable(),
+                               ConstructorArgs,
+                               CXXConstExpr->hadMultipleCandidates(),
+                               CXXConstExpr->isListInitialization(),
+                               CXXConstExpr->isStdInitListInitialization(),
+                               CXXConstExpr->requiresZeroInitialization(),
+                               CXXConstExpr->getConstructionKind(),
+                               SourceRange());
+
+    DeclRefExpr DstExpr(getContext(), DstDecl, false, DestTy, VK_PRValue,
+                        SourceLocation());
+
+    RValue DV = EmitAnyExpr(&DstExpr);
+    CharUnits Alignment =
+        getContext().getTypeAlignInChars(TheCXXConstructExpr->getType());
+    EmitAggExpr(TheCXXConstructExpr,
+                AggValueSlot::forAddr(
+                    Address(DV.getScalarVal(), ConvertTypeForMem(Ty), Alignment),
+                    Qualifiers(), AggValueSlot::IsDestructed,
+                    AggValueSlot::DoesNotNeedGCBarriers,
+                    AggValueSlot::IsNotAliased, AggValueSlot::DoesNotOverlap));
+  }
 
   FinishFunction();
-  HelperFn = Fn;
-  CGM.setAtomicGetterHelperFnMap(Ty, HelperFn);
-  return HelperFn;
+  if (IsSetter)
+    CGM.setAtomicSetterHelperFnMap(Ty, Fn);
+  else
+    CGM.setAtomicGetterHelperFnMap(Ty, Fn);
+  return Fn;
 }
 
 llvm::Value *
