@@ -26,6 +26,7 @@ namespace __tsan {
 #if SANITIZER_APPLE
 // Map Objective-C objects, including tagged pointers without backing storage,
 // to stable addresses usable by TSan's mutex synchronization model.
+bool IsTaggedObjCPointer(uptr obj);
 uptr SyncAddressForObjCObject(uptr obj, ThreadState *thr, uptr pc);
 #endif
 

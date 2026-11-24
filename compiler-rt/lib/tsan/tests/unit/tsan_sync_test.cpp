@@ -15,6 +15,22 @@
 
 namespace __tsan {
 
+#if SANITIZER_APPLE
+TEST(ObjCSync, TaggedPointerMarker) {
+  constexpr uptr high = 1ull << 63;
+  EXPECT_FALSE(IsTaggedObjCPointer(0));
+  EXPECT_FALSE(IsTaggedObjCPointer(0x10000));
+#if defined(__x86_64__) && (SANITIZER_OSX || TARGET_OS_MACCATALYST)
+  EXPECT_TRUE(IsTaggedObjCPointer(0x10001));
+  EXPECT_FALSE(IsTaggedObjCPointer(high | 0x10000));
+#else
+  EXPECT_FALSE(IsTaggedObjCPointer(0x10001));
+  EXPECT_TRUE(IsTaggedObjCPointer(high | 0x10000));
+#endif
+  EXPECT_TRUE(IsTaggedObjCPointer(high | 1));
+}
+#endif
+
 TEST(MetaMap, Basic) {
   ThreadState *thr = cur_thread();
   SlotLocker locker(thr);

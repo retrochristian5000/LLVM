@@ -91,6 +91,7 @@ if(APPLE)
     tsan_interceptors_darwin.cpp
     tsan_interceptors_mac.cpp
     tsan_interceptors_mach_vm.cpp
+    tsan_interceptors_objc.cpp
     tsan_macho.cpp
     tsan_malloc_mac.cpp
     ../mman/tsan_mman_darwin.cpp

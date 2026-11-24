@@ -16,7 +16,6 @@
 
 #  include <errno.h>
 #  include <libkern/OSAtomic.h>
-#  include <objc/objc-sync.h>
 #  include <os/lock.h>
 #  include <sys/ucontext.h>
 
@@ -385,30 +384,6 @@ TSAN_INTERCEPTOR(void, xpc_connection_cancel, xpc_connection_t connection) {
 }
 
 #  endif  // #if defined(__has_include) && __has_include(<xpc/xpc.h>)
-
-TSAN_INTERCEPTOR(int, objc_sync_enter, id obj) {
-  SCOPED_TSAN_INTERCEPTOR(objc_sync_enter, obj);
-  if (!obj)
-    return REAL(objc_sync_enter)(obj);
-  uptr addr = SyncAddressForObjCObject((uptr)obj, thr, pc);
-  MutexPreLock(thr, pc, addr, MutexFlagWriteReentrant);
-  int result = REAL(objc_sync_enter)(obj);
-  CHECK_EQ(result, OBJC_SYNC_SUCCESS);
-  MutexPostLock(thr, pc, addr, MutexFlagWriteReentrant);
-  return result;
-}
-
-TSAN_INTERCEPTOR(int, objc_sync_exit, id obj) {
-  SCOPED_TSAN_INTERCEPTOR(objc_sync_exit, obj);
-  if (!obj)
-    return REAL(objc_sync_exit)(obj);
-  uptr addr = SyncAddressForObjCObject((uptr)obj, thr, pc);
-  MutexUnlock(thr, pc, addr);
-  int result = REAL(objc_sync_exit)(obj);
-  if (result != OBJC_SYNC_SUCCESS)
-    MutexInvalidAccess(thr, pc, addr);
-  return result;
-}
 
 TSAN_INTERCEPTOR(int, swapcontext, ucontext_t *oucp, const ucontext_t *ucp) {
   {

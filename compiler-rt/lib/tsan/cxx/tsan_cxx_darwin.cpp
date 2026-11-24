@@ -9,7 +9,7 @@
 // Darwin libc++ synchronization interceptors.
 // These wrap dynamically-linked libc++ reference-counting and call_once
 // operations so their synchronization is visible to ThreadSanitizer.
-// Objective-C and OS-specific interceptors remain in rtl/.
+// Objective-C runtime synchronization lives in tsan_interceptors_objc.cpp.
 //
 //===----------------------------------------------------------------------===//
 

@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Darwin-specific synchronization address handling for Objective-C objects.
-// The objc_sync_enter/exit interceptors stay in tsan_interceptors_mac.cpp;
+// The objc_sync interceptors live in tsan_interceptors_objc.cpp;
 // shared SyncVar and MetaMap logic stays in tsan_sync.cpp.
 
 #include "sanitizer_common/sanitizer_platform.h"
@@ -24,9 +24,16 @@ namespace __tsan {
 // pointers encode the object data directly in their pointer bits and do not
 // have an associated memory allocation. The Obj-C runtime uses tagged pointers
 // to transparently optimize small objects.
-static bool IsTaggedObjCPointer(uptr obj) {
-  const uptr kPossibleTaggedBits = 0x8000000000000001ull;
-  return ((uptr)obj & kPossibleTaggedBits) != 0;
+bool IsTaggedObjCPointer(uptr obj) {
+  // Match objc4's tag marker, not the tag payload. ARM64/ARM64e uses the
+  // most significant bit even in the split-tag representation. Desktop
+  // x86_64 (including Catalyst) uses the least significant bit.
+#if defined(__x86_64__) && (SANITIZER_OSX || TARGET_OS_MACCATALYST)
+  constexpr uptr kTagMask = 1;
+#else
+  constexpr uptr kTagMask = 1ull << 63;
+#endif
+  return (obj & kTagMask) != 0;
 }
 
 // Returns an address which can be used to inform TSan about synchronization
