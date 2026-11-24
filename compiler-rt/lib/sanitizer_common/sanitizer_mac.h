@@ -68,6 +68,10 @@ void GetAppReservedRanges(InternalMmapVector<ReservedRange>& ranges);
 
 char **GetEnviron();
 
+// Exclusive task VM ceiling from TASK_VM_INFO, or zero if unavailable.
+// Unlike GetMaxUserVirtualAddress(), this is not capped by sanitizer tables.
+uptr GetDarwinTaskVmMaxAddress();
+
 void RestrictMemoryToMaxAddress(uptr max_address);
 
 using ThreadEventCallback = void (*)(uptr thread);

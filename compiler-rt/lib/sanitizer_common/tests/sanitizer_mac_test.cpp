@@ -19,6 +19,7 @@
 
 #include <sys/sysctl.h>  // sysctlbyname
 #include <mach/kern_return.h>  // KERN_SUCCESS
+#include <mach/mach.h>
 
 namespace __sanitizer {
 
@@ -68,6 +69,22 @@ TEST(SanitizerMac, GetMacosAlignedVersion) {
 
   // Prefix match
   ASSERT_EQ(expected.compare(0, actual.size(), actual), 0);
+}
+#endif
+
+#if defined(TASK_VM_INFO_REV2_COUNT) && SANITIZER_WORDSIZE == 64
+TEST(SanitizerMac, TaskVmAddressCeiling) {
+  task_vm_info_data_t info = {};
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  const kern_return_t kr = task_info(
+      mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info),
+      &count);
+  if (kr != KERN_SUCCESS || count < TASK_VM_INFO_REV2_COUNT)
+    GTEST_SKIP() << "Kernel does not provide TASK_VM_INFO revision 2";
+  ASSERT_GT(info.max_address, info.min_address);
+  EXPECT_EQ(info.max_address, GetDarwinTaskVmMaxAddress());
+  EXPECT_EQ(Min<uptr>(info.max_address - 1, SANITIZER_MMAP_RANGE_SIZE - 1),
+            GetMaxUserVirtualAddress());
 }
 #endif
 

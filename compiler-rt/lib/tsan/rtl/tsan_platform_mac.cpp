@@ -17,6 +17,7 @@
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
+#include "sanitizer_common/sanitizer_mac.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_procmaps.h"
 #include "../interface/tsan_interface_got.h"
@@ -51,19 +52,30 @@ void InitializeShadowMemoryPlatform() { }
 #endif
 
 void InitializePlatformEarly() {
-#  if !SANITIZER_GO && SANITIZER_IOS
-  uptr max_vm = GetMaxUserVirtualAddress() + 1;
-  if (max_vm < HiAppMemEnd()) {
-    ReportDarwinVirtualMemoryLimit(max_vm, HiAppMemEnd());
+#  if !SANITIZER_GO
+  const uptr kernel_limit = GetDarwinTaskVmMaxAddress();
+  const uptr supported_limit = GetMaxUserVirtualAddress() + 1;
+  VPrintf(1,
+          "ThreadSanitizer: Darwin VM limit: kernel=%p supported=%p "
+          "layout_end=%p\n",
+          reinterpret_cast<void *>(kernel_limit),
+          reinterpret_cast<void *>(supported_limit),
+          reinterpret_cast<void *>(HiAppMemEnd()));
+  // Startup reserves through the start of the high application window, not
+  // its nominal exclusive end. Darwin may reserve a small top-of-VA region
+  // that is outside the task map but still inside the nominal TSan window.
+  if (supported_limit < HiAppMemBeg()) {
+    ReportDarwinVirtualMemoryLimit(supported_limit, HiAppMemBeg());
     Die();
   }
-  // In some configurations, the max_vm is expanded, but much of this space is
-  // already mapped. TSAN will not work in this configuration.
+#    if SANITIZER_IOS && !SANITIZER_IOSSIM
+  // Preserve the device-specific upper boundary availability check.
   if (!MemoryRangeIsAvailable(HiAppMemEnd() - 1, HiAppMemEnd() - 1)) {
     ReportDarwinOccupiedShadowAddress(HiAppMemEnd() - 1);
     Die();
   }
-#endif
+#    endif
+#  endif
 }
 
 void InitializePlatform() {

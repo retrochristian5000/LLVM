@@ -1194,7 +1194,6 @@ char **GetArgv() {
   return *_NSGetArgv();
 }
 
-#if SANITIZER_IOS && !SANITIZER_IOSSIM
 // The task_vm_info struct is normally provided by the macOS SDK, but we need
 // fields only available in 10.12+. Declare the struct manually to be able to
 // build against older SDKs.
@@ -1225,46 +1224,44 @@ struct __sanitizer_task_vm_info {
 #define __SANITIZER_TASK_VM_INFO_COUNT ((mach_msg_type_number_t) \
     (sizeof(__sanitizer_task_vm_info) / sizeof(natural_t)))
 
-static uptr GetTaskInfoMaxAddress() {
-  __sanitizer_task_vm_info vm_info = {} /* zero initialize */;
+uptr GetDarwinTaskVmMaxAddress() {
+  __sanitizer_task_vm_info vm_info = {};
   mach_msg_type_number_t count = __SANITIZER_TASK_VM_INFO_COUNT;
-  int err = task_info(mach_task_self(), TASK_VM_INFO, (int *)&vm_info, &count);
-  return err ? 0 : vm_info.max_address;
+  const kern_return_t kr =
+      task_info(mach_task_self(), TASK_VM_INFO,
+                reinterpret_cast<task_info_t>(&vm_info), &count);
+  // Older kernels can succeed while returning an earlier TASK_VM_INFO
+  // revision that does not contain min_address and max_address.
+  if (kr != KERN_SUCCESS || count < __SANITIZER_TASK_VM_INFO_COUNT ||
+      vm_info.max_address <= vm_info.min_address ||
+      vm_info.max_address > ~(uptr)0)
+    return 0;
+  return static_cast<uptr>(vm_info.max_address);
 }
 
 uptr GetMaxUserVirtualAddress() {
-  static uptr max_vm = GetTaskInfoMaxAddress();
-  if (max_vm != 0) {
-    const uptr ret_value = max_vm - 1;
-    CHECK_LE(ret_value, SANITIZER_MMAP_RANGE_SIZE);
-    return ret_value;
-  }
+  static const uptr max_vm = GetDarwinTaskVmMaxAddress();
+  // The kernel may expose more VM than a sanitizer's compile-time tables
+  // support (for example extended user VA on iOS). A larger kernel limit is
+  // not an error and must not index beyond the supported address space.
+  if (max_vm)
+    return Min<uptr>(max_vm - 1, SANITIZER_MMAP_RANGE_SIZE - 1);
 
-  // xnu cannot provide vm address limit
-# if SANITIZER_WORDSIZE == 32
+  // Preserve the existing conservative fallbacks when TASK_VM_INFO cannot
+  // supply the task's actual bounds.
+#  if SANITIZER_IOS && !SANITIZER_IOSSIM
+#    if SANITIZER_WORDSIZE == 32
   constexpr uptr fallback_max_vm = 0xffe00000 - 1;
-# else
+#    else
   constexpr uptr fallback_max_vm = 0x200000000 - 1;
-# endif
-  static_assert(fallback_max_vm <= SANITIZER_MMAP_RANGE_SIZE,
+#    endif
+#  else
+  constexpr uptr fallback_max_vm = SANITIZER_MMAP_RANGE_SIZE - 1;
+#  endif
+  static_assert(fallback_max_vm < SANITIZER_MMAP_RANGE_SIZE,
                 "Max virtual address must be less than mmap range size.");
   return fallback_max_vm;
 }
-
-#else // !SANITIZER_IOS
-
-uptr GetMaxUserVirtualAddress() {
-# if SANITIZER_WORDSIZE == 64
-  constexpr uptr max_vm = (1ULL << 47) - 1;  // 0x00007fffffffffffUL;
-# else // SANITIZER_WORDSIZE == 32
-  static_assert(SANITIZER_WORDSIZE == 32, "Wrong wordsize");
-  constexpr uptr max_vm = (1ULL << 32) - 1;  // 0xffffffff;
-# endif
-  static_assert(max_vm <= SANITIZER_MMAP_RANGE_SIZE,
-                "Max virtual address must be less than mmap range size.");
-  return max_vm;
-}
-#endif
 
 uptr GetMaxVirtualAddress() {
   return GetMaxUserVirtualAddress();
