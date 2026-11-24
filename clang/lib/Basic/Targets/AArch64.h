@@ -73,6 +73,7 @@ class LLVM_LIBRARY_VISIBILITY AArch64TargetInfo : public TargetInfo {
   bool HasMOPS = false;
   bool HasD128 = false;
   bool HasRCPC = false;
+  bool HasRCPC2 = false;
   bool HasRDM = false;
   bool HasDIT = false;
   bool HasCCPP = false;

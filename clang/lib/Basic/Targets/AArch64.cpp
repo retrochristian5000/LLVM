@@ -568,6 +568,8 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (HasRCPC3)
     Builder.defineMacro("__ARM_FEATURE_RCPC", "3");
+  else if (HasRCPC2)
+    Builder.defineMacro("__ARM_FEATURE_RCPC", "2");
   else if (HasRCPC)
     Builder.defineMacro("__ARM_FEATURE_RCPC", "1");
 
@@ -913,6 +915,7 @@ void AArch64TargetInfo::computeFeatureLookup() {
       .Case("dpb", HasCCPP)
       .Case("dpb2", HasCCDP)
       .Case("rcpc", HasRCPC)
+      .Cases({"rcpc-immo", "rcpc2"}, HasRCPC2)
       .Case("frintts", HasFRInt3264)
       .Case("i8mm", HasMatMul)
       .Case("bf16", HasBFloat16)
@@ -1165,6 +1168,10 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasCRC = true;
     if (Feature == "+rcpc")
       HasRCPC = true;
+    if (Feature == "+rcpc-immo") {
+      HasRCPC2 = true;
+      HasRCPC = true;
+    }
     if (Feature == "+aes") {
       FPU |= NeonMode;
       HasAES = true;
@@ -1323,8 +1330,11 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasD128 = true;
     if (Feature == "+gcs")
       HasGCS = true;
-    if (Feature == "+rcpc3")
+    if (Feature == "+rcpc3") {
       HasRCPC3 = true;
+      HasRCPC2 = true;
+      HasRCPC = true;
+    }
     if (Feature == "+pauth-lr") {
       HasPAuthLR = true;
       HasPAuth = true;
@@ -1333,12 +1343,27 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasCSSC = true;
   }
 
+  // FEAT_LRCPC2 is implied by the backend's Armv8.4-A and later
+  // architecture features (including Armv9-A), and by Armv8-R. Unlike
+  // optional SVE defaults, this is already an instruction-availability
+  // guarantee in the selected backend architecture.
+  if (HasRCPC &&
+      (ArchInfo->is_superset(llvm::AArch64::ARMV8_4A) ||
+       *ArchInfo == llvm::AArch64::ARMV8R))
+    HasRCPC2 = true;
+
   // Check features that are manually disabled by command line options.
   // This needs to be checked after architecture-related features are handled,
   // making sure they are properly disabled when required.
   for (const auto &Feature : Features) {
     if (Feature == "-d128")
       HasD128 = false;
+    if (Feature == "-rcpc")
+      HasRCPC = HasRCPC2 = HasRCPC3 = false;
+    if (Feature == "-rcpc-immo")
+      HasRCPC2 = HasRCPC3 = false;
+    if (Feature == "-rcpc3")
+      HasRCPC3 = false;
   }
 
   resetDataLayout();

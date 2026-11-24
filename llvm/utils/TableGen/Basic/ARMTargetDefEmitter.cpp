@@ -200,10 +200,8 @@ static void emitARMTargetDef(const RecordKeeper &RK, raw_ostream &OS) {
       if (auto EarlierAEK = I->getValueAsOptionalString("ArchExtKindSpelling"))
         OS << "  {" << EarlierAEK->upper() << ", " << LaterAEK << "},\n";
   }
-  // FIXME: Tablegen has the Subtarget Feature FeatureRCPC_IMMO which is implied
-  // by FeatureRCPC3 and in turn implies FeatureRCPC. The proper fix is to make
-  // FeatureRCPC_IMMO an Extension but that will expose it to the command line.
-  OS << "  {AEK_RCPC, AEK_RCPC3},\n";
+  // RCpc dependencies are emitted above from the Extension records,
+  // including the intermediate FEAT_LRCPC2 extension.
   OS << "};\n"
      << "#undef EMIT_EXTENSION_DEPENDENCIES\n"
      << "#endif // EMIT_EXTENSION_DEPENDENCIES\n"
