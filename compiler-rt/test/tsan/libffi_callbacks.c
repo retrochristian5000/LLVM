@@ -8,7 +8,11 @@
 //
 // RACE: WARNING: ThreadSanitizer: data race
 
+#if __has_include(<ffi.h>)
 #include <ffi.h>
+#else
+#include <ffi/ffi.h>
+#endif
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>

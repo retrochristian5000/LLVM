@@ -2,6 +2,11 @@ include_directories(
   ../.. ../array ../buff ../flags ../endian ../interface ../mman ../reg ../stack
   ../vector ../warn)
 
+option(COMPILER_RT_TSAN_LIBFFI "Track native macOS libffi call arguments in TSan" OFF)
+if(COMPILER_RT_TSAN_LIBFFI AND NOT APPLE)
+  message(FATAL_ERROR "TSan libffi interception is currently native macOS only")
+endif()
+
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
 append_list_if(SANITIZER_LIMIT_FRAME_SIZE -Wframe-larger-than=530
@@ -208,6 +213,41 @@ if(APPLE)
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
+  if(COMPILER_RT_TSAN_LIBFFI)
+    if(NOT COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY OR
+       NOT "${TSAN_SUPPORTED_OS}" STREQUAL "osx")
+      message(FATAL_ERROR "TSan libffi requires the native macOS-only runtime profile")
+    endif()
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state()
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ffi)
+    # Recheck the selected SDK/architecture rather than reusing an old result.
+    unset(TSAN_LIBFFI_LINKS CACHE)
+    check_cxx_source_compiles([=[
+#if __has_include(<ffi.h>)
+#include <ffi.h>
+#elif __has_include(<ffi/ffi.h>)
+#include <ffi/ffi.h>
+#else
+#error libffi headers are unavailable
+#endif
+static void target() {}
+int main() {
+  ffi_cif cif;
+  if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 0, &ffi_type_void, nullptr) != FFI_OK)
+    return 1;
+  ffi_call(&cif, target, nullptr, nullptr);
+  return 0;
+}
+]=] TSAN_LIBFFI_LINKS)
+    cmake_pop_check_state()
+    if(NOT TSAN_LIBFFI_LINKS)
+      message(FATAL_ERROR "TSan libffi requires compatible native macOS SDK headers and -lffi")
+    endif()
+    list(APPEND TSAN_SOURCES ../ffi/tsan_ffi_darwin.cpp)
+    list(APPEND TSAN_LINK_LIBS ffi)
+  endif()
 
   add_weak_symbols("ubsan" WEAK_SYMBOL_LINK_FLAGS)
   add_weak_symbols("sanitizer_common" WEAK_SYMBOL_LINK_FLAGS)

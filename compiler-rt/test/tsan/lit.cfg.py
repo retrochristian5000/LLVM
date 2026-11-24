@@ -106,6 +106,11 @@ if lit_config.params.get("tsan_libffi") == "1" and (
     or (config.target_os == "Darwin" and config.apple_target_is_host)
 ):
     config.available_features.add("tsan-libffi")
+    if (
+        lit_config.params.get("tsan_libffi_runtime") == "1"
+        and config.target_os == "Darwin"
+    ):
+        config.available_features.add("tsan-libffi-runtime")
     for name, default in (("cflags", ""), ("ldflags", "-lffi")):
         flags = shlex.split(lit_config.params.get("tsan_libffi_" + name, default))
         config.substitutions.append(
