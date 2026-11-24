@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../../lib/Driver/ToolChains/DarwinSDKPaths.h"
 #include "clang/Driver/ToolChain.h"
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/DiagnosticOptions.h"
@@ -37,6 +38,24 @@ using namespace clang;
 using namespace clang::driver;
 
 namespace {
+
+TEST(ToolChainTest, DarwinConfiguredSDKIncludePaths) {
+  using clang::driver::tools::darwin::getSDKIncludePath;
+  auto Check = [](llvm::StringRef Root, llvm::StringRef Dir,
+                  llvm::StringRef Expected) {
+    auto Path = getSDKIncludePath(Root, Dir);
+    if (llvm::sys::path::is_style_windows(llvm::sys::path::Style::native))
+      llvm::replace(Path, '\\', '/');
+    EXPECT_EQ(Expected, Path.str());
+  };
+
+  Check("/AppleSDK", "/usr/include", "/AppleSDK/usr/include");
+  Check("/AppleSDK", "usr/include", "/AppleSDK/usr/include");
+  Check("/AppleSDK/", "/usr/local/include", "/AppleSDK/usr/local/include");
+  Check("/", "/usr/include", "/usr/include");
+  Check("/AppleSDK/System/iOSSupport", "/usr/include",
+        "/AppleSDK/System/iOSSupport/usr/include");
+}
 
 TEST(ToolChainTest, VFSGCCInstallation) {
   DiagnosticOptions DiagOpts;

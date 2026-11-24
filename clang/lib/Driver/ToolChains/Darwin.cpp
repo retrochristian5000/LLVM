@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Darwin.h"
+#include "DarwinSDKPaths.h"
 #include "Arch/ARM.h"
 #include "clang/Basic/AlignedAllocation.h"
 #include "clang/Basic/ObjCRuntime.h"
@@ -2938,12 +2939,12 @@ void AppleMachO::AddClangSystemIncludeArgs(
   llvm::StringRef CIncludeDirs(C_INCLUDE_DIRS);
   if (!CIncludeDirs.empty()) {
     llvm::SmallVector<llvm::StringRef, 5> dirs;
-    CIncludeDirs.split(dirs, ":");
-    for (llvm::StringRef dir : dirs) {
-      llvm::StringRef Prefix =
-          llvm::sys::path::is_absolute(dir) ? "" : llvm::StringRef(Sysroot);
-      addExternCSystemInclude(DriverArgs, CC1Args, Prefix + dir);
-    }
+    CIncludeDirs.split(dirs, ":", /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+    // C_INCLUDE_DIRS can be configured by a non-Darwin build host. Do not
+    // allow its absolute paths to bypass the selected Apple SDK.
+    for (llvm::StringRef Dir : dirs)
+      addExternCSystemInclude(DriverArgs, CC1Args,
+                              darwin::getSDKIncludePath(Sysroot, Dir));
   } else {
     // Otherwise, add <sysroot>/usr/include.
     SmallString<128> P(Sysroot);
