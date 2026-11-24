@@ -119,6 +119,14 @@ if lit_config.params.get("tsan_libffi") == "1" and (
             ("%tsan_libffi_" + name, " ".join(shlex.quote(flag) for flag in flags))
         )
 
+# The Objective-C++ runtime test is selected by the actual build option.
+if (
+    config.target_os == "Darwin"
+    and config.apple_target_is_host
+    and getattr(config, "tsan_has_objcxx", False)
+):
+    config.available_features.add("tsan-objcxx-runtime")
+
 # Default test suffixes.
 config.suffixes = [".c", ".cpp", ".m", ".mm"]
 

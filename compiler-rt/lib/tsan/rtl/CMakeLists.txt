@@ -213,6 +213,11 @@ if(APPLE)
     )
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
+  if(COMPILER_RT_TSAN_OBJCXX)
+    list(APPEND TSAN_SOURCES ../objc/tsan_objc_darwin.mm)
+    set_source_files_properties(../objc/tsan_objc_darwin.mm PROPERTIES
+      COMPILE_OPTIONS "-fno-objc-arc;-fno-sanitize=all")
+  endif()
   if(COMPILER_RT_TSAN_LIBFFI)
     if(NOT COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY OR
        NOT "${TSAN_SUPPORTED_OS}" STREQUAL "osx")

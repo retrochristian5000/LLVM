@@ -15,6 +15,50 @@ if(COMPILER_RT_TSAN_DEBUG_OUTPUT)
   list(APPEND TSAN_CFLAGS -DTSAN_DEBUG_OUTPUT=2)
 endif()
 
+# Objective-C++ is a separate frontend mode even when the C++ compiler
+# is also Clang. Enable it only for the explicitly selected native macOS
+# runtime; builtins, Go and other Darwin targets keep their existing graph.
+option(COMPILER_RT_TSAN_OBJCXX "Enable native macOS Objective-C++ TSan hooks" OFF)
+if(COMPILER_RT_TSAN_OBJCXX)
+  if(NOT APPLE OR NOT COMPILER_RT_DARWIN_NATIVE_ARCH_ONLY OR
+     NOT "${TSAN_SUPPORTED_OS}" STREQUAL "osx")
+    message(FATAL_ERROR "TSan Objective-C++ requires the native macOS-only runtime profile")
+  endif()
+  if(NOT CMAKE_OBJCXX_COMPILER)
+    set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}" CACHE FILEPATH
+        "Objective-C++ compiler for TSan")
+  endif()
+  if(CMAKE_CXX_COMPILER_TARGET AND NOT CMAKE_OBJCXX_COMPILER_TARGET)
+    set(CMAKE_OBJCXX_COMPILER_TARGET "${CMAKE_CXX_COMPILER_TARGET}")
+  endif()
+  enable_language(OBJCXX)
+  if(NOT CMAKE_OBJCXX_COMPILER_ID MATCHES "^(AppleClang|Clang)$")
+    message(FATAL_ERROR "TSan Objective-C++ requires Clang's native Objective-C++ frontend")
+  endif()
+  set(CMAKE_OBJCXX_STANDARD 17)
+  set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+  include(CheckOBJCXXSourceCompiles)
+  include(CMakePushCheckState)
+  cmake_push_check_state()
+  list(APPEND CMAKE_REQUIRED_LIBRARIES objc)
+  unset(TSAN_OBJCXX_COMPILES CACHE)
+  check_objcxx_source_compiles([=[
+#include <objc/objc.h>
+#include <stddef.h>
+extern "C" void objc_copyStruct(void *, const void *, ptrdiff_t, BOOL, BOOL);
+int main() {
+  int source = 1, destination = 0;
+  const char *encoding = @encode(BOOL);
+  objc_copyStruct(&destination, &source, sizeof(source), NO, NO);
+  return !encoding[0] || destination != source;
+}
+]=] TSAN_OBJCXX_COMPILES)
+  cmake_pop_check_state()
+  if(NOT TSAN_OBJCXX_COMPILES)
+    message(FATAL_ERROR "TSan Objective-C++ requires compatible SDK headers and libobjc")
+  endif()
+endif()
+
 # Add the actual runtime library.
 add_subdirectory(rtl)
 
