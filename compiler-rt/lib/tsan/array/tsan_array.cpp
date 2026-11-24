@@ -55,10 +55,11 @@ static void MemoryRangeSet(uptr addr, uptr size, RawShadow val) {
   DCHECK(IsValidAppMemoryRange(addr, size));
   RawShadow* begin = MemToShadow(addr);
   RawShadow* end = begin + size / kShadowCell * kShadowCnt;
-  // Don't want to touch lots of shadow memory.
-  // If a program maps 10MB stack, there is no need reset the whole range.
+  // Only an empty shadow fill can be replaced with a zero-filled mapping.
+  // An imitated write must preserve its epoch/access record in every cell.
+  // This can commit physical pages, so keep the lazy remap for large resets.
   // UnmapOrDie/MmapFixedNoReserve does not work on Windows.
-  if (SANITIZER_WINDOWS ||
+  if (SANITIZER_WINDOWS || val != Shadow::kEmpty ||
       size <= common_flags()->clear_shadow_mmap_threshold) {
     ShadowSet(begin, end, val);
     return;

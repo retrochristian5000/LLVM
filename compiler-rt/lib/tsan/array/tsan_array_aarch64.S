@@ -27,13 +27,31 @@ __tsan_shadow_set_aarch64:
 #endif
   bti c
   cmp x0, x1
-  b.hs 2f
+  b.hs 4f
   uxtw x2, w2
+  sub x3, x1, x0
+  // Four cells per iteration reduce loop-control work without assuming
+  // a particular cache line size, enabling optional ISA extensions, or
+  // writing beyond the requested range. A18 Pro can use this baseline
+  // AArch64 sequence as well as earlier cores.
+  cmp x3, #64
+  b.lo 2f
 1:
-  stp x2, xzr, [x0], #16
-  cmp x0, x1
-  b.lo 1b
+  stp x2, xzr, [x0]
+  stp x2, xzr, [x0, #16]
+  stp x2, xzr, [x0, #32]
+  stp x2, xzr, [x0, #48]
+  add x0, x0, #64
+  sub x3, x3, #64
+  cmp x3, #64
+  b.hs 1b
 2:
+  cbz x3, 4f
+3:
+  stp x2, xzr, [x0], #16
+  subs x3, x3, #16
+  b.ne 3b
+4:
   ret
 
 #if !defined(__APPLE__)
