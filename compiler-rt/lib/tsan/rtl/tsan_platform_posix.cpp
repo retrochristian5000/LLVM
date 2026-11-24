@@ -91,6 +91,7 @@ void InitializeShadowMemory() {
       reinterpret_cast<int (*)(int)>(dlsym(RTLD_DEFAULT, "__tsan_on_finalize"));
 }
 
+#    if !(SANITIZER_IOS && !SANITIZER_IOSSIM)
 static bool TryProtectRange(uptr beg, uptr end) {
   CHECK_LE(beg, end);
   if (beg == end)
@@ -109,6 +110,8 @@ static void ProtectRange(uptr beg, uptr end) {
     Die();
   }
 }
+
+#    endif  // !(SANITIZER_IOS && !SANITIZER_IOSSIM)
 
 // CheckAndProtect will check if the memory layout is compatible with TSan.
 // Optionally (if 'protect' is true), it will set the memory regions between
@@ -157,9 +160,7 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
     return true;
 
 #    if SANITIZER_IOS && !SANITIZER_IOSSIM
-  ProtectRange(HeapMemEnd(), ShadowBeg());
-  ProtectRange(ShadowEnd(), MetaShadowBeg());
-  ProtectRange(MetaShadowEnd(), HiAppMemBeg());
+  ProtectDarwinDeviceLayout();
 #    else
   ProtectRange(LoAppMemEnd(), ShadowBeg());
   ProtectRange(ShadowEnd(), MetaShadowBeg());

@@ -96,6 +96,7 @@ if(APPLE)
     ../mman/tsan_mman_darwin.cpp
     ../mman/tsan_mman_mac.cpp
     tsan_platform_darwin.cpp
+    tsan_platform_ios.cpp
     tsan_platform_mac.cpp
     tsan_platform_posix.cpp
     tsan_sync_darwin.cpp

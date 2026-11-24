@@ -6,13 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Darwin Mach VM accounting and libc jump-buffer ABI. These interfaces are
-// shared across Darwin platforms, not specific to the macOS application layer.
+// Shared Darwin startup and Mach VM accounting. Platform-specific layout
+// policy is in tsan_platform_mac.cpp and tsan_platform_ios.cpp.
 
 #include "sanitizer_common/sanitizer_platform.h"
 #if SANITIZER_APPLE
 
 #include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_mac.h"
+#if !SANITIZER_GO
+#include "../interface/tsan_interface_got.h"
+#include "tsan_macho.h"
+#endif
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -23,7 +28,52 @@
 
 namespace __tsan {
 
+void InitializePlatformEarly() {
 #if !SANITIZER_GO
+  const uptr kernel_limit = GetDarwinTaskVmMaxAddress();
+  const uptr supported_limit = GetMaxUserVirtualAddress() + 1;
+  VPrintf(1,
+          "ThreadSanitizer: Darwin VM limit: kernel=%p supported=%p "
+          "layout_end=%p\n",
+          reinterpret_cast<void *>(kernel_limit),
+          reinterpret_cast<void *>(supported_limit),
+          reinterpret_cast<void *>(HiAppMemEnd()));
+  ValidateDarwinPlatformLayout(supported_limit);
+#endif
+}
+
+void InitializePlatform() {
+  DisableCoreDumperIfNecessary();
+#if !SANITIZER_GO
+  VPrintf(2, "ThreadSanitizer: main Mach-O executable architecture: %s\n",
+          MachOExecutableArchitecture());
+  if (Verbosity() >= 2) {
+    MachOGOTSlots slots;
+    if (GetMainExecutableMachOGOTSlots(&slots))
+      VPrintf(2,
+              "ThreadSanitizer: main Mach-O symbol-pointer slots: "
+              "lazy=%zu, non-lazy=%zu\n",
+              slots.lazy, slots.non_lazy);
+#if defined(__aarch64__) && !SANITIZER_GO
+    VPrintf(2, "ThreadSanitizer: AArch64 Mach-O GOT data relocation: %s\n",
+            VerifyAArch64GOTAnchor() ? "resolved" : "mismatch");
+#endif
+  }
+  if (!CheckAndProtect(true, true, true)) {
+    ReportDarwinIncompatibleMemoryLayout();
+    Die();
+  }
+
+  InitializeDarwinThreadSupport();
+#endif
+
+  InitializeDarwinLongJmp();
+}
+
+#if !SANITIZER_GO
+void InitializeShadowMemoryPlatform() {}
+
+
 bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
                           const char *name) {
   const uptr page_size = GetPageSizeCached();

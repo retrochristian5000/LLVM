@@ -1221,6 +1221,11 @@ void InitializeDarwinLongJmp();
 #if !SANITIZER_GO
 // Set up Darwin pthread TLS and lifecycle callbacks after memory layout checks.
 void InitializeDarwinThreadSupport();
+// Layout policy is selected by the target SDK, not the host architecture.
+void ValidateDarwinPlatformLayout(uptr supported_limit);
+#if SANITIZER_IOS && !SANITIZER_IOSSIM
+void ProtectDarwinDeviceLayout();
+#endif
 // Reserve a startup VM range without replacing existing mappings.
 bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
                           const char *name);

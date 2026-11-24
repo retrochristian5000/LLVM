@@ -178,7 +178,8 @@ elif [ "$GOOS" = "darwin" ]; then
 	SRCS="
 		$SRCS
 		../interface/tsan_interface_darwin.cpp
-		../rtl/tsan_platform_mac.cpp
+		../cpu/tsan_cpu_darwin.cpp
+		../rtl/tsan_platform_darwin.cpp
 		../../sanitizer_common/sanitizer_mac.cpp
 		../../sanitizer_common/sanitizer_mac_libcdep.cpp
 		../../sanitizer_common/sanitizer_posix.cpp

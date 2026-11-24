@@ -224,6 +224,24 @@ TEST(Shadow, ShadowCellRangeValidation) {
 }
 
 #if SANITIZER_APPLE && !SANITIZER_GO
+TEST(Shadow, DarwinTargetLayout) {
+#if SANITIZER_IOS && !SANITIZER_IOSSIM
+  EXPECT_EQ(static_cast<uptr>(MappingAppleAarch64::kShadowBeg), ShadowBeg());
+  EXPECT_EQ(static_cast<uptr>(MappingAppleAarch64::kMetaShadowBeg), MetaShadowBeg());
+  EXPECT_EQ(LoAppMemEnd(), HeapMemBeg());
+  EXPECT_LT(HeapMemEnd(), ShadowBeg());
+  EXPECT_LT(ShadowEnd(), MetaShadowBeg());
+  EXPECT_LT(MetaShadowEnd(), HiAppMemBeg());
+  EXPECT_EQ(HiAppMemBeg(), HiAppMemEnd());
+#else
+  EXPECT_EQ(static_cast<uptr>(Mapping48AddressSpace::kShadowBeg), ShadowBeg());
+  EXPECT_EQ(static_cast<uptr>(Mapping48AddressSpace::kMetaShadowBeg), MetaShadowBeg());
+  EXPECT_LT(LoAppMemEnd(), ShadowBeg());
+  EXPECT_LT(MidAppMemBeg(), MidAppMemEnd());
+  EXPECT_LT(HiAppMemBeg(), HiAppMemEnd());
+#endif
+}
+
 TEST(Shadow, DarwinMachVmPageRounding) {
   const uptr page_size = GetPageSizeCached();
   const uptr heap_end = HeapMemEnd();
