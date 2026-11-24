@@ -3511,6 +3511,9 @@ def note_previous_uuid : Note<"previous uuid specified here">;
 def warn_attribute_pointers_only : Warning<
   "%0 attribute only applies to%select{| constant}1 pointer arguments">,
   InGroup<IgnoredAttributes>;
+def warn_attribute_pointer_or_reference_or_record_only : Warning<
+  "%0 attribute only applies to a pointer, reference, class, struct, or union (%1 is invalid)">,
+  InGroup<IgnoredAttributes>;
 def err_attribute_pointers_only : Error<warn_attribute_pointers_only.Summary>;
 def err_attribute_integers_only : Error<
   "%0 attribute argument may only refer to a function parameter of integer "

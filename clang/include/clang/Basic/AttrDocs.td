@@ -324,6 +324,12 @@ For example:
     free(p); // Not OK.
   }
 
+For compatibility with Apple Clang, a by-value class, struct, or union
+parameter may also carry the ``noescape`` attribute. This preserves the
+source-level parameter annotation and function type information. It does not
+add LLVM pointer capture attributes to the record's lowered ABI arguments
+or imply that the compiler verifies the lifetime of every member.
+
 Since ``noescape`` is a parameter attribute and not a type attribute, it only
 applies to the outermost pointer level, regardless of where in the parameter
 declaration you place it:

@@ -1435,11 +1435,11 @@ static void handleNoEscapeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   if (D->isInvalidDecl())
     return;
 
-  // noescape only applies to pointer types.
+  // Match Apple's noescape extension for pointers, references and records.
   QualType T = cast<ParmVarDecl>(D)->getType();
-  if (!S.isValidPointerAttrType(T, /* RefOkay */ true)) {
-    S.Diag(AL.getLoc(), diag::warn_attribute_pointers_only)
-        << AL << AL.getRange() << 0;
+  if (!S.isValidPointerAttrType(T, /*RefOkay=*/true) && !T->isRecordType()) {
+    S.Diag(AL.getLoc(), diag::warn_attribute_pointer_or_reference_or_record_only)
+        << AL << AL.getRange() << T;
     return;
   }
 

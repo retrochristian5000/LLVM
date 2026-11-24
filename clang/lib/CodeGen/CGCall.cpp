@@ -3335,7 +3335,12 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
       break;
     }
 
-    if (FI.getExtParameterInfo(ArgNo).isNoEscape())
+    // Record parameters can carry the source-level noescape contract, but
+    // their ABI representation may contain integers or multiple IR arguments.
+    // Only pointer/reference parameters have the pointer capture semantics.
+    if (FI.getExtParameterInfo(ArgNo).isNoEscape() &&
+        (ParamType->isAnyPointerType() || ParamType->isBlockPointerType() ||
+         ParamType->isReferenceType()))
       Attrs.addCapturesAttr(
           llvm::CaptureInfo(llvm::CaptureComponents::Address));
 
