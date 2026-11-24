@@ -38,6 +38,17 @@ void ReportDarwinOccupiedShadowAddress(uptr address) {
       reinterpret_cast<void *>(address));
 }
 
+void ReportDarwinVmReservationFailure(const char *name, uptr begin, uptr end,
+                                      int kernel_error) {
+  Report(
+      "FATAL: ThreadSanitizer [TSAN-LAYOUT-004]: cannot reserve Darwin "
+      "virtual-memory range without replacing existing mappings\n"
+      "  region=%s begin=%p end_exclusive=%p kern_return=%d\n"
+      "  action=inspect existing mappings and the selected TSan layout\n",
+      name, reinterpret_cast<void *>(begin), reinterpret_cast<void *>(end),
+      kernel_error);
+}
+
 void ReportDarwinIncompatibleMemoryLayout() {
   Report(
       "FATAL: ThreadSanitizer [TSAN-LAYOUT-003]: incompatible "

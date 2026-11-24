@@ -16,10 +16,44 @@
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
+#include "../warn/tsan_warn_darwin.h"
 
 #include <mach/mach.h>
+#include <mach/vm_statistics.h>
 
 namespace __tsan {
+
+#if !SANITIZER_GO
+bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
+                          const char *name) {
+  const uptr page_size = GetPageSizeCached();
+  CHECK_LE(begin, end);
+  CHECK(IsAligned(begin, page_size));
+  CHECK(IsAligned(end, page_size));
+  if (begin == end)
+    return true;
+
+  // Unlike mmap(MAP_FIXED), a fixed Mach mapping without OVERWRITE fails
+  // on an occupied range. This also protects anonymous mappings omitted
+  // by the Mach-O image iterator.
+  vm_address_t address = begin;
+  const vm_prot_t protection =
+      accessible ? VM_PROT_READ | VM_PROT_WRITE : VM_PROT_NONE;
+  const kern_return_t kr =
+      vm_map(mach_task_self(), &address, end - begin, 0,
+             VM_FLAGS_FIXED | VM_MAKE_TAG(VM_MEMORY_SANITIZER), MACH_PORT_NULL,
+             0, FALSE, protection, VM_PROT_READ | VM_PROT_WRITE,
+             VM_INHERIT_COPY);
+  if (kr != KERN_SUCCESS) {
+    ReportDarwinVmReservationFailure(name, begin, end, kr);
+    return false;
+  }
+  CHECK_EQ(address, begin);
+  if (accessible)
+    IncreaseTotalMmap(end - begin);
+  return true;
+}
+#endif
 
 static void RegionMemUsage(uptr start, uptr end, uptr *res, uptr *dirty) {
   vm_address_t address = start;

@@ -44,10 +44,16 @@ void DontDumpShadow(uptr addr, uptr size) {
 
 void InitializeShadowMemory() {
   // Map memory shadow.
+#    if SANITIZER_APPLE
+  if (!ReserveDarwinVmRange(ShadowBeg(), ShadowEnd(), true, "shadow")) {
+#    else
   if (!MmapFixedSuperNoReserve(ShadowBeg(), ShadowEnd() - ShadowBeg(),
                                "shadow")) {
+#    endif
+#    if !SANITIZER_APPLE
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
+#    endif
     Die();
   }
   // This memory range is used for thread stacks and large user mmaps.
@@ -62,9 +68,15 @@ void InitializeShadowMemory() {
   // Map meta shadow.
   const uptr meta = MetaShadowBeg();
   const uptr meta_size = MetaShadowEnd() - meta;
+#    if SANITIZER_APPLE
+  if (!ReserveDarwinVmRange(meta, MetaShadowEnd(), true, "meta shadow")) {
+#    else
   if (!MmapFixedSuperNoReserve(meta, meta_size, "meta shadow")) {
+#    endif
+#    if !SANITIZER_APPLE
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
+#    endif
     Die();
   }
   DontDumpShadow(meta, meta_size);
@@ -83,7 +95,11 @@ static bool TryProtectRange(uptr beg, uptr end) {
   CHECK_LE(beg, end);
   if (beg == end)
     return true;
+#    if SANITIZER_APPLE
+  return ReserveDarwinVmRange(beg, end, false, "layout guard");
+#    else
   return beg == (uptr)MmapFixedNoAccess(beg, end - beg);
+#    endif
 }
 
 static void ProtectRange(uptr beg, uptr end) {

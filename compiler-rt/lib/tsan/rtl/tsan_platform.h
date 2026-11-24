@@ -1221,6 +1221,9 @@ void InitializeDarwinLongJmp();
 #if !SANITIZER_GO
 // Set up Darwin pthread TLS and lifecycle callbacks after memory layout checks.
 void InitializeDarwinThreadSupport();
+// Reserve a startup VM range without replacing existing mappings.
+bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
+                          const char *name);
 #endif
 #endif
 void InitializePlatformEarly();

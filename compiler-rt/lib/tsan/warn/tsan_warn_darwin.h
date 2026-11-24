@@ -24,6 +24,8 @@ namespace __tsan {
 void ReportDarwinVirtualMemoryLimit(uptr limit, uptr expected);
 void ReportDarwinOccupiedShadowAddress(uptr address);
 void ReportDarwinIncompatibleMemoryLayout();
+void ReportDarwinVmReservationFailure(const char *name, uptr begin, uptr end,
+                                      int kernel_error);
 
 void ReportDarwinRejectedFixedMachVmRange(uptr address, uptr size, int flags);
 void ReportDarwinUnsupportedMachVmResult(uptr address, uptr size, int flags);
