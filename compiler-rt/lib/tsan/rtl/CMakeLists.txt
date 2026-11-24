@@ -225,13 +225,17 @@ if(APPLE)
         OS osx
         ARCHS ${TSAN_SUPPORTED_ARCH}
         SOURCES ../mman/tsan_mman_range_posix.c
+                ../mman/tsan_mman_vm_darwin.c
         ADDITIONAL_HEADERS ../mman/tsan_mman_range_posix.h
+                           ../mman/tsan_mman_vm_darwin.h
         CFLAGS -std=c11 -fPIC -fno-sanitize=all -fvisibility=hidden -fno-lto)
     endfunction()
     add_tsan_posix_c_objects()
     list(APPEND TSAN_POSIX_C_OBJECT_LIBS RTTsanPosixC)
-    list(APPEND TSAN_HEADERS ../mman/tsan_mman_range_posix.h)
-    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_NATIVE_POSIX_C=1)
+    list(APPEND TSAN_HEADERS ../mman/tsan_mman_range_posix.h
+                             ../mman/tsan_mman_vm_darwin.h)
+    list(APPEND TSAN_RTL_CFLAGS -DTSAN_HAS_NATIVE_POSIX_C=1
+                               -DTSAN_HAS_NATIVE_DARWIN_VM_C=1)
   endif()
   if(COMPILER_RT_TSAN_OBJCXX)
     list(APPEND TSAN_SOURCES ../objc/tsan_objc_darwin.mm)

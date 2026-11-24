@@ -28,6 +28,9 @@
 
 #include <mach/mach.h>
 #include <mach/vm_statistics.h>
+#if defined(TSAN_HAS_NATIVE_DARWIN_VM_C)
+#include "../mman/tsan_mman_vm_darwin.h"
+#endif
 
 namespace __tsan {
 
@@ -114,6 +117,15 @@ bool ReserveDarwinVmRange(uptr begin, uptr end, bool accessible,
 // Region totals cannot be attributed exactly to a subrange of a Mach entry.
 // Count only complete entries and explicitly mark incomplete samples.
 static bool RegionMemUsage(uptr start, uptr end, uptr *res, uptr *dirty) {
+#if defined(TSAN_HAS_NATIVE_DARWIN_VM_C)
+  TsanDarwinVmUsage usage = {};
+  const bool complete =
+      __tsan_darwin_vm_usage(start, end, GetPageSizeCached(), &usage);
+  static_assert(sizeof(uptr) == sizeof(uint64_t), "native Darwin VM width");
+  *res = usage.resident_bytes;
+  *dirty = usage.dirty_bytes;
+  return complete;
+#else
   vm_address_t address = start;
   const uptr page_size = GetPageSizeCached();
   uptr resident_pages = 0;
@@ -161,6 +173,7 @@ static bool RegionMemUsage(uptr start, uptr end, uptr *res, uptr *dirty) {
   *res = resident_pages * page_size;
   *dirty = dirty_pages * page_size;
   return complete;
+#endif
 }
 
 void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
