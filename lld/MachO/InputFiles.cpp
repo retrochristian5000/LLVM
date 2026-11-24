@@ -175,11 +175,22 @@ static bool checkCompatibility(const InputFile *input) {
     return false;
   }
 
-  if (it->target.MinDeployment > config->platformInfo.target.MinDeployment)
-    warn(toString(input) + " has version " +
-         it->target.MinDeployment.getAsString() +
-         ", which is newer than target minimum of " +
-         config->platformInfo.target.MinDeployment.getAsString());
+  if (config->warnNewerDeployment &&
+      it->target.MinDeployment > config->platformInfo.target.MinDeployment) {
+    // Report each distinct deployment mismatch once per link, even when
+    // many members of an archive were built for the same newer OS.
+    std::string version = it->target.MinDeployment.getAsString();
+    bool first;
+    {
+      std::lock_guard<std::mutex> lock(config->deploymentWarningMutex);
+      first = config->warnedDeploymentVersions.insert(version).second;
+    }
+    if (first)
+      warn(toString(input) + " has version " + version +
+           ", which is newer than target minimum of " +
+           config->platformInfo.target.MinDeployment.getAsString() +
+           " (reported once per input deployment version)");
+  }
 
   return true;
 }

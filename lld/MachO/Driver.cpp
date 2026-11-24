@@ -2115,6 +2115,8 @@ bool link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
   }
   config->warnDuplicateRpath =
       args.hasFlag(OPT_warn_duplicate_rpath, OPT_no_warn_duplicate_rpath, true);
+  config->warnNewerDeployment = args.hasFlag(
+      OPT_warn_newer_deployment, OPT_no_warn_newer_deployment, true);
   config->runtimePaths = getRuntimePaths(args);
   config->allowableClients = getAllowableClients(args);
   config->allLoad = args.hasFlag(OPT_all_load, OPT_noall_load, false);

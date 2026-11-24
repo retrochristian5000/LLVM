@@ -25,6 +25,7 @@
 #include "llvm/TextAPI/Platform.h"
 #include "llvm/TextAPI/Target.h"
 
+#include <mutex>
 #include <vector>
 
 namespace llvm {
@@ -207,6 +208,9 @@ struct Configuration {
   std::vector<llvm::StringRef> librarySearchPaths;
   std::vector<llvm::StringRef> frameworkSearchPaths;
   bool warnDuplicateRpath = true;
+  bool warnNewerDeployment = true;
+  std::mutex deploymentWarningMutex;
+  llvm::StringSet<> warnedDeploymentVersions;
   llvm::SmallVector<llvm::StringRef, 0> runtimePaths;
   llvm::SmallVector<llvm::StringRef, 0> allowableClients;
   std::vector<std::string> astPaths;

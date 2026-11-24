@@ -856,6 +856,12 @@ def application_extension : Flag<["-"], "application_extension">,
 def no_application_extension : Flag<["-"], "no_application_extension">,
     HelpText<"Disable application extension functionality (default)">,
     Group<grp_rare>;
+def warn_newer_deployment : Flag<["-"], "warn_newer_deployment">,
+    HelpText<"Warn once per input minimum OS version newer than the output deployment target (default)">,
+    Group<grp_rare>;
+def no_warn_newer_deployment : Flag<["-"], "no_warn_newer_deployment">,
+    HelpText<"Suppress newer minimum OS warnings; does not make the output compatible with older OS versions">,
+    Group<grp_rare>;
 def fatal_warnings : Flag<["-"], "fatal_warnings">,
     HelpText<"Treat warnings as errors">,
     Group<grp_rare>;
