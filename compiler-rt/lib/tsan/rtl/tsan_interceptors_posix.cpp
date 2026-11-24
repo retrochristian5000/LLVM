@@ -537,9 +537,11 @@ static void SetJmp(ThreadState *thr, uptr sp, uptr env) {
   }
 #endif
 #if SANITIZER_APPLE
-  // Keep same-depth frames for distinct live buffers; discard an overwritten
-  // buffer's old record and frames already unwound by the native stack.
-  RetireDarwinJmpBufFrames(thr, sp, env);
+  // Retire only checkpoints outside this live scope. A handler can execute
+  // on a separate signal stack at an unrelated native address.
+  const uptr signal_depth =
+      atomic_load(&thr->in_signal_handler, memory_order_relaxed);
+  RetireDarwinJmpBufFrames(thr, sp, env, thr->shadow_stack_pos, signal_depth);
 #else
   JmpBufGarbageCollect(thr, sp);
   (void)env;
@@ -577,6 +579,12 @@ static void LongJmp(ThreadState *thr, uptr *env) {
   }
 #endif
   if (buf) {
+#if SANITIZER_APPLE
+    // Signal-mask restoration can run another handler which records or
+    // removes jump buffers. Do not retain a pointer into the mutable vector.
+    JmpBuf saved_frame = *buf;
+    buf = &saved_frame;
+#endif
     CHECK_GE(thr->shadow_stack_pos, buf->shadow_stack_pos);
     // Unwind the stack to the selected live frame.
     while (thr->shadow_stack_pos > buf->shadow_stack_pos)
@@ -601,7 +609,8 @@ static void LongJmp(ThreadState *thr, uptr *env) {
     atomic_store(&thr->in_signal_handler, buf->in_signal_handler,
         memory_order_relaxed);
 #if SANITIZER_APPLE
-    RetireDarwinJmpBufFrames(thr, buf->sp, 0);
+    RetireDarwinJmpBufFrames(thr, buf->sp, 0, buf->shadow_stack_pos,
+                             buf->in_signal_handler);
 #else
     JmpBufGarbageCollect(thr, buf->sp - 1);
 #endif

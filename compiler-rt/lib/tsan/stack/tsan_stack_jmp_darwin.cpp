@@ -6,12 +6,21 @@
 #include "../rtl/tsan_rtl.h"
 namespace __tsan {
 void RetireDarwinJmpBufFrames(ThreadState *thr, uptr stack_pointer,
-                              uptr overwritten_env) {
+                              uptr overwritten_env,
+                              uptr *shadow_stack_pos, uptr signal_depth) {
   for (uptr i = 0; i < thr->jmp_bufs.Size();) {
     const JmpBuf &frame = thr->jmp_bufs[i];
-    // Deeper returned frames expire; equal-SP environments do not.
-    const bool expired = frame.sp < stack_pointer ||
-                         (overwritten_env && frame.env == overwritten_env);
+    // An interrupted checkpoint remains live even when the handler is on a
+    // numerically higher stack. Once a signal scope exits, its checkpoints
+    // expire regardless of the relative native stack addresses.
+    const bool same_scope = frame.in_signal_handler == signal_depth;
+    const bool expired =
+        (overwritten_env && frame.env == overwritten_env) ||
+        frame.in_signal_handler > signal_depth ||
+        (same_scope &&
+         (frame.sp < stack_pointer ||
+          reinterpret_cast<uptr>(frame.shadow_stack_pos) >
+              reinterpret_cast<uptr>(shadow_stack_pos)));
     if (!expired) {
       ++i;
       continue;

@@ -16,10 +16,12 @@ enum class DarwinJmpBufLookup {
   kEnvironmentMismatch,
   kExpiredShadowFrame,
 };
-// The native stack grows downward. Distinct envs at the same SP remain live.
-// A new setjmp overwrites a previous snapshot of the same env.
+// Compare native SPs only within the same signal nesting level: an alternate
+// signal stack may be at a higher address than the interrupted stack.
+// Distinct envs at the same SP remain live; a reused env replaces its record.
 void RetireDarwinJmpBufFrames(ThreadState *thr, uptr stack_pointer,
-                              uptr overwritten_env);
+                              uptr overwritten_env,
+                              uptr *shadow_stack_pos, uptr signal_depth);
 DarwinJmpBufLookup FindDarwinJmpBufFrame(ThreadState *thr, uptr env,
                                         uptr stack_pointer, JmpBuf **frame);
 const char *DarwinJmpBufLookupDescription(DarwinJmpBufLookup status);
