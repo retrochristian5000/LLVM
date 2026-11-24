@@ -264,6 +264,28 @@ TEST(Shadow, DarwinTargetLayout) {
 #endif
 }
 
+TEST(Shadow, DarwinMappingScanPolicy) {
+  using Action = PosixMappingAction;
+  const uptr heap_end = HeapEnd();
+  ASSERT_GT(heap_end, HeapMemEnd());
+  EXPECT_EQ(Action::kContinue,
+            ClassifyPosixMapping(heap_end - 1, heap_end, true, true));
+  EXPECT_EQ(Action::kReject,
+            ClassifyPosixMapping(heap_end - 1, heap_end, true, false));
+  // A mapping beginning in the allocator guard must not hide its tail.
+  EXPECT_EQ(Action::kReject,
+            ClassifyPosixMapping(heap_end - 1, heap_end + 1, true, true));
+  // Darwin must never terminate its unordered image scan at a vDSO
+  // sentinel, including an inaccessible segment at that address.
+  EXPECT_EQ(Action::kReject,
+            ClassifyPosixMapping(VdsoBeg(), VdsoBeg() + 1, true, true));
+  EXPECT_EQ(Action::kContinue,
+            ClassifyPosixMapping(VdsoBeg(), VdsoBeg() + 1, false, true));
+  EXPECT_EQ(Action::kContinue,
+            ClassifyPosixMapping(LoAppMemBeg(), LoAppMemBeg() + 1, true,
+                                 true));
+}
+
 TEST(Shadow, DarwinMachVmPageRounding) {
   const uptr page_size = GetPageSizeCached();
   const uptr heap_end = HeapMemEnd();

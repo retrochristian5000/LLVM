@@ -19,6 +19,9 @@
 #include "tsan_array_darwin.h"
 #include "../rtl/tsan_platform.h"
 #include "../rtl/tsan_rtl.h"
+#if defined(TSAN_HAS_NATIVE_POSIX_C)
+#include "../mman/tsan_mman_range_posix.h"
+#endif
 
 namespace __tsan {
 
@@ -29,6 +32,18 @@ DarwinArrayRangeDiagnosis DiagnoseDarwinArrayRange(uptr addr, uptr size) {
 
   const uptr page_size = GetPageSizeCached();
   CHECK(IsPowerOfTwo(page_size));
+#if defined(TSAN_HAS_NATIVE_POSIX_C)
+  // The arithmetic is shared with POSIX, but Mach deallocation accepts
+  // an unaligned start. Do not import munmap's alignment requirement.
+  uintptr_t begin;
+  size_t length;
+  if (!__tsan_posix_page_extent(addr, size, page_size, &begin, &length)) {
+    result.error = AppMemoryRangeError::kOverflow;
+    return result;
+  }
+  result.page_begin = begin;
+  result.page_end = begin + length;
+#else
   const uptr max_addr = ~(uptr)0;
   if (size > max_addr - addr) {
     result.error = AppMemoryRangeError::kOverflow;
@@ -41,6 +56,7 @@ DarwinArrayRangeDiagnosis DiagnoseDarwinArrayRange(uptr addr, uptr size) {
   }
   result.page_begin = RoundDownTo(addr, page_size);
   result.page_end = RoundUpTo(end, page_size);
+#endif
   result.error = DiagnoseAppMemoryRange(
       result.page_begin, result.page_end - result.page_begin,
       &result.first_unsupported);

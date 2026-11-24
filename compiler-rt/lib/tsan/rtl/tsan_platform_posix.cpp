@@ -113,6 +113,31 @@ static void ProtectRange(uptr beg, uptr end) {
 
 #    endif  // !(SANITIZER_IOS && !SANITIZER_IOSSIM)
 
+// Classify a single reported mapping. The iterator's ordering and the
+// platform's special mappings are separate from application-range geometry.
+PosixMappingAction ClassifyPosixMapping(uptr start, uptr end, bool accessible,
+                                       bool ignore_heap) {
+  if (start >= HeapMemBeg() && end <= HeapEnd())
+    return ignore_heap ? PosixMappingAction::kContinue
+                       : PosixMappingAction::kReject;
+
+  if (end > start && IsValidAppMemoryRange(start, end - start))
+    return PosixMappingAction::kContinue;
+
+  // The allocator's extra guard range is already covered by the full heap
+  // interval above. A mapping merely starting in that guard is not enough.
+  if (!accessible)
+    return PosixMappingAction::kContinue;
+
+#if !SANITIZER_APPLE
+  if (start >= VdsoBeg())
+    return PosixMappingAction::kStop;
+#endif
+  // Darwin enumerates Mach-O segments in image/load-command order, not
+  // increasing address order, and has no ELF vDSO termination boundary.
+  return PosixMappingAction::kReject;
+}
+
 // CheckAndProtect will check if the memory layout is compatible with TSan.
 // Optionally (if 'protect' is true), it will set the memory regions between
 // app memory to be inaccessible.
@@ -124,27 +149,11 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
   MemoryMappingLayout proc_maps(true);
   MemoryMappedSegment segment;
   while (proc_maps.Next(&segment)) {
-    if (segment.start >= HeapMemBeg() && segment.end <= HeapEnd()) {
-      if (ignore_heap) {
-        continue;
-      } else {
-        return false;
-      }
-    }
-
-    // Note: IsAppMem includes if it is heap memory, hence we must
-    // put this check after the heap bounds check.
-    if (segment.end > segment.start &&
-        IsValidAppMemoryRange(segment.start, segment.end - segment.start))
+    const PosixMappingAction action = ClassifyPosixMapping(
+        segment.start, segment.end, segment.protection != 0, ignore_heap);
+    if (action == PosixMappingAction::kContinue)
       continue;
-
-    // Guard page after the heap end
-    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
-
-    if (segment.protection == 0)  // Zero page or mprotected.
-      continue;
-
-    if (segment.start >= VdsoBeg())  // vdso
+    if (action == PosixMappingAction::kStop)
       break;
 
     // Debug output can break tests. Suppress this message in most cases.

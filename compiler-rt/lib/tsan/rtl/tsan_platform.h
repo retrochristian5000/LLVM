@@ -1265,6 +1265,11 @@ void InitializePlatformEarly();
 // Validate the architecture's supported virtual-address width before mapping.
 void InitializeCpuVmaSize(uptr current_frame);
 #endif
+#if SANITIZER_POSIX && !SANITIZER_GO
+enum class PosixMappingAction { kContinue, kStop, kReject };
+PosixMappingAction ClassifyPosixMapping(uptr start, uptr end, bool accessible,
+                                       bool ignore_heap);
+#endif
 bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings);
 void InitializeShadowMemoryPlatform();
 void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns);
