@@ -112,6 +112,11 @@ STDCXX_INTERCEPTOR(void, _ZNSt3__111__call_onceERVmPvPFvS2_E, void *flag,
   call_once_callback_args new_args = {func, arg, flag};
   REAL(_ZNSt3__111__call_onceERVmPvPFvS2_E)(flag, &new_args,
                                             call_once_callback_wrapper);
+  // Every normally returning call_once observes the successful initializer.
+  // The inline fast path already has an acquire load; make the out-of-line
+  // slow path's per-flag synchronization explicit as well. If the initializer
+  // throws, the real call unwinds past this annotation and the flag is retried.
+  __tsan_acquire(flag);
 }
 
 #  undef STDCXX_INTERCEPTOR
