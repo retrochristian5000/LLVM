@@ -30,6 +30,10 @@ DarwinArrayRangeDiagnosis DiagnoseDarwinArrayRange(uptr addr, uptr size);
 
 bool DarwinArrayRangeIsSupported(uptr addr, uptr size);
 
+// XNU fixed allocations realign the start before adding size, unlike
+// deallocation. The returned address of an anywhere allocation is aligned.
+DarwinArrayRangeDiagnosis DiagnoseDarwinAllocationRange(uptr addr, uptr size);
+
 }  // namespace __tsan
 
 #endif  // SANITIZER_APPLE

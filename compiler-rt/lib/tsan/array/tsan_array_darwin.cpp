@@ -67,6 +67,12 @@ bool DarwinArrayRangeIsSupported(uptr addr, uptr size) {
   return DiagnoseDarwinArrayRange(addr, size).error == AppMemoryRangeError::kNone;
 }
 
+DarwinArrayRangeDiagnosis DiagnoseDarwinAllocationRange(uptr addr, uptr size) {
+  const uptr page_size = GetPageSizeCached();
+  CHECK(IsPowerOfTwo(page_size));
+  return DiagnoseDarwinArrayRange(RoundDownTo(addr, page_size), size);
+}
+
 extern "C" void __tsan_tls_initialization() {}
 
 void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {

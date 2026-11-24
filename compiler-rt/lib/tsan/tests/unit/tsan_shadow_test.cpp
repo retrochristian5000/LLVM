@@ -286,6 +286,30 @@ TEST(Shadow, DarwinMappingScanPolicy) {
                                  true));
 }
 
+TEST(Shadow, DarwinMachVmAllocationRounding) {
+  const uptr page = GetPageSizeCached();
+  const uptr end = HeapMemEnd();
+  ASSERT_GT(end - HeapMemBeg(), 2 * page);
+  const uptr base = end - page;
+  const DarwinArrayRangeDiagnosis allocation =
+      DiagnoseDarwinAllocationRange(end - 1, page);
+  EXPECT_EQ(AppMemoryRangeError::kNone, allocation.error);
+  EXPECT_EQ(base, allocation.page_begin);
+  EXPECT_EQ(end, allocation.page_end);
+  const DarwinArrayRangeDiagnosis deallocation =
+      DiagnoseDarwinArrayRange(end - 1, page);
+  EXPECT_EQ(AppMemoryRangeError::kCrossesGap, deallocation.error);
+  EXPECT_EQ(end + page, deallocation.page_end);
+  EXPECT_EQ(AppMemoryRangeError::kCrossesGap,
+            DiagnoseDarwinAllocationRange(base + 1, page + 1).error);
+  EXPECT_EQ(AppMemoryRangeError::kOverflow,
+            DiagnoseDarwinAllocationRange(~uptr(0), page).error);
+  const DarwinArrayRangeDiagnosis empty =
+      DiagnoseDarwinAllocationRange(~uptr(0), 0);
+  EXPECT_EQ(AppMemoryRangeError::kNone, empty.error);
+  EXPECT_EQ(0U, empty.page_end);
+}
+
 TEST(Shadow, DarwinMachVmPageRounding) {
   const uptr page_size = GetPageSizeCached();
   const uptr heap_end = HeapMemEnd();

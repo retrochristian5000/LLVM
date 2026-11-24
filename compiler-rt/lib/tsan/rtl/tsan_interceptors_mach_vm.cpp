@@ -26,20 +26,36 @@ TSAN_INTERCEPTOR(kern_return_t, mach_vm_allocate, vm_map_t target,
   SCOPED_TSAN_INTERCEPTOR(mach_vm_allocate, target, address, size, flags);
   if (target != mach_task_self())
     return REAL(mach_vm_allocate)(target, address, size, flags);
-  // Fixed mappings may not overlap TSan's reserved shadow regions.
+  // XNU fixed allocations round the start down before adding size.
+  // Keep the existing conservative check for explicit superpage requests;
+  // their extent can depend on additional kernel alignment rules.
+  const bool ordinary_pages = !(flags & VM_FLAGS_SUPERPAGE_MASK);
   if (address && !(flags & VM_FLAGS_ANYWHERE) &&
-      !DarwinArrayRangeIsSupported(*address, size)) {
+      (ordinary_pages
+           ? DiagnoseDarwinAllocationRange(*address, size).error !=
+                 AppMemoryRangeError::kNone
+           : !DarwinArrayRangeIsSupported(*address, size))) {
     ReportDarwinRejectedFixedMachVmRange(*address, size, flags);
     return KERN_NO_SPACE;
   }
   kern_return_t kr = REAL(mach_vm_allocate)(target, address, size, flags);
   if (kr == KERN_SUCCESS && address && size != 0) {
     // Anywhere allocations must also stay inside instrumented app memory.
-    if (!DarwinArrayRangeIsSupported(*address, size)) {
+    const DarwinArrayRangeDiagnosis range =
+        ordinary_pages ? DiagnoseDarwinAllocationRange(*address, size)
+                       : DiagnoseDarwinArrayRange(*address, size);
+    if (range.error != AppMemoryRangeError::kNone) {
       ReportDarwinUnsupportedMachVmResult(*address, size, flags);
       Die();
     }
-    MemoryRangeImitateWriteOrResetRange(thr, pc, *address, size);
+    // Ordinary allocations initialize whole pages, not just the requested
+    // bytes. In particular a fixed overwrite must not retain stale shadow
+    // records in the tail of its last page.
+    if (ordinary_pages)
+      MemoryRangeImitateWriteOrResetRange(thr, pc, range.page_begin,
+                                         range.page_end - range.page_begin);
+    else
+      MemoryRangeImitateWriteOrResetRange(thr, pc, *address, size);
   }
   return kr;
 }
