@@ -246,6 +246,7 @@ int main() {
       message(FATAL_ERROR "TSan libffi requires compatible native macOS SDK headers and -lffi")
     endif()
     list(APPEND TSAN_SOURCES ../ffi/tsan_ffi_darwin.cpp)
+    list(APPEND TSAN_HEADERS ../ffi/tsan_ffi.h)
     list(APPEND TSAN_LINK_LIBS ffi)
   endif()
 
