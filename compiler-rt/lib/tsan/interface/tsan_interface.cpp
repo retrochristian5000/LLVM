@@ -36,18 +36,32 @@ void __tsan_flush_memory() {
   FlushShadowMemory();
 }
 
-void __tsan_read16_pc(void *addr, void *pc) {
-  uptr pc_no_pac = STRIP_PAC_PC(pc);
+namespace {
+
+// An explicit-PC caller may describe a byte range rather than a naturally
+// aligned C++ object. Each eight-byte access must stay within its shadow
+// cell, or the shadow mask silently drops bytes at the end of that cell.
+void Access16WithPC(void *address, void *caller_pc, AccessType type) {
+  const uptr addr = reinterpret_cast<uptr>(address);
+  const uptr pc = STRIP_PAC_PC(caller_pc);
   ThreadState *thr = cur_thread();
-  MemoryAccess(thr, pc_no_pac, (uptr)addr, 8, kAccessRead);
-  MemoryAccess(thr, pc_no_pac, (uptr)addr + 8, 8, kAccessRead);
+  if (addr % kShadowCell) {
+    UnalignedMemoryAccess(thr, pc, addr, 8, type);
+    UnalignedMemoryAccess(thr, pc, addr + 8, 8, type);
+  } else {
+    MemoryAccess(thr, pc, addr, 8, type);
+    MemoryAccess(thr, pc, addr + 8, 8, type);
+  }
+}
+
+}  // namespace
+
+void __tsan_read16_pc(void *addr, void *pc) {
+  Access16WithPC(addr, pc, kAccessRead);
 }
 
 void __tsan_write16_pc(void *addr, void *pc) {
-  uptr pc_no_pac = STRIP_PAC_PC(pc);
-  ThreadState *thr = cur_thread();
-  MemoryAccess(thr, pc_no_pac, (uptr)addr, 8, kAccessWrite);
-  MemoryAccess(thr, pc_no_pac, (uptr)addr + 8, 8, kAccessWrite);
+  Access16WithPC(addr, pc, kAccessWrite);
 }
 
 // __tsan_unaligned_read/write calls are emitted by compiler.
