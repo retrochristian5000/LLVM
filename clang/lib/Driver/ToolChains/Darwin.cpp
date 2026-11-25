@@ -378,6 +378,13 @@ void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
   Args.AddAllArgs(CmdArgs, options::OPT_multiply__defined);
   Args.AddAllArgs(CmdArgs, options::OPT_multiply__defined__unused);
 
+  // Static PIE requires a startup and relocation model that Darwin's
+  // Mach-O executable linker does not provide.
+  const Arg *StaticPIE = Args.getLastArg(options::OPT_static_pie);
+  if (StaticPIE)
+    D.Diag(diag::err_drv_unsupported_opt_for_target)
+        << StaticPIE->getSpelling() << MachOTC.getTriple().str();
+
   // The executable link mode is independent of Darwin's mandatory PIC
   // code generation on 64-bit targets. Prefer explicit linker-mode options
   // over compiler-mode options and leave the default to the Mach-O linker.
@@ -386,8 +393,10 @@ void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
                       options::OPT_fno_pie, options::OPT_fno_PIE);
   const Arg *PIELink =
       Args.getLastArg(options::OPT_pie, options::OPT_no_pie);
-  if (!Args.hasArg(options::OPT_dynamiclib, options::OPT_bundle,
-                   options::OPT_static)) {
+  if (!StaticPIE &&
+      !Args.hasArg(options::OPT_dynamiclib, options::OPT_bundle,
+                   options::OPT_static, options::OPT_r, options::OPT_object,
+                   options::OPT_preload)) {
     if (PIELink)
       CmdArgs.push_back(PIELink->getOption().matches(options::OPT_pie)
                             ? "-pie"
