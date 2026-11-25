@@ -34,6 +34,55 @@
 ; RUN: llvm-readobj --file-headers %t/libarm64.dylib | FileCheck %s --check-prefix=AOBJ
 ; AOBJ: CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
 ;
+;; Verify the same ARM64e pointer-authentication semantics in an executable
+;; produced through full LTO and cached ThinLTO. A native entry point keeps
+;; the bitcode callback live across the link.
+; RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/main.o %t/main.s
+; RUN: llvm-mc -filetype=obj -triple=arm64e-apple-macos -o %t/support.o %t/support.s
+; RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+; RUN:   -dylib -install_name @rpath/libsupport.dylib %t/support.o -o %t/libsupport.dylib
+; RUN: llvm-as %t/auth.ll -o %t/auth.full.o
+; RUN: llvm-as %t/impl.ll -o %t/impl.full.o
+; RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+; RUN:   -execute -pie -e _main %t/main.o %t/auth.full.o %t/impl.full.o \
+; RUN:   %t/libsupport.dylib -o %t/full-pie
+; RUN: llvm-readobj --file-headers %t/full-pie | FileCheck %s --check-prefix=EPIE
+; RUN: llvm-objdump --macho --chained-fixups %t/full-pie | FileCheck %s --check-prefix=EAUTH
+;
+; RUN: opt -module-hash -module-summary %t/auth.ll -o %t/auth.cached.o
+; RUN: opt -module-hash -module-summary %t/impl.ll -o %t/impl.cached.o
+; RUN: mkdir %t/cache
+; RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+; RUN:   -execute -pie -e _main -cache_path_lto %t/cache \
+; RUN:   %t/main.o %t/auth.cached.o %t/impl.cached.o %t/libsupport.dylib -o %t/thin-pie
+; RUN: llvm-readobj --file-headers %t/thin-pie | FileCheck %s --check-prefix=EPIE
+; RUN: llvm-objdump --macho --chained-fixups %t/thin-pie | FileCheck %s --check-prefix=EAUTH
+; RUN: ls %t/cache/llvmcache-* | count 2
+; RUN: %no-arg-lld -arch arm64e -platform_version macos 13.0 13.0 \
+; RUN:   -execute -pie -e _main -cache_path_lto %t/cache \
+; RUN:   %t/main.o %t/auth.cached.o %t/impl.cached.o %t/libsupport.dylib -o %t/thin-pie-again
+; RUN: llvm-readobj --file-headers %t/thin-pie-again | FileCheck %s --check-prefix=EPIE
+; RUN: llvm-objdump --macho --chained-fixups %t/thin-pie-again | FileCheck %s --check-prefix=EAUTH
+; RUN: ls %t/cache/llvmcache-* | count 2
+;
+; EPIE: CpuSubType: CPU_SUBTYPE_ARM64E (0x2)
+; EPIE: PointerAuthABI: Userland
+; EPIE: FileType: Executable
+; EPIE: MH_PIE
+;
+;--- main.s
+.text
+.globl _main
+_main:
+  mov w0, #7
+  b __whp_indirect
+
+;--- support.s
+.text
+.globl _pie_support
+_pie_support:
+  ret
+
 ;--- auth.ll
 target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128-Fn32"
 target triple = "arm64e-apple-macosx13.0.0"
