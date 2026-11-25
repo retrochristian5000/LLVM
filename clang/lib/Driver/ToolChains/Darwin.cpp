@@ -658,6 +658,21 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   AddLinkArgs(C, Args, CmdArgs, Inputs, Version, LinkerIsLLD,
               UsePlatformVersion);
 
+  // Preserve an explicitly selected AArch64 CPU as the LTO backend default.
+  // Per-function target attributes in bitcode still take precedence.
+  // Leave native-only links and Apple's ld64 interface unchanged.
+  if (LinkerIsLLD && Triple.getArch() == llvm::Triple::aarch64 &&
+      getToolChain().getLTOMode(Args) != LTOK_None) {
+    if (Arg *A = Args.getLastArg(options::OPT_mcpu_EQ)) {
+      A->claim();
+      std::string CPU = getCPUName(getToolChain().getDriver(), Args, Triple);
+      if (!CPU.empty()) {
+        CmdArgs.push_back("-mcpu");
+        CmdArgs.push_back(Args.MakeArgString(CPU));
+      }
+    }
+  }
+
   if (willEmitRemarks(Args) &&
       checkRemarksOptions(getToolChain().getDriver(), Args,
                           getToolChain().getTriple()))

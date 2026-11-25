@@ -274,6 +274,27 @@
 // LINK_EXPORT_DYNAMIC: {{ld(.exe)?"}}
 // LINK_EXPORT_DYNAMIC: "-export_dynamic"
 
+// Explicit CPU selection reaches Mach-O LLD's LTO backend, not native links.
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld=lld -B%S/Inputs/lld \
+// RUN:   -mcpu=apple-a18-pro -flto=thin -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-LTO
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld=lld -B%S/Inputs/lld \
+// RUN:   -mcpu=apple-a18-pro -flto=full -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-LTO
+// A18-LTO: "-arch" "arm64e"
+// A18-LTO-SAME: "-mcpu" "apple-a18-pro"
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld=lld -B%S/Inputs/lld \
+// RUN:   -mcpu=apple-a18-pro -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-NATIVE
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld=lld -B%S/Inputs/lld \
+// RUN:   -flto=thin -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-NATIVE
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld= -mlinker-version=1000 \
+// RUN:   -mcpu=apple-a18-pro -flto=thin -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-NATIVE
+// A18-NATIVE: "-arch" "arm64e"
+// A18-NATIVE-NOT: "-mcpu"
+// RUN: %clang -target arm64e-apple-macosx15.0 -fuse-ld=lld -B%S/Inputs/lld \
+// RUN:   -mcpu=apple-a18-pro -flto=thin -Wl,-mcpu,apple-a18 -### %t.o 2>&1 | FileCheck %s --check-prefix=A18-OVERRIDE
+// A18-OVERRIDE: "-arch" "arm64e"
+// A18-OVERRIDE-SAME: "-mcpu" "apple-a18-pro"
+// A18-OVERRIDE-SAME: "-mcpu" "apple-a18"
+
 // RUN: %clang -target x86_64h-apple-darwin -### %t.o 2> %t.log
 // RUN: FileCheck -check-prefix=LINK_X86_64H_ARCH %s < %t.log
 //
