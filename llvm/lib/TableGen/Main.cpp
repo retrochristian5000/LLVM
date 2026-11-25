@@ -121,7 +121,11 @@ static int WriteOutput(const char *argv0, StringRef Filename,
     // Only updates the real output file if there are any differences.
     // This prevents recompilation of all the files depending on it if there
     // aren't any.
-    if (auto ExistingOrErr = MemoryBuffer::getFile(Filename, /*IsText=*/true))
+    // StringRef comparison is length-aware. No sentinel byte is needed,
+    // including when the existing output ends on a host page boundary.
+    if (auto ExistingOrErr =
+            MemoryBuffer::getFile(Filename, /*IsText=*/true,
+                                  /*RequiresNullTerminator=*/false))
       if (std::move(ExistingOrErr.get())->getBuffer() == Content)
         return 0;
   }
@@ -199,7 +203,7 @@ int llvm::TableGenMain(const char *argv0, MultiFileTableGenMainFn MainFn) {
   Timer.startTimer("Write output");
   if (int Ret = WriteOutput(argv0, OutputFilename, OutFiles.MainFile))
     return Ret;
-  for (auto [Suffix, Content] : OutFiles.AdditionalFiles) {
+  for (const auto &[Suffix, Content] : OutFiles.AdditionalFiles) {
     SmallString<128> Filename(OutputFilename);
     // TODO: Format using the split-file convention when writing to stdout?
     if (Filename != "-") {
