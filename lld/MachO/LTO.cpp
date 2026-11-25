@@ -47,6 +47,11 @@ static lto::Config createConfig() {
   for (StringRef pluginFn : config->passPlugins)
     c.PassPluginFilenames.push_back(std::string(pluginFn));
   c.OptPipeline = std::string(config->ltoNewPmPasses);
+  // Mach-O code generation stays position independent even for an
+  // executable linked with -no_pie. Do not derive the code-generation
+  // relocation model from config->isPic, which also controls dyld fixups
+  // and the MH_PIE header flag. Keep the LTO and ThinLTO policy explicit.
+  c.RelocModel = Reloc::PIC_;
   c.CodeModel = getCodeModelFromCMModel();
   c.CPU = getCPUStr();
   c.MAttrs = getMAttrs();
