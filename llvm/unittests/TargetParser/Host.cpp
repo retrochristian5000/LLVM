@@ -743,5 +743,17 @@ TEST(getDarwinHostCPUFeatures, MatchesReportedInstructions) {
             Has("hw.optional.arm.FEAT_DotProd"));
   EXPECT_EQ(Features.lookup("i8mm"), Has("hw.optional.arm.FEAT_I8MM"));
   EXPECT_EQ(Features.lookup("bf16"), Has("hw.optional.arm.FEAT_BF16"));
+  EXPECT_EQ(Features.lookup("complxnum"), Has("hw.optional.arm.FEAT_FCMA"));
+  EXPECT_EQ(Features.lookup("rcpc-immo"), Has("hw.optional.arm.FEAT_LRCPC2"));
+  EXPECT_EQ(Features.lookup("altnzcv"), Has("hw.optional.arm.FEAT_FlagM2"));
+
+  // The driver decodes every entry, including disabled extensions.
+  // Darwin sysctl names and -march aliases are not backend feature names.
+  for (const auto &Feature : Features) {
+    EXPECT_TRUE(AArch64::targetFeatureToExtension(
+                    ("+" + Feature.getKey()).str())
+                    .has_value())
+        << Feature.getKey().str();
+  }
 }
 #endif

@@ -2552,11 +2552,11 @@ StringMap<bool> sys::getHostCPUFeatures() {
   Features["fp16fml"] = Has("hw.optional.arm.FEAT_FHM");
   Features["jsconv"] = Has("hw.optional.arm.FEAT_JSCVT");
   Features["rcpc"] = Has("hw.optional.arm.FEAT_LRCPC");
-  Features["rcpc2"] = Has("hw.optional.arm.FEAT_LRCPC2");
+  Features["rcpc-immo"] = Has("hw.optional.arm.FEAT_LRCPC2");
   Features["rdm"] = Has("hw.optional.arm.FEAT_RDM");
-  Features["fcma"] = Has("hw.optional.arm.FEAT_FCMA");
+  Features["complxnum"] = Has("hw.optional.arm.FEAT_FCMA");
   Features["flagm"] = Has("hw.optional.arm.FEAT_FlagM");
-  Features["flagm2"] = Has("hw.optional.arm.FEAT_FlagM2");
+  Features["altnzcv"] = Has("hw.optional.arm.FEAT_FlagM2");
   Features["dit"] = Has("hw.optional.arm.FEAT_DIT");
 
   // LLVM's AES and SHA feature names each represent multiple architectural
