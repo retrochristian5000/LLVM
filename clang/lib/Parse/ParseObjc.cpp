@@ -2685,6 +2685,83 @@ bool Parser::ParseObjCXXMessageReceiver(bool &IsExpr, void *&TypeOrExpr) {
   return false;
 }
 
+Parser::ObjCIdentifierParseResult
+Parser::parseObjCIdentifierExpression(IdentifierInfo &II, SourceLocation ILoc,
+                                      ExprResult &Res) {
+  assert(getLangOpts().ObjC && "Objective-C mode required");
+
+  // Support 'Class.property' and 'super.property' notation.
+  if (Tok.is(tok::period) &&
+      (Actions.getTypeName(II, ILoc, getCurScope()) ||
+       (&II == Ident_super && getCurScope()->isInObjcMethodScope()))) {
+    ConsumeToken();
+
+    if (Tok.is(tok::code_completion) && &II != Ident_super) {
+      cutOffParsing();
+      Actions.CodeCompletion().CodeCompleteObjCClassPropertyRefExpr(
+          getCurScope(), II, ILoc, ExprStatementTokLoc == ILoc);
+      return ObjCIdentifierParseResult::Error;
+    }
+    // Allow either an identifier or the keyword 'class' (in C++).
+    if (Tok.isNot(tok::identifier) &&
+        !(getLangOpts().CPlusPlus && Tok.is(tok::kw_class))) {
+      Diag(Tok, diag::err_expected_property_name);
+      return ObjCIdentifierParseResult::Error;
+    }
+    IdentifierInfo &PropertyName = *Tok.getIdentifierInfo();
+    SourceLocation PropertyLoc = ConsumeToken();
+
+    Res = Actions.ObjC().ActOnClassPropertyRefExpr(II, PropertyName, ILoc,
+                                                   PropertyLoc);
+    return ObjCIdentifierParseResult::Handled;
+  }
+
+  // Recover a message to super with a missing opening bracket.
+  if (&II == Ident_super && !InMessageExpression &&
+      getCurScope()->isInObjcMethodScope() &&
+      ((Tok.is(tok::identifier) &&
+        (NextToken().is(tok::colon) || NextToken().is(tok::r_square))) ||
+       Tok.is(tok::code_completion))) {
+    Res = ParseObjCMessageExpressionBody(SourceLocation(), ILoc, nullptr,
+                                         nullptr);
+    return ObjCIdentifierParseResult::Handled;
+  }
+
+  // Recover a class message with a missing opening bracket, or complete
+  // a message after a class name.
+  if ((Tok.is(tok::identifier) && !InMessageExpression) ||
+      Tok.is(tok::code_completion)) {
+    const Token &Next = NextToken();
+    if (Tok.is(tok::code_completion) || Next.is(tok::colon) ||
+        Next.is(tok::r_square)) {
+      if (ParsedType Typ = Actions.getTypeName(II, ILoc, getCurScope())) {
+        if (Typ.get()->isObjCObjectOrInterfaceType()) {
+          // Fake up a Declarator to use with ActOnTypeName.
+          DeclSpec DS(AttrFactory);
+          DS.SetRangeStart(ILoc);
+          DS.SetRangeEnd(ILoc);
+          const char *PrevSpec = nullptr;
+          unsigned DiagID;
+          DS.SetTypeSpecType(TST_typename, ILoc, PrevSpec, DiagID, Typ,
+                             Actions.getASTContext().getPrintingPolicy());
+
+          Declarator DeclaratorInfo(DS, ParsedAttributesView::none(),
+                                    DeclaratorContext::TypeName);
+          TypeResult Ty = Actions.ActOnTypeName(DeclaratorInfo);
+          if (Ty.isInvalid())
+            return ObjCIdentifierParseResult::Handled;
+
+          Res = ParseObjCMessageExpressionBody(SourceLocation(),
+                                               SourceLocation(), Ty.get(),
+                                               nullptr);
+          return ObjCIdentifierParseResult::Handled;
+        }
+      }
+    }
+  }
+  return ObjCIdentifierParseResult::NotHandled;
+}
+
 bool Parser::isSimpleObjCMessageExpression() {
   assert(Tok.is(tok::l_square) && getLangOpts().ObjC &&
          "Incorrect start for isSimpleObjCMessageExpression");

@@ -942,80 +942,12 @@ Parser::ParseCastExpression(CastParseKind ParseKind, bool isAddressOfOperand,
     IdentifierInfo &II = *Tok.getIdentifierInfo();
     SourceLocation ILoc = ConsumeToken();
 
-    // Support 'Class.property' and 'super.property' notation.
-    if (getLangOpts().ObjC && Tok.is(tok::period) &&
-        (Actions.getTypeName(II, ILoc, getCurScope()) ||
-         // Allow the base to be 'super' if in an objc-method.
-         (&II == Ident_super && getCurScope()->isInObjcMethodScope()))) {
-      ConsumeToken();
-
-      if (Tok.is(tok::code_completion) && &II != Ident_super) {
-        cutOffParsing();
-        Actions.CodeCompletion().CodeCompleteObjCClassPropertyRefExpr(
-            getCurScope(), II, ILoc, ExprStatementTokLoc == ILoc);
+    if (getLangOpts().ObjC) {
+      auto Result = parseObjCIdentifierExpression(II, ILoc, Res);
+      if (Result == ObjCIdentifierParseResult::Error)
         return ExprError();
-      }
-      // Allow either an identifier or the keyword 'class' (in C++).
-      if (Tok.isNot(tok::identifier) &&
-          !(getLangOpts().CPlusPlus && Tok.is(tok::kw_class))) {
-        Diag(Tok, diag::err_expected_property_name);
-        return ExprError();
-      }
-      IdentifierInfo &PropertyName = *Tok.getIdentifierInfo();
-      SourceLocation PropertyLoc = ConsumeToken();
-
-      Res = Actions.ObjC().ActOnClassPropertyRefExpr(II, PropertyName, ILoc,
-                                                     PropertyLoc);
-      break;
-    }
-
-    // In an Objective-C method, if we have "super" followed by an identifier,
-    // the token sequence is ill-formed. However, if there's a ':' or ']' after
-    // that identifier, this is probably a message send with a missing open
-    // bracket. Treat it as such.
-    if (getLangOpts().ObjC && &II == Ident_super && !InMessageExpression &&
-        getCurScope()->isInObjcMethodScope() &&
-        ((Tok.is(tok::identifier) &&
-         (NextToken().is(tok::colon) || NextToken().is(tok::r_square))) ||
-         Tok.is(tok::code_completion))) {
-      Res = ParseObjCMessageExpressionBody(SourceLocation(), ILoc, nullptr,
-                                           nullptr);
-      break;
-    }
-
-    // If we have an Objective-C class name followed by an identifier
-    // and either ':' or ']', this is an Objective-C class message
-    // send that's missing the opening '['. Recovery
-    // appropriately. Also take this path if we're performing code
-    // completion after an Objective-C class name.
-    if (getLangOpts().ObjC &&
-        ((Tok.is(tok::identifier) && !InMessageExpression) ||
-         Tok.is(tok::code_completion))) {
-      const Token& Next = NextToken();
-      if (Tok.is(tok::code_completion) ||
-          Next.is(tok::colon) || Next.is(tok::r_square))
-        if (ParsedType Typ = Actions.getTypeName(II, ILoc, getCurScope()))
-          if (Typ.get()->isObjCObjectOrInterfaceType()) {
-            // Fake up a Declarator to use with ActOnTypeName.
-            DeclSpec DS(AttrFactory);
-            DS.SetRangeStart(ILoc);
-            DS.SetRangeEnd(ILoc);
-            const char *PrevSpec = nullptr;
-            unsigned DiagID;
-            DS.SetTypeSpecType(TST_typename, ILoc, PrevSpec, DiagID, Typ,
-                               Actions.getASTContext().getPrintingPolicy());
-
-            Declarator DeclaratorInfo(DS, ParsedAttributesView::none(),
-                                      DeclaratorContext::TypeName);
-            TypeResult Ty = Actions.ActOnTypeName(DeclaratorInfo);
-            if (Ty.isInvalid())
-              break;
-
-            Res = ParseObjCMessageExpressionBody(SourceLocation(),
-                                                 SourceLocation(),
-                                                 Ty.get(), nullptr);
-            break;
-          }
+      if (Result == ObjCIdentifierParseResult::Handled)
+        break;
     }
 
     // Make sure to pass down the right value for isAddressOfOperand.

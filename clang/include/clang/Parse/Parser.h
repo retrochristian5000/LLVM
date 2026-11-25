@@ -5890,6 +5890,13 @@ private:
 
   //===--------------------------------------------------------------------===//
   // Objective-C Expressions
+  enum class ObjCIdentifierParseResult { NotHandled, Handled, Error };
+
+  // Handle Objective-C properties and recovery for identifier-led messages.
+  // Error requests an immediate return; Handled preserves postfix parsing.
+  ObjCIdentifierParseResult parseObjCIdentifierExpression(
+      IdentifierInfo &II, SourceLocation ILoc, ExprResult &Res);
+
   ExprResult ParseObjCAtExpression(SourceLocation AtLocation);
   ExprResult ParseObjCStringLiteral(SourceLocation AtLoc);
 
