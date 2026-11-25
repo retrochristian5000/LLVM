@@ -375,18 +375,38 @@ std::string llvm::computeLTOCacheKey(
   for (auto &V : UsedCfiDecls)
     AddUint64(V);
 
-  if (!Conf.SampleProfile.empty()) {
-    auto FileOrErr = MemoryBuffer::getFile(Conf.SampleProfile);
-    if (FileOrErr) {
-      Hasher.update(FileOrErr.get()->getBuffer());
+  // Profile generation and profile use are different optimization modes.
+  // In generation mode CSIRProfile is an output filename (possibly a
+  // runtime pattern), not an input file. In use mode its contents can
+  // change without the filename changing.
+  AddUnsigned(Conf.RunCSIRInstr);
+  AddUnsigned(Conf.PGOWarnMismatch);
+  AddUnsigned(Conf.AddFSDiscriminator);
 
-      if (!Conf.ProfileRemapping.empty()) {
-        FileOrErr = MemoryBuffer::getFile(Conf.ProfileRemapping);
-        if (FileOrErr)
-          Hasher.update(FileOrErr.get()->getBuffer());
-      }
+  auto AddProfileFile = [&](StringRef Path) {
+    AddString(Path);
+    if (Path.empty())
+      return;
+    auto FileOrErr = MemoryBuffer::getFile(Path);
+    AddUnsigned(static_cast<bool>(FileOrErr));
+    if (FileOrErr) {
+      StringRef Buffer = FileOrErr.get()->getBuffer();
+      AddUint64(Buffer.size());
+      Hasher.update(Buffer);
     }
+  };
+
+  if (!Conf.SampleProfile.empty()) {
+    AddProfileFile(Conf.SampleProfile);
+  } else if (Conf.RunCSIRInstr) {
+    AddString(Conf.CSIRProfile);
+  } else {
+    AddProfileFile(Conf.CSIRProfile);
   }
+
+  if (!Conf.SampleProfile.empty() || Conf.RunCSIRInstr ||
+      !Conf.CSIRProfile.empty())
+    AddProfileFile(Conf.ProfileRemapping);
 
   return toHex(Hasher.result());
 }
