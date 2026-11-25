@@ -1982,9 +1982,11 @@ bool link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
     config->osoPrefix = saver().save(expanded.str());
   }
 
+  // PIE is an executable link mode. Dylibs and bundles remain PIC
+  // regardless of executable-only PIE options.
   bool pie = args.hasFlag(OPT_pie, OPT_no_pie, true);
-  if (!supportsNoPie() && !pie) {
-    warn("-no_pie ignored for arm64");
+  if (config->outputType == MH_EXECUTE && !pie && !supportsNoPie()) {
+    warn("-no_pie ignored for " + getArchitectureName(config->arch()));
     pie = true;
   }
 
