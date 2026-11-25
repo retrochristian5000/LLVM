@@ -2601,7 +2601,9 @@ void ChainedFixupsSection::addBinding(const Symbol *sym,
       {{sym, outlineAddend}, static_cast<uint32_t>(bindings.size())});
 
   if (inserted) {
-    symtabSize += sym->getName().size() + 1;
+    StringRef name = sym->getName();
+    if (importNameOffsets.insert({name, symtabSize}).second)
+      symtabSize += name.size() + 1;
     hasWeakBind = hasWeakBind || needsWeakBind(*sym);
     // The 23-bit limit is for the symbol-name offset; an ADDEND import
     // stores a signed 32-bit addend and does not require ADDEND64.
@@ -2742,20 +2744,22 @@ void ChainedFixupsSection::writeTo(uint8_t *buf) const {
 
   // Write imports table.
   header->imports_offset = curOffset();
-  uint64_t nameOffset = 0;
   for (auto [import, idx] : bindings) {
     const Symbol &sym = *import.first;
+    auto name = importNameOffsets.find(sym.getName());
+    assert(name != importNameOffsets.end() && "missing import name");
     buf += writeImport(buf, importFormat, ordinalForSymbol(sym),
-                       sym.isWeakRef(), nameOffset, import.second);
-    nameOffset += sym.getName().size() + 1;
+                       sym.isWeakRef(), name->second, import.second);
   }
 
-  // Write imported symbol names.
+  // Write each name once, in first-use order. Bind ordinals and addends
+  // remain independent of the string pool, including authenticated binds.
   header->symbols_offset = curOffset();
-  for (auto [import, idx] : bindings) {
-    StringRef name = import.first->getName();
+  for (auto [name, offset] : importNameOffsets) {
+    assert(curOffset() - header->symbols_offset == offset);
     memcpy(buf, name.data(), name.size());
-    buf += name.size() + 1; // account for null terminator
+    buf[name.size()] = 0;
+    buf += name.size() + 1;
   }
 
   assert(curOffset() == getRawSize());

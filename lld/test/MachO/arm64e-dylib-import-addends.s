@@ -41,12 +41,17 @@
 # FMT32: imports_format = 2 (DYLD_CHAINED_IMPORT_ADDEND)
 # FMT64: imports_format = 3 (DYLD_CHAINED_IMPORT_ADDEND64)
 # COMMON: pointer_format = 12 (DYLD_CHAINED_PTR_ARM64E_USERLAND24)
-# COMMON: _dysym
+# COMMON-DAG: name_offset = [[NAME:[0-9]+]] (_dysym)
+# COMMON-DAG: name_offset = [[NAME]] (_dysym)
+# COMMON-DAG: name_offset = {{[0-9]+}} (_other)
 
 #--- producer.s
 .text
 .globl _dysym
 _dysym:
+  ret
+.globl _other
+_other:
   ret
 
 #--- consumer.s
@@ -54,3 +59,4 @@ _dysym:
 .p2align 3
 .quad _dysym + ADDEND
 .quad _dysym@AUTH(ia,42,addr)
+.quad _other@AUTH(ib,17,addr)

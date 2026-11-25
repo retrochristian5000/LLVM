@@ -808,6 +808,8 @@ private:
   std::vector<Location> locations;
   // (target symbol, addend) => import ordinal
   llvm::MapVector<std::pair<const Symbol *, int64_t>, uint32_t> bindings;
+  // Share names across imports without changing their distinct ordinals.
+  llvm::MapVector<llvm::StringRef, uint64_t> importNameOffsets;
 
   struct SegmentInfo {
     SegmentInfo(const OutputSegment *oseg) : oseg(oseg) {}
