@@ -64,6 +64,7 @@
 #include "llvm/Support/Base64.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGen.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/Path.h"
@@ -79,6 +80,13 @@ using namespace dwarf;
 static cl::opt<bool> JumpTableInFunctionSection(
     "jumptable-in-function-section", cl::Hidden, cl::init(false),
     cl::desc("Putting Jump Table in function section"));
+
+// Opt-in for freestanding i386 firmware with section-based reachability.
+// Do not alter hosted targets or the default ELF merge policy.
+static cl::opt<bool> SeparateBareMetalELFConstants(
+    "x86-elf-separate-constants", cl::Hidden, cl::init(false),
+    cl::desc("Use separate non-mergeable sections for local i386 bare-metal "
+             "ELF constant globals when data sections are enabled"));
 
 static void GetObjCImageInfo(Module &M, unsigned &Version, unsigned &Flags,
                              StringRef &Section) {
@@ -943,7 +951,22 @@ static MCSection *selectELFSectionForGlobal(
 
 MCSection *TargetLoweringObjectFileELF::SelectSectionForGlobal(
     const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
-  unsigned Flags = getELFSectionFlags(Kind, TM.getTargetTriple());
+  const Triple &T = TM.getTargetTriple();
+  // A section-based firmware layout must not retain an entire literal pool
+  // because one global is reachable. Keep each eligible local constant in
+  // its own ordinary read-only section. Explicit section attributes and
+  // machine constant pools are handled by their existing paths.
+  if (SeparateBareMetalELFConstants && TM.getDataSections() &&
+      TM.getUniqueSectionNames() && T.getArch() == Triple::x86 &&
+      T.getOS() == Triple::UnknownOS && T.isOSBinFormatELF() &&
+      (T.getEnvironmentName() == "elf" ||
+       T.getEnvironment() == Triple::CODE16) &&
+      GO->hasLocalLinkage() && GO->hasGlobalUnnamedAddr() &&
+      !GO->hasComdat() && !GO->hasSection() &&
+      (Kind.isMergeableCString() || Kind.isMergeableConst()))
+    Kind = SectionKind::getReadOnly();
+
+  unsigned Flags = getELFSectionFlags(Kind, T);
 
   // If we have -ffunction-section or -fdata-section then we should emit the
   // global value to a uniqued section specifically for it.
