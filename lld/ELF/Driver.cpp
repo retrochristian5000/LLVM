@@ -3042,6 +3042,8 @@ static void readSecurityNotes(Ctx &ctx) {
     return {ctx, toDiagLevel(policy)};
   };
   for (ELFFileBase *f : ctx.objectFiles) {
+    // ISA requirements are a union, unlike CET compatibility properties.
+    ctx.arg.x86ISANeeded |= f->x86ISANeeded;
     uint32_t features = f->andFeatures;
 
     reportUnless(ctx.arg.zBtiReport,

@@ -236,6 +236,7 @@ public:
   // Name of source file obtained from STT_FILE, if present.
   StringRef sourceFile;
   uint32_t andFeatures = 0;
+  uint32_t x86ISANeeded = 0;
   bool hasCommonSyms = false;
   std::optional<AArch64PauthAbiCoreInfo> aarch64PauthAbiCoreInfo;
 };

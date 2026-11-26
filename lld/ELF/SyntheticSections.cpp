@@ -179,7 +179,16 @@ void GnuPropertySection::writeTo(uint8_t *buf) {
     write32(ctx, buf + offset + 8, ctx.arg.andFeatures); // Feature flags
     if (ctx.arg.is64)
       write32(ctx, buf + offset + 12, 0); // Padding
-    offset += 16;
+    offset += ctx.arg.is64 ? 16 : 12;
+  }
+
+  if (ctx.arg.x86ISANeeded != 0) {
+    write32(ctx, buf + offset, GNU_PROPERTY_X86_ISA_1_NEEDED);
+    write32(ctx, buf + offset + 4, 4);
+    write32(ctx, buf + offset + 8, ctx.arg.x86ISANeeded);
+    if (ctx.arg.is64)
+      write32(ctx, buf + offset + 12, 0);
+    offset += ctx.arg.is64 ? 16 : 12;
   }
 
   if (ctx.aarch64PauthAbiCoreInfo) {
@@ -193,6 +202,8 @@ void GnuPropertySection::writeTo(uint8_t *buf) {
 size_t GnuPropertySection::getSize() const {
   uint32_t contentSize = 0;
   if (ctx.arg.andFeatures != 0)
+    contentSize += ctx.arg.is64 ? 16 : 12;
+  if (ctx.arg.x86ISANeeded != 0)
     contentSize += ctx.arg.is64 ? 16 : 12;
   if (ctx.aarch64PauthAbiCoreInfo)
     contentSize += 4 + 4 + AArch64PauthAbiCoreInfo::size();
@@ -4612,7 +4623,8 @@ template <class ELFT> void elf::createSyntheticSections(Ctx &ctx) {
   ctx.in.iplt = std::make_unique<IpltSection>(ctx);
   add(*ctx.in.iplt);
 
-  if (ctx.arg.andFeatures || ctx.aarch64PauthAbiCoreInfo) {
+  if (ctx.arg.andFeatures || ctx.arg.x86ISANeeded ||
+      ctx.aarch64PauthAbiCoreInfo) {
     ctx.in.gnuProperty = std::make_unique<GnuPropertySection>(ctx);
     add(*ctx.in.gnuProperty);
   }

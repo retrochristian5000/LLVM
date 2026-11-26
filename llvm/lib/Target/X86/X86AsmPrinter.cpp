@@ -928,10 +928,22 @@ void X86AsmPrinter::emitStartOfAsmFile(Module &M) {
     if (M.getModuleFlag("cf-protection-return"))
       FeatureFlagsAnd |= ELF::GNU_PROPERTY_X86_FEATURE_1_SHSTK;
 
-    if (FeatureFlagsAnd) {
-      // Emit a .note.gnu.property section with the flags.
+    unsigned ISANeeded = 0;
+    if (TT.isOSLinux()) {
+      if (M.getModuleFlag("x86-isa-needed-baseline"))
+        ISANeeded |= ELF::GNU_PROPERTY_X86_ISA_1_BASELINE;
+      if (M.getModuleFlag("x86-isa-needed-v2"))
+        ISANeeded |= ELF::GNU_PROPERTY_X86_ISA_1_V2;
+      if (M.getModuleFlag("x86-isa-needed-v3"))
+        ISANeeded |= ELF::GNU_PROPERTY_X86_ISA_1_V3;
+      if (M.getModuleFlag("x86-isa-needed-v4"))
+        ISANeeded |= ELF::GNU_PROPERTY_X86_ISA_1_V4;
+    }
+
+    if (FeatureFlagsAnd || ISANeeded) {
+      // Emit a single .note.gnu.property with sorted property entries.
       assert((TT.isX86_32() || TT.isX86_64()) &&
-             "CFProtection used on invalid architecture!");
+             "x86 GNU property used on invalid architecture!");
       MCSection *Cur = OutStreamer->getCurrentSectionOnly();
       MCSection *Nt = MMI->getContext().getELFSection(
           ".note.gnu.property", ELF::SHT_NOTE, ELF::SHF_ALLOC);
@@ -941,15 +953,22 @@ void X86AsmPrinter::emitStartOfAsmFile(Module &M) {
       const int WordSize = TT.isX86_64() && !TT.isX32() ? 8 : 4;
       emitAlignment(WordSize == 4 ? Align(4) : Align(8));
       OutStreamer->emitIntValue(4, 4 /*size*/); // data size for "GNU\0"
-      OutStreamer->emitIntValue(8 + WordSize, 4 /*size*/); // Elf_Prop size
+      const unsigned PropertyCount = unsigned(FeatureFlagsAnd != 0) +
+                                     unsigned(ISANeeded != 0);
+      OutStreamer->emitIntValue(PropertyCount * (8 + WordSize), 4);
       OutStreamer->emitIntValue(ELF::NT_GNU_PROPERTY_TYPE_0, 4 /*size*/);
       OutStreamer->emitBytes(StringRef("GNU", 4)); // note name
 
-      // Emitting an Elf_Prop for the CET properties.
-      OutStreamer->emitInt32(ELF::GNU_PROPERTY_X86_FEATURE_1_AND);
-      OutStreamer->emitInt32(4);                          // data size
-      OutStreamer->emitInt32(FeatureFlagsAnd);            // data
-      emitAlignment(WordSize == 4 ? Align(4) : Align(8)); // padding
+      auto EmitProperty = [&](uint32_t Type, uint32_t Value) {
+        OutStreamer->emitInt32(Type);
+        OutStreamer->emitInt32(4);
+        OutStreamer->emitInt32(Value);
+        emitAlignment(WordSize == 4 ? Align(4) : Align(8));
+      };
+      if (FeatureFlagsAnd)
+        EmitProperty(ELF::GNU_PROPERTY_X86_FEATURE_1_AND, FeatureFlagsAnd);
+      if (ISANeeded)
+        EmitProperty(ELF::GNU_PROPERTY_X86_ISA_1_NEEDED, ISANeeded);
 
       OutStreamer->switchSection(Cur);
     }

@@ -998,6 +998,11 @@ static void parseGnuPropertyNote(Ctx &ctx, ELFFileBase &f,
       if (size < 4)
         return void(err(place) << "FEATURE_1_AND entry is too short");
       f.andFeatures |= read32<ELFT::Endianness>(desc.data());
+    } else if ((ctx.arg.emachine == EM_386 || ctx.arg.emachine == EM_X86_64) &&
+               type == GNU_PROPERTY_X86_ISA_1_NEEDED) {
+      if (size != 4)
+        return void(err(place) << "GNU_PROPERTY_X86_ISA_1_NEEDED entry must be 4 bytes");
+      f.x86ISANeeded |= read32<ELFT::Endianness>(desc.data());
     } else if (ctx.arg.emachine == EM_AARCH64 &&
                type == GNU_PROPERTY_AARCH64_FEATURE_PAUTH) {
       ArrayRef<uint8_t> contents = data ? *data : desc;

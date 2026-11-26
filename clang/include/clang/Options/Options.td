@@ -3293,6 +3293,10 @@ def mfunction_return_EQ : Joined<["-"], "mfunction-return=">,
   NormalizedValues<["Keep", "Extern"]>,
   NormalizedValuesScope<"llvm::FunctionReturnThunksKind">,
   MarshallingInfoEnum<CodeGenOpts<"FunctionReturnThunks">, "Keep">;
+defm needed : BoolMOption<"needed", CodeGenOpts<"X86ISANeeded">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+          "Emit the required x86 ISA GNU property (Linux ELF only)">,
+  NegFlag<SetFalse, [], [ClangOption, CC1Option]>>;
 def mindirect_branch_cs_prefix : Flag<["-"], "mindirect-branch-cs-prefix">,
   Group<m_Group>, Visibility<[ClangOption, CLOption, CC1Option]>,
   HelpText<"Add cs prefix to call and jmp to indirect thunk">,

@@ -246,6 +246,7 @@ public:
 struct Config {
   uint8_t osabi = 0;
   uint32_t andFeatures = 0;
+  uint32_t x86ISANeeded = 0;
   llvm::CachePruningPolicy thinLTOCachePolicy;
   llvm::SetVector<llvm::CachedHashString> dependencyFiles; // for --dependency-file
   llvm::StringMap<uint64_t> sectionStartMap;

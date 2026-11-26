@@ -1426,6 +1426,25 @@ void CodeGenModule::Release() {
   }
 
   llvm::Triple T = Context.getTargetInfo().getTriple();
+  if (CodeGenOpts.X86ISANeeded && T.isX86() && T.isOSLinux() &&
+      T.isOSBinFormatELF()) {
+    // Record each required ISA level independently: Max merges each bit
+    // across full LTO without losing nonconsecutive requirements.
+    auto HasAnyFeature = [&](llvm::ArrayRef<llvm::StringRef> Features) {
+      return llvm::any_of(Features,
+                          [&](llvm::StringRef F) { return Target.hasFeature(F); });
+    };
+    if (T.isX86_64() || HasAnyFeature({"fxsr", "x87", "mmx", "sse", "sse2"}))
+      getModule().addModuleFlag(llvm::Module::Max, "x86-isa-needed-baseline", 1);
+    if (HasAnyFeature({"cx16", "popcnt", "sse3", "ssse3", "sse4.1", "sse4.2"}) ||
+        (T.isX86_64() && Target.hasFeature("sahf")))
+      getModule().addModuleFlag(llvm::Module::Max, "x86-isa-needed-v2", 1);
+    if (HasAnyFeature({"avx", "avx2", "f16c", "fma", "lzcnt", "movbe", "xsave"}))
+      getModule().addModuleFlag(llvm::Module::Max, "x86-isa-needed-v3", 1);
+    if (HasAnyFeature({"avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"}))
+      getModule().addModuleFlag(llvm::Module::Max, "x86-isa-needed-v4", 1);
+  }
+
   if (T.isARM() || T.isThumb()) {
     // The minimum width of an enum in bytes
     uint32_t EnumWidth = Context.getLangOpts().ShortEnums ? 1 : 4;

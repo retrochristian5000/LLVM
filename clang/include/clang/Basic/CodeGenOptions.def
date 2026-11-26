@@ -118,6 +118,7 @@ CODEGENOPT(CFProtectionBranch , 1, 0, Benign) ///< if -fcf-protection is
 ENUM_CODEGENOPT(CFBranchLabelScheme, CFBranchLabelSchemeKind, 2,
     CFBranchLabelSchemeKind::Default, Benign) ///< if -mcf-branch-label-scheme is set.
 CODEGENOPT(FunctionReturnThunks, 1, 0, Benign) ///< -mfunction-return={keep|thunk-extern}
+CODEGENOPT(X86ISANeeded, 1, 0, Benign) ///< Emit x86 ISA requirements in ELF.
 CODEGENOPT(IndirectBranchCSPrefix, 1, 0, Benign) ///< if -mindirect-branch-cs-prefix
                                                  ///< is set.
 

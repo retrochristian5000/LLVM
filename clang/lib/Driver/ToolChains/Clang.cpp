@@ -7456,6 +7456,17 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(
         Args.MakeArgString(Twine("-mfunction-return=") + A->getValue()));
 
+  if (const Arg *A =
+          Args.getLastArg(options::OPT_mneeded, options::OPT_mno_needed)) {
+    if (A->getOption().matches(options::OPT_mneeded)) {
+      if (Triple.isX86() && Triple.isOSLinux() && Triple.isOSBinFormatELF())
+        CmdArgs.push_back("-mneeded");
+      else
+        D.Diag(diag::err_drv_unsupported_opt_for_target)
+            << A->getAsString(Args) << Triple.getTriple();
+    }
+  }
+
   Args.AddLastArg(CmdArgs, options::OPT_mindirect_branch_cs_prefix);
 
   // Forward -f options with positive and negative forms; we translate these by
