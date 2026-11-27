@@ -111,6 +111,18 @@ std::string x86::getX86TargetCPU(const Driver &D, const ArgList &Args,
   if (Is64Bit)
     return "x86-64";
 
+  // Bare-metal legacy x86 firmware has no hosted OS CPU baseline.
+  // Keep the architecture spelling meaningful even after -m16 changes
+  // the ELF environment to CODE16. Explicit -march still takes priority.
+  if (Triple.getOS() == llvm::Triple::UnknownOS &&
+      (Triple.getEnvironmentName() == "elf" ||
+       Triple.getEnvironment() == llvm::Triple::CODE16)) {
+    StringRef Arch = Triple.getArchName();
+    if (Arch == "i386" || Arch == "i486" || Arch == "i586" ||
+        Arch == "i686")
+      return Arch.str();
+  }
+
   switch (Triple.getOS()) {
   case llvm::Triple::NetBSD:
     return "i486";
