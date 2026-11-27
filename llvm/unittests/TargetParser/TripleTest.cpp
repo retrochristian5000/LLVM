@@ -74,6 +74,22 @@ TEST(TripleTest, X86FirmwareELFAndCode16) {
   EXPECT_EQ(32U, Code16.getArchPointerBitWidth());
 }
 
+TEST(TripleTest, X86I586FirmwareELFAndCode16) {
+  EXPECT_EQ("i586-unknown-none-elf", Triple::normalize("i586-none-elf"));
+  Triple Firmware("i586-unknown-none-elf");
+  EXPECT_EQ("i586", Firmware.getArchName());
+  EXPECT_EQ(Triple::x86, Firmware.getArch());
+  EXPECT_EQ(Triple::ELF, Firmware.getObjectFormat());
+  EXPECT_EQ(32U, Firmware.getArchPointerBitWidth());
+
+  Triple Code16("i586-unknown-none-code16");
+  EXPECT_EQ("i586", Code16.getArchName());
+  EXPECT_EQ(Triple::x86, Code16.getArch());
+  EXPECT_EQ(Triple::CODE16, Code16.getEnvironment());
+  EXPECT_EQ(Triple::ELF, Code16.getObjectFormat());
+  EXPECT_EQ(32U, Code16.getArchPointerBitWidth());
+}
+
 TEST(TripleTest, BasicParsing) {
   Triple T;
 
