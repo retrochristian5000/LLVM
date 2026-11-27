@@ -1,0 +1,96 @@
+# REQUIRES: x86
+# RUN: split-file %s %t
+# RUN: llvm-mc -filetype=obj -triple=i386-none-elf %t/mode16.s -o %t/mode16.o
+# RUN: llvm-mc -filetype=obj -triple=i386-none-elf %t/flat.s -o %t/flat.o
+# RUN: ld.lld -melf_i386 -r %t/mode16.o -o %t/partial.o
+# RUN: ld.lld -melf_i386 -z noexecstack -e 0 -T %t/mode16.lds %t/partial.o -o %t/segmented
+# RUN: llvm-objcopy --strip-all %t/segmented %t/segmented.o
+# RUN: %python %t/check.py relabel %t/segmented.o
+# RUN: ld.lld -melf_i386 -z noexecstack -N -T %t/flat.lds %t/segmented.o %t/flat.o -o %t/final
+# RUN: llvm-objcopy -O binary %t/final %t/rom.bin
+# RUN: %python %t/check.py verify %t/rom.bin
+
+## Model the SeaBIOS segmented link, strip and ELF type conversion followed
+## by the flat ROM link. Check actual relocation bytes and fixed addresses,
+## not the linker-specific padding between executable sections.
+#--- mode16.s
+.section .fixedaddr.fff0,"ax",@progbits
+.code16
+.byte 0xea
+.word entry16
+.word 0xf000
+.section .text.entry16,"ax",@progbits
+entry16:
+callw helper16
+.word flat_symbol
+.section .text.helper16,"ax",@progbits
+helper16:
+retw
+
+#--- mode16.lds
+OUTPUT_FORMAT("elf32-i386")
+OUTPUT_ARCH(i386)
+SECTIONS {
+  flat_symbol = 0x1234;
+  .text.entry16 0xe05b : { *(.text.entry16) }
+  .text.helper16 0xe080 : { *(.text.helper16) }
+  .fixedaddr.fff0 0xfff0 : { *(.fixedaddr.fff0) }
+  /DISCARD/ : { *(.text) *(.data) *(.bss) *(.note*) }
+}
+
+#--- flat.s
+.section .text.flat,"ax",@progbits
+.code32
+.globl flat_entry
+flat_entry:
+.long flat_target
+call flat_target
+.section .text.target,"ax",@progbits
+flat_target:
+ret
+
+#--- flat.lds
+OUTPUT_FORMAT("elf32-i386")
+OUTPUT_ARCH(i386)
+ENTRY(flat_entry)
+SECTIONS {
+  .text 0xf0000 : {
+    *(.text.flat)
+    . = ABSOLUTE(0xf0020);
+    *(.text.target)
+    . = ABSOLUTE(0xfe05b);
+    *(.text.entry16)
+    . = ABSOLUTE(0xfe080);
+    *(.text.helper16)
+    . = ABSOLUTE(0xffff0);
+    *(.fixedaddr.fff0)
+    . = ABSOLUTE(0x100000);
+  } :text
+  /DISCARD/ : { *(.text*) *(.data*) *(.bss*) *(.note*) }
+}
+PHDRS { text PT_LOAD AT(0xf0000); }
+
+#--- check.py
+from pathlib import Path
+import sys
+
+mode, filename = sys.argv[1:]
+path = Path(filename)
+data = path.read_bytes()
+if mode == "relabel":
+    # SeaBIOS ldnoexec.py reclassifies the already linked, stripped ELF.
+    assert data[:6] == b"\x7fELF\x01\x01"
+    assert data[16:18] == b"\x02\x00"
+    path.write_bytes(data[:16] + b"\x01\x00" + data[18:])
+elif mode == "verify":
+    assert len(data) == 65536
+    # R_386_32 absolute address and R_386_PC32 call displacement.
+    assert data[:9] == bytes.fromhex("20000f00e817000000")
+    assert data[0x20] == 0xc3
+    # R_386_PC16 call and R_386_16 absolute symbol.
+    assert data[0xe05b:0xe060] == bytes.fromhex("e822003412")
+    assert data[0xe080] == 0xc3
+    # Reset vector at physical 0xffff0: far jump to f000:e05b.
+    assert data[0xfff0:0xfff5] == bytes.fromhex("ea5be000f0")
+else:
+    raise ValueError("Unknown test mode: " + mode)
