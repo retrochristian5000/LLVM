@@ -1,0 +1,66 @@
+# REQUIRES: x86
+# RUN: split-file %s %t
+# RUN: llvm-mc -filetype=obj -triple=i386-none-elf %t/pad.s -o %t/pad.o
+# RUN: llvm-mc -filetype=obj -triple=i386-none-elf %t/code.s -o %t/code.o
+# RUN: ld.lld -melf_i386 -r %t/pad.o %t/code.o -o %t/partial.o
+# RUN: ld.lld -melf_i386 -T %t/layout.lds %t/pad.o %t/code.o -o %t/direct
+# RUN: ld.lld -melf_i386 -T %t/layout.lds %t/partial.o -o %t/indirect
+# RUN: llvm-objcopy --dump-section .text.caller=%t/direct.caller --dump-section .text.merge=%t/direct.merge %t/direct
+# RUN: llvm-objcopy --dump-section .text.caller=%t/indirect.caller --dump-section .text.merge=%t/indirect.merge %t/indirect
+# RUN: %python %t/check.py %t/direct.caller %t/direct.merge %t/indirect.caller %t/indirect.merge
+
+## The relocatable link must adjust implicit ELF32 REL addends when
+## merging section symbols across an alignment gap. Test both directions
+## of PC16 wrapping, unaligned fields, and adjacent sentinel bytes.
+## Do not depend on linker-specific executable padding contents.
+
+#--- pad.s
+.section .text.merge,"ax",@progbits
+.byte 0x90,0x90,0x90
+
+#--- code.s
+.section .text.merge,"ax",@progbits
+.balign 16
+.code16
+.byte 0x90,0x90,0x90
+local_target:
+retw
+callw .Lcaller
+.section .text.caller,"ax",@progbits
+.globl caller_entry
+caller_entry:
+.Lcaller:
+.code16
+.byte 0xa5
+callw local_target
+.word local_target
+.byte 0x5a
+.code32
+call local_target
+.long local_target
+.byte 0x3c
+
+#--- layout.lds
+OUTPUT_FORMAT("elf32-i386")
+OUTPUT_ARCH(i386)
+ENTRY(caller_entry)
+SECTIONS {
+  .text.caller 0x1000 : { *(.text.caller) }
+  .text.merge 0xe000 : { *(.text.merge) }
+  /DISCARD/ : { *(.note*) *(.data*) *(.bss*) }
+}
+
+#--- check.py
+from pathlib import Path
+import sys
+
+for caller_path, merge_path in zip(sys.argv[1::2], sys.argv[2::2]):
+    caller = Path(caller_path).read_bytes()
+    merge = Path(merge_path).read_bytes()
+    # Target: e000h + 16-byte aligned contribution + 3 bytes = e013h.
+    # PC16 wraps, ABS16 contains e013h, PC32 contains d007h,
+    # ABS32 contains 0000e013h. Sentinels must remain untouched.
+    assert caller == bytes.fromhex("a5e80fd013e05ae807d0000013e000003c")
+    # Reverse PC16 call: 1000h - e017h wraps to 2fe9h.
+    assert len(merge) == 23
+    assert merge[19:] == bytes.fromhex("c3e8e92f")
