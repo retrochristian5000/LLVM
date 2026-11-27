@@ -831,8 +831,14 @@ static StringRef getArchNameForCompilerRTLib(const ToolChain &TC,
   const llvm::Triple &Triple = TC.getTriple();
   bool IsWindows = Triple.isOSWindows();
 
-  if (TC.isBareMetal())
+  if (TC.isBareMetal()) {
+    // compiler-rt canonicalizes i[3-6]86 to i386 when naming legacy
+    // runtime files. Preserve the CPU spelling in the target triple,
+    // but match that filename convention.
+    if (TC.getArch() == llvm::Triple::x86)
+      return "i386";
     return Triple.getArchName();
+  }
 
   if (TC.getArch() == llvm::Triple::arm || TC.getArch() == llvm::Triple::armeb)
     return (arm::getARMFloatABI(TC, Args) == arm::FloatABI::Hard && !IsWindows)
