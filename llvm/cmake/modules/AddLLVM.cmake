@@ -1277,6 +1277,10 @@ macro(add_llvm_executable name)
     target_link_libraries(${name} PRIVATE llvmlibc)
   endif()
 
+  if(LLVM_HOST_ALLOCATOR STREQUAL "jemalloc")
+    llvm_link_host_allocator(${name})
+  endif()
+
   llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS} BUNDLE_PATH ${ARG_BUNDLE_PATH})
 
   if (ARG_EXPORT_SYMBOLS)

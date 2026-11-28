@@ -1090,6 +1090,8 @@ if(LLVM_INTEGRATED_CRT_ALLOC)
   endif()
 endif()
 
+include(LLVMHostAllocator)
+
 # Define options to control the inclusion and default build behavior for
 # components which may not strictly be necessary (tools, examples, and tests).
 #
