@@ -6872,8 +6872,19 @@ std::string Driver::GetFilePath(StringRef Name, const ToolChain &TC) const {
     return std::nullopt;
   };
 
-  if (auto P = SearchPaths(PrefixDirs))
-    return *P;
+  // GCC accepts both directory prefixes and literal filename prefixes.
+  // Keep the prefix order, including the existing sysroot-relative form.
+  for (const auto &Dir : PrefixDirs) {
+    if (Dir.empty())
+      continue;
+    SmallString<128> P(Dir[0] == '=' ? SysRoot + Dir.substr(1) : Dir);
+    if (llvm::sys::fs::is_directory(P))
+      llvm::sys::path::append(P, Name);
+    else
+      P += Name;
+    if (llvm::sys::fs::exists(Twine(P)))
+      return std::string(P);
+  }
 
   SmallString<128> R(ResourceDir);
   llvm::sys::path::append(R, Name);

@@ -436,6 +436,19 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.addAllArgs(CmdArgs, {options::OPT_L});
 
+  // GCC also treats directory-valued -B prefixes as library search paths.
+  // Explicit -L options take precedence, and literal filename prefixes
+  // must not be passed to the linker as directories.
+  for (const Arg *A : Args.filtered(options::OPT_B)) {
+    std::string Prefix = A->getValue();
+    if (Prefix.empty())
+      continue;
+    if (Prefix[0] == '=')
+      Prefix = D.SysRoot + Prefix.substr(1);
+    if (llvm::sys::fs::is_directory(Prefix))
+      CmdArgs.push_back(Args.MakeArgString(Twine("-L") + Prefix));
+  }
+
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
 
   if (auto LTO = ToolChain.getLTOMode(Args); LTO != LTOK_None)
