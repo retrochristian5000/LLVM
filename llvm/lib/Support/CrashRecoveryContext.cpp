@@ -34,7 +34,11 @@ struct CrashRecoveryContextImpl {
   const CrashRecoveryContextImpl *Next;
 
   CrashRecoveryContext *CRC;
+#if defined(_WIN32)
   ::jmp_buf JumpBuffer;
+#else
+  ::sigjmp_buf JumpBuffer;
+#endif
   volatile unsigned Failed : 1;
   unsigned SwitchedThread : 1;
   unsigned ValidJumpBuffer : 1;
@@ -43,12 +47,34 @@ public:
   CrashRecoveryContextImpl(CrashRecoveryContext *CRC) noexcept
       : CRC(CRC), Failed(false), SwitchedThread(false), ValidJumpBuffer(false) {
     Next = CurrentContext;
+#if defined(_WIN32)
     CurrentContext = this;
+#endif
   }
   ~CrashRecoveryContextImpl() {
+#if defined(_WIN32)
     if (!SwitchedThread)
+#else
+    if (!SwitchedThread && CurrentContext == this)
+#endif
       CurrentContext = Next;
   }
+
+#if !defined(_WIN32)
+  // Publish the context only after sigsetjmp has saved a live stack frame.
+  void activate() {
+    ValidJumpBuffer = true;
+    CurrentContext = this;
+  }
+
+  // Do not retain a jump target after RunSafely returns. HandleCrash may
+  // already have restored the enclosing context.
+  void deactivate() {
+    if (CurrentContext == this)
+      CurrentContext = Next;
+    ValidJumpBuffer = false;
+  }
+#endif
 
   /// Called when the separate crash-recovery thread was finished, to
   /// indicate that we don't need to clear the thread-local CurrentContext.
@@ -76,8 +102,13 @@ public:
     CRC->RetCode = RetCode;
 
     // Jump back to the RunSafely we were called under.
-    if (ValidJumpBuffer)
+    if (ValidJumpBuffer) {
+#if defined(_WIN32)
       longjmp(JumpBuffer, 1);
+#else
+      siglongjmp(JumpBuffer, 1);
+#endif
+    }
 
     // Otherwise let the caller decide of the outcome of the crash. Currently
     // this occurs when using SEH on Windows with MSVC or clang-cl.
@@ -378,11 +409,8 @@ static void CrashRecoverySignalHandler(int Signal) {
     return;
   }
 
-  // Unblock the signal we received.
-  sigset_t SigMask;
-  sigemptyset(&SigMask);
-  sigaddset(&SigMask, Signal);
-  sigprocmask(SIG_UNBLOCK, &SigMask, nullptr);
+  // Keep the delivered signal blocked while collecting crash diagnostics.
+  // siglongjmp restores the thread's mask saved by sigsetjmp.
 
   // Return the same error code as if the program crashed, as mentioned in the
   // section "Exit Status for Commands":
@@ -437,10 +465,22 @@ bool CrashRecoveryContext::RunSafely(function_ref<void()> Fn) {
     CrashRecoveryContextImpl *CRCI = new CrashRecoveryContextImpl(this);
     Impl = CRCI;
 
+#if defined(_WIN32)
     CRCI->ValidJumpBuffer = true;
-    if (setjmp(CRCI->JumpBuffer) != 0) {
+    if (setjmp(CRCI->JumpBuffer) != 0)
+      return false;
+#else
+    // This checkpoint must remain in RunSafely, not in a helper that returns
+    // before the protected callback executes.
+    if (sigsetjmp(CRCI->JumpBuffer, 1) != 0) {
+      CRCI->deactivate();
       return false;
     }
+    CRCI->activate();
+    Fn();
+    CRCI->deactivate();
+    return true;
+#endif
   }
 
   Fn();

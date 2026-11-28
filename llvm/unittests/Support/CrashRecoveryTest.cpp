@@ -27,6 +27,9 @@
 
 #ifdef LLVM_ON_UNIX
 #include <signal.h>
+#if LLVM_ENABLE_THREADS
+#include <pthread.h>
+#endif
 #endif
 
 using namespace llvm;
@@ -149,6 +152,68 @@ extern const char *TestMainArgv0;
 
 // Just a reachable symbol to ease resolving of the executable's path.
 static cl::opt<std::string> CrashTestStringArg1("crash-test-string-arg1");
+
+// Use the calling thread's mask, including in threaded builds.
+static int changeSignalMask(int How, const sigset_t *Set, sigset_t *Old) {
+#if LLVM_ENABLE_THREADS
+  return pthread_sigmask(How, Set, Old);
+#else
+  return sigprocmask(How, Set, Old);
+#endif
+}
+
+TEST(CrashRecoveryTest, RestoresSignalMaskAfterRecovery) {
+  CrashRecoveryContext::Disable();
+  sigset_t Original, Desired, Actual;
+  ASSERT_EQ(0, changeSignalMask(SIG_SETMASK, nullptr, &Original));
+  Desired = Original;
+  sigaddset(&Desired, SIGUSR1);
+  sigdelset(&Desired, SIGABRT);
+  ASSERT_EQ(0, changeSignalMask(SIG_SETMASK, &Desired, nullptr));
+
+  CrashRecoveryContext::Enable();
+  CrashRecoveryContext CRC;
+  int MaskResult = -1;
+  bool Completed = CRC.RunSafely([&]() {
+    sigset_t Unblock;
+    sigemptyset(&Unblock);
+    sigaddset(&Unblock, SIGUSR1);
+    MaskResult = changeSignalMask(SIG_UNBLOCK, &Unblock, nullptr);
+    if (MaskResult == 0)
+      raise(SIGABRT);
+  });
+  int QueryResult = changeSignalMask(SIG_SETMASK, nullptr, &Actual);
+  int RestoreResult = changeSignalMask(SIG_SETMASK, &Original, nullptr);
+  CrashRecoveryContext::Disable();
+
+  EXPECT_EQ(0, RestoreResult);
+  EXPECT_EQ(0, MaskResult);
+  EXPECT_FALSE(Completed);
+  EXPECT_EQ(128 + SIGABRT, CRC.RetCode);
+  ASSERT_EQ(0, QueryResult);
+  EXPECT_EQ(1, sigismember(&Actual, SIGUSR1));
+  EXPECT_EQ(0, sigismember(&Actual, SIGABRT));
+}
+
+TEST(CrashRecoveryTest, ContextLifetimeTracksProtectedFrame) {
+  CrashRecoveryContext::Disable();
+  CrashRecoveryContext::Enable();
+  {
+    CrashRecoveryContext Outer;
+    CrashRecoveryContext Inner;
+    EXPECT_EQ(nullptr, CrashRecoveryContext::GetCurrent());
+    EXPECT_TRUE(Outer.RunSafely([&]() {
+      EXPECT_EQ(&Outer, CrashRecoveryContext::GetCurrent());
+      EXPECT_TRUE(Inner.RunSafely([&]() {
+        EXPECT_EQ(&Inner, CrashRecoveryContext::GetCurrent());
+      }));
+      // Inner remains alive, but its saved frame has returned.
+      EXPECT_EQ(&Outer, CrashRecoveryContext::GetCurrent());
+    }));
+    EXPECT_EQ(nullptr, CrashRecoveryContext::GetCurrent());
+  }
+  CrashRecoveryContext::Disable();
+}
 
 TEST(CrashRecoveryTest, PreservesIgnoredSignalDisposition) {
   CrashRecoveryContext::Disable();
