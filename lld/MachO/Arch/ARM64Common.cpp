@@ -69,7 +69,12 @@ int64_t ARM64Common::getEmbeddedAddend(MemoryBufferRef mb, uint64_t offset,
 static void writeValue(uint8_t *loc, const Relocation &r, uint64_t value) {
   switch (r.length) {
   case 2:
-    checkInt(loc, r, value, 32);
+    // Absolute addresses occupy an unsigned field. SUBTRACTOR and
+    // PC-relative POINTER_TO_GOT instead encode signed displacements.
+    if (r.type == ARM64_RELOC_UNSIGNED)
+      checkUInt(loc, r, value, 32);
+    else
+      checkInt(loc, r, value, 32);
     write32le(loc, value);
     break;
   case 3:
