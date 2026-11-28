@@ -33,6 +33,10 @@ struct ARM64Common : TargetInfo {
                          uint8_t *loc) const override;
 };
 
+// Decide whether a local GOT/TLV load must remain a memory access rather
+// than be relaxed into an address calculation.
+bool arm64GotLoadNeedsSlot(const InputSection &isec, const Relocation &r);
+
 inline uint64_t bitField(uint64_t value, int right, int width, int left) {
   return ((value >> right) & ((1 << width) - 1)) << left;
 }

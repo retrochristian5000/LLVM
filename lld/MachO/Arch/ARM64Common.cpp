@@ -127,6 +127,39 @@ void ARM64Common::relocateOne(uint8_t *loc, const Relocation &r, uint64_t value,
   }
 }
 
+static bool isGotLoadInstruction(uint32_t instruction) {
+  return (instruction & 0xbfc00000) == 0xb9400000;
+}
+
+static bool hasGotLoadImmediate(uint32_t instruction) {
+  return ((instruction >> 10) & 0xfff) != 0;
+}
+
+static bool needsGotLoadSlot(uint32_t instruction) {
+  // LDR Rt=31 discards the value, while ADD Rd=31 writes SP.
+  // A 32-bit LDR from a 64-bit GOT slot also cannot be replaced with
+  // an ADD that produces the entire 64-bit address.
+  return (instruction & 0x1f) == 31 ||
+         (target->wordSize == 8 && (instruction & 0x40000000) == 0);
+}
+
+bool macho::arm64GotLoadNeedsSlot(const InputSection &isec,
+                                 const Relocation &r) {
+  if (r.offset > isec.data.size() ||
+      isec.data.size() - r.offset < sizeof(uint32_t)) {
+    error(isec.getLocation(r.offset) + ": truncated GOT load instruction");
+    return false;
+  }
+  uint32_t instruction = read32le(isec.data.data() + r.offset);
+  if (!isGotLoadInstruction(instruction) || hasGotLoadImmediate(instruction)) {
+    error(isec.getLocation(r.offset) + ": " +
+          target->getRelocAttrs(r.type).name +
+          " reloc requires LDR with a zero embedded immediate");
+    return false;
+  }
+  return needsGotLoadSlot(instruction);
+}
+
 void ARM64Common::relaxGotLoad(uint8_t *loc, uint8_t type) const {
   // The instruction format comments below are quoted from
   // Arm® Architecture Reference Manual
@@ -136,13 +169,18 @@ void ARM64Common::relaxGotLoad(uint8_t *loc, uint8_t type) const {
   // C6.2.132 LDR (immediate)
   // This matches both the 64- and 32-bit variants:
   // LDR <(X|W)t>, [<Xn|SP>{, #<pimm>}]
-  if ((instruction & 0xbfc00000) != 0xb9400000)
-    error(getRelocAttrs(type).name + " reloc requires LDR instruction");
-  assert(((instruction >> 10) & 0xfff) == 0 &&
-         "non-zero embedded LDR immediate");
+  if (!isGotLoadInstruction(instruction) || hasGotLoadImmediate(instruction)) {
+    error(getRelocAttrs(type).name +
+          " reloc requires LDR with a zero embedded immediate");
+    return;
+  }
+  if (needsGotLoadSlot(instruction)) {
+    error(getRelocAttrs(type).name + " reloc requires an indirect pointer load");
+    return;
+  }
   // C6.2.4 ADD (immediate)
   // ADD <Xd|SP>, <Xn|SP>, #<imm>{, <shift>}
-  instruction = ((instruction & 0x001fffff) | 0x91000000);
+  instruction = (instruction & 0x3ff) | 0x91000000;
   write32le(loc, instruction);
 }
 

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Writer.h"
+#include "Arch/ARM64Common.h"
 #include "ConcatOutputSection.h"
 #include "Config.h"
 #include "InputFiles.h"
@@ -678,12 +679,19 @@ static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
   }
 
   const RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
+  // Decide before layout: both PAGE21 and PAGEOFF12 must address the same
+  // pointer slot when any use of this symbol cannot be relaxed.
+  bool keepLoad =
+      relocAttrs.hasAttr(RelocAttrBits::LOAD) && !needsBinding(sym) &&
+      is_contained({AK_arm64, AK_arm64e, AK_arm64_32}, config->arch()) &&
+      arm64GotLoadNeedsSlot(*isec, r);
 
   if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
     if (needsBinding(sym))
       in.stubs->addEntry(sym);
   } else if (relocAttrs.hasAttr(RelocAttrBits::GOT)) {
-    if (relocAttrs.hasAttr(RelocAttrBits::POINTER) || needsBinding(sym)) {
+    if (relocAttrs.hasAttr(RelocAttrBits::POINTER) || needsBinding(sym) ||
+        keepLoad) {
       // An arm64e DWARF CIE personality pointer refers to a GOT slot that
       // libunwind authenticates using the slot's address as discriminator.
       if (config->arch() == AK_arm64e &&
@@ -694,7 +702,7 @@ static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
         in.got->addEntry(sym);
     }
   } else if (relocAttrs.hasAttr(RelocAttrBits::TLV)) {
-    if (needsBinding(sym))
+    if (needsBinding(sym) || keepLoad)
       in.tlvPointers->addEntry(sym);
   } else if (relocAttrs.hasAttr(RelocAttrBits::UNSIGNED)) {
     // References from thread-local variable sections are treated as offsets
