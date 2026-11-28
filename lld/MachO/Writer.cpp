@@ -27,6 +27,7 @@
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -975,11 +976,15 @@ template <class LP> void Writer::createLoadCommands() {
   if (codeSignatureSection)
     in.header->addLoadCommand(make<LCCodeSignature>(codeSignatureSection));
 
-  const uint32_t MACOS_MAXPATHLEN = 1024;
-  config->headerPad = std::max(
-      config->headerPad, (config->headerPadMaxInstallNames
-                              ? LCDylib::getInstanceCount() * MACOS_MAXPATHLEN
-                              : 0));
+  constexpr uint64_t MACOS_MAXPATHLEN = 1024;
+  if (config->headerPadMaxInstallNames) {
+    uint64_t pad = LCDylib::getInstanceCount() * MACOS_MAXPATHLEN;
+    if (!isUInt<32>(pad)) {
+      error("-headerpad_max_install_names: required padding exceeds 32 bits");
+      return;
+    }
+    config->headerPad = std::max(config->headerPad, static_cast<uint32_t>(pad));
+  }
 }
 
 // Sorting only can happen once all outputs have been collected. Here we sort
@@ -1399,6 +1404,14 @@ template <class LP> void Writer::run() {
   // the ordinary __TEXT,_text InputSections.
   sortSegmentsAndSections();
   createLoadCommands<LP>();
+  if (errorCount())
+    return;
+  // Section file offsets remain 32-bit in both Mach-O header formats.
+  // Reject an oversized header before allocating an output file.
+  if (!isUInt<32>(in.header->getSize())) {
+    error("Mach-O header and padding exceed the 32-bit file offset range");
+    return;
+  }
   finalizeAddresses();
 
   llvm::thread mapFileWriter([&] {

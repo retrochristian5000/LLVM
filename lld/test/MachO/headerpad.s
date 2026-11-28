@@ -9,9 +9,17 @@
 ## alignment behavior.
 
 # RUN: rm -rf %t; mkdir -p %t
+# RUN: llvm-mc -filetype=obj -triple=x86_64-apple-darwin %s -o %t/test.o
+
+################ Reject unrepresentable padding without allocating huge output
+# RUN: not %no-lsystem-lld -o %t/invalid %t/test.o -headerpad 100000000 2>&1 | FileCheck %s --check-prefix=PAD-RANGE
+# RUN: not %no-lsystem-lld -o %t/invalid %t/test.o -headerpad -1 2>&1 | FileCheck %s --check-prefix=PAD-RANGE
+# RUN: not %no-lsystem-lld -o %t/invalid %t/test.o -headerpad ffffffff 2>&1 | FileCheck %s --check-prefix=PAD-HEADER
+# RUN: not test -e %t/invalid
+# PAD-RANGE: error: -headerpad: expected a non-negative 32-bit hexadecimal size
+# PAD-HEADER: error: Mach-O header and padding exceed the 32-bit file offset range
 
 ################ Check default behavior
-# RUN: llvm-mc -filetype=obj -triple=x86_64-apple-darwin %s -o %t/test.o
 # RUN: %lld -o %t/test %t/test.o
 # RUN: llvm-objdump --macho --all-headers %t/test | FileCheck %s --check-prefix=PADx
 #

@@ -23,6 +23,7 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/LEB128.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/xxhash.h"
 
@@ -79,12 +80,24 @@ MachHeaderSection::MachHeaderSection()
 }
 
 void MachHeaderSection::addLoadCommand(LoadCommand *lc) {
+  uint32_t size = lc->getSize();
+  // The Mach-O ABI requires each command to include its header and be
+  // aligned to 4 bytes (32-bit) or 8 bytes (64-bit).
+  if (size < sizeof(load_command) || size % target->wordSize != 0) {
+    error("invalid Mach-O load command size: " + Twine(size));
+    return;
+  }
+  // mach_header::sizeofcmds is 32-bit, including in a 64-bit image.
+  if (!isUInt<32>(uint64_t(sizeOfCmds) + size)) {
+    error("Mach-O load commands exceed the 32-bit sizeofcmds field");
+    return;
+  }
   loadCommands.push_back(lc);
-  sizeOfCmds += lc->getSize();
+  sizeOfCmds += size;
 }
 
 uint64_t MachHeaderSection::getSize() const {
-  uint64_t size = target->headerSize + sizeOfCmds + config->headerPad;
+  uint64_t size = uint64_t(target->headerSize) + sizeOfCmds + config->headerPad;
   // If we are emitting an encryptable binary, our load commands must have a
   // separate (non-encrypted) page to themselves.
   if (config->emitEncryptionInfo)

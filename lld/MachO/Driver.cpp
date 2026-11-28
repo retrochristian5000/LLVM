@@ -45,6 +45,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -2055,7 +2056,13 @@ bool link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
   config->finalOutput =
       args.getLastArgValue(OPT_final_output, config->outputFile);
   config->astPaths = args.getAllArgValues(OPT_add_ast_path);
-  config->headerPad = args::getHex(args, OPT_headerpad, /*Default=*/32);
+  int64_t headerPad = args::getHex(args, OPT_headerpad, /*Default=*/32);
+  if (headerPad < 0 || !isUInt<32>(static_cast<uint64_t>(headerPad))) {
+    error("-headerpad: expected a non-negative 32-bit hexadecimal size");
+    config->headerPad = 0;
+  } else {
+    config->headerPad = static_cast<uint32_t>(headerPad);
+  }
   config->headerPadMaxInstallNames =
       args.hasArg(OPT_headerpad_max_install_names);
   config->printDylibSearch =
