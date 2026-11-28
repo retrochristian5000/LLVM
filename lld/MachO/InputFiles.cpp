@@ -189,7 +189,10 @@ static bool checkCompatibility(const InputFile *input) {
       warn(toString(input) + " has version " + version +
            ", which is newer than target minimum of " +
            config->platformInfo.target.MinDeployment.getAsString() +
-           " (reported once per input deployment version)");
+           " (reported once per input deployment version); "
+           "the input minimum OS version, not its SDK version, is newer. "
+           "Rebuild the input for the target minimum OS or raise the "
+           "deployment target.");
   }
 
   return true;
