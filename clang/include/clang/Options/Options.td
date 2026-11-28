@@ -1085,6 +1085,12 @@ def Xopenmp_target_EQ : JoinedAndSeparate<["-"], "Xopenmp-target=">, Group<Compi
 def z : Separate<["-"], "z">, Flags<[LinkerInput]>,
   HelpText<"Pass -z <arg> to the linker">, MetaVarName<"<arg>">,
   Group<Link_Group>;
+// Give the common GNU spelling an explicit driver option without changing
+// the order of general -Wl, argument lists.
+def Wl_z_nodelete : Flag<["-"], "Wl,-z,nodelete">,
+  Visibility<[ClangOption, FlangOption]>, Flags<[LinkerInput]>,
+  Alias<z>, AliasArgs<["nodelete"]>, Group<Link_Group>,
+  HelpText<"Mark an ELF shared object as not unloadable at runtime">;
 def offload_link : Flag<["--"], "offload-link">, Group<Link_Group>,
   HelpText<"Use the new offloading linker to perform the link job.">;
 def Xlinker : Separate<["-"], "Xlinker">, Flags<[LinkerInput, RenderAsInput]>,

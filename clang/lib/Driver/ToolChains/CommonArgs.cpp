@@ -532,6 +532,16 @@ void tools::AddLinkerInputs(const ToolChain &TC, const InputInfoList &Inputs,
     // Otherwise, this is a linker input argument.
     const Arg &A = II.getInputArg();
 
+    // ELF NODELETE is a loader contract, not Mach-O dead stripping.
+    // Diagnose the explicit driver option rather than dropping the request.
+    if (A.getOption().matches(options::OPT_z) &&
+        StringRef(A.getValue()) == "nodelete" &&
+        TC.getTriple().isOSBinFormatMachO()) {
+      D.Diag(diag::err_drv_unsupported_opt_for_target)
+          << "-z nodelete" << TC.getTripleString();
+      continue;
+    }
+
     // Handle reserved library options.
     if (A.getOption().matches(options::OPT_Z_reserved_lib_stdcxx))
       TC.AddCXXStdlibLibArgs(Args, CmdArgs);
