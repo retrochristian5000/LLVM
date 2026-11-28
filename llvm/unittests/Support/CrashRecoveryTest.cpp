@@ -150,6 +150,28 @@ extern const char *TestMainArgv0;
 // Just a reachable symbol to ease resolving of the executable's path.
 static cl::opt<std::string> CrashTestStringArg1("crash-test-string-arg1");
 
+TEST(CrashRecoveryTest, PreservesIgnoredSignalDisposition) {
+  CrashRecoveryContext::Disable();
+  struct sigaction Ignore = {}, Previous = {}, Current = {};
+  Ignore.sa_handler = SIG_IGN;
+  sigemptyset(&Ignore.sa_mask);
+  ASSERT_EQ(0, sigaction(SIGTRAP, &Ignore, &Previous));
+
+  CrashRecoveryContext::Enable(/*NeedsPOSIXUtilitySignalHandling=*/true);
+  int QueryResult = sigaction(SIGTRAP, nullptr, &Current);
+  EXPECT_EQ(0, QueryResult);
+  if (QueryResult == 0)
+    EXPECT_TRUE(Current.sa_handler == SIG_IGN);
+
+  CrashRecoveryContext::Disable();
+  QueryResult = sigaction(SIGTRAP, nullptr, &Current);
+  // Restore the test process's original disposition before asserting.
+  int RestoreResult = sigaction(SIGTRAP, &Previous, nullptr);
+  EXPECT_EQ(0, RestoreResult);
+  ASSERT_EQ(0, QueryResult);
+  EXPECT_TRUE(Current.sa_handler == SIG_IGN);
+}
+
 TEST(CrashRecoveryTest, UnixCRCReturnCode) {
   using namespace llvm::sys;
   if (getenv("LLVM_CRC_UNIXCRCRETURNCODE")) {
@@ -161,7 +183,8 @@ TEST(CrashRecoveryTest, UnixCRCReturnCode) {
       llvm_unreachable("RunSafely returned true!");
     if (CRC.RetCode != 128 + SIGABRT)
       llvm_unreachable("Unexpected RetCode!");
-    // re-throw signal
+    // Restore handlers in reverse installation order before re-throwing.
+    llvm::CrashRecoveryContext::Disable();
     llvm::sys::unregisterHandlers();
     raise(CRC.RetCode - 128);
     llvm_unreachable("Should have exited already!");

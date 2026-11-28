@@ -481,6 +481,9 @@ int clang_main(int Argc, char **Argv, const llvm::ToolContext &ToolContext) {
   // by POSIX. Return code 255 is excluded because some tools, such as
   // llvm-ifs, exit with code 255 (-1) on failure.
   if (CommandRes > 128 && CommandRes != 255) {
+    // Restore the handlers underneath integrated CC1 recovery before
+    // unregistering LLVM's own signal handlers and re-raising the signal.
+    llvm::CrashRecoveryContext::Disable();
     llvm::sys::unregisterHandlers();
     // DiagnosticConsumer must be always destroyed.
     Diags.getClient()->~DiagnosticConsumer();
@@ -490,6 +493,7 @@ int clang_main(int Argc, char **Argv, const llvm::ToolContext &ToolContext) {
   // if the child was killed by a signal. The signal number is not preserved,
   // so resignal with SIGABRT to ensure the driver exits via signal.
   if (CommandRes == -2) {
+    llvm::CrashRecoveryContext::Disable();
     llvm::sys::unregisterHandlers();
     // DiagnosticConsumer must be always destroyed.
     Diags.getClient()->~DiagnosticConsumer();

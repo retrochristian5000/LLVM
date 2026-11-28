@@ -342,7 +342,7 @@ static void RegisterHandlers(
     assert(Index < std::size(RegisteredSignalInfo) &&
            "Out of space for signal handlers!");
 
-    struct sigaction NewHandler;
+    struct sigaction NewHandler = {};
 
     switch (Kind) {
     case SignalKind::IsKill:
@@ -368,12 +368,12 @@ static void RegisterHandlers(
 
     if (NeedsPOSIXUtilitySignalHandling) {
       // Don't install the new handler if the signal disposition is SIG_IGN.
-      struct sigaction act;
-      if (sigaction(Signal, NULL, &act) == 0 && act.sa_handler != SIG_IGN)
-        sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA);
-    } else {
-      sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA);
+      struct sigaction Act = {};
+      if (sigaction(Signal, nullptr, &Act) != 0 || Act.sa_handler == SIG_IGN)
+        return;
     }
+    if (sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA) != 0)
+      return;
     RegisteredSignalInfo[Index].SigNo = Signal;
     ++NumRegisteredSignals;
   };

@@ -354,6 +354,7 @@ static const int Signals[] =
     { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV, SIGTRAP };
 static const unsigned NumSignals = std::size(Signals);
 static struct sigaction PrevActions[NumSignals];
+static bool InstalledActions[NumSignals];
 
 static void CrashRecoverySignalHandler(int Signal) {
   // Lookup the current thread local recovery object.
@@ -399,27 +400,32 @@ static void CrashRecoverySignalHandler(int Signal) {
 static void
 installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling) {
   // Setup the signal handler.
-  struct sigaction Handler;
+  struct sigaction Handler = {};
   Handler.sa_handler = CrashRecoverySignalHandler;
   Handler.sa_flags = 0;
   sigemptyset(&Handler.sa_mask);
 
   for (unsigned i = 0; i != NumSignals; ++i) {
+    InstalledActions[i] = false;
     if (NeedsPOSIXUtilitySignalHandling) {
       // Don't install the new handler if the signal disposition is SIG_IGN.
-      struct sigaction act;
-      if (sigaction(Signals[i], NULL, &act) == 0 && act.sa_handler != SIG_IGN)
-        sigaction(Signals[i], &Handler, &PrevActions[i]);
-    } else {
-      sigaction(Signals[i], &Handler, &PrevActions[i]);
+      struct sigaction Act = {};
+      if (sigaction(Signals[i], nullptr, &Act) != 0 ||
+          Act.sa_handler == SIG_IGN)
+        continue;
     }
+    InstalledActions[i] =
+        sigaction(Signals[i], &Handler, &PrevActions[i]) == 0;
   }
 }
 
 static void uninstallExceptionOrSignalHandlers() {
   // Restore the previous signal handlers.
-  for (unsigned i = 0; i != NumSignals; ++i)
-    sigaction(Signals[i], &PrevActions[i], nullptr);
+  for (unsigned i = 0; i != NumSignals; ++i) {
+    if (InstalledActions[i] &&
+        sigaction(Signals[i], &PrevActions[i], nullptr) == 0)
+      InstalledActions[i] = false;
+  }
 }
 
 #endif // !_WIN32
